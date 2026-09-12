@@ -6,7 +6,7 @@
 | --- | --- |
 | `spool.svg` | 彩色标志，上传到「站点 Logo」。346 字节，viewBox 512，透明底，浅色/深色底都可用 |
 | `spool-mono.svg` | 单色标志（currentColor），只用于文档、贴纸、内联 SVG；不要上传（`<img>` 里取不到页面颜色，会渲成黑色） |
-| `home_content.html` | 首页内容，整段粘贴到「首页内容」。极客风深色页（磷光终端），内联 CSS + CSS 动效、无 JS、限定在 `.spool-home` 作用域；页面自带深色底，应用切到浅色主题时它仍是深色，属有意为之 |
+| `home_content.html` | 首页内容，整段粘贴到「首页内容」。按项目技能 design-taste-frontend-v1（variance 8 / motion 6 / density 4）设计的深色编辑式非对称页，内联 CSS + CSS 动效、无 JS、限定在 `.spool-home` 作用域；页面自带深色底，应用切到浅色主题时它仍是深色，属有意为之 |
 | `site-copy.txt` | 站点名称与副标题文案 |
 
 ## 上传步骤
@@ -33,7 +33,7 @@
 ## 注意事项
 
 - 首页 HTML 里的 JavaScript 不会执行，所以没有复制按钮：base URL 与命令行用 `user-select:all`，点一下整行选中；`$` 提示符不会被选进去。
-- 首屏的「请求流程」控制台是示例回放（标头已写明「非实时」），不是真实流量；动效全部走 transform/opacity，系统开启「减弱动态效果」时全部静止。
+- 「请求流程」一节的转发日志是示例回放（已写明「非实时」），不是真实流量；动效全部走 transform/opacity，系统开启「减弱动态效果」时全部静止。
 - Safari 不显示 SVG favicon（Chrome / Edge / Firefox 正常）。若 Safari 用户多，导出一张 256×256 PNG 代替上传。
 - 模型广场导航栏的 logo 容器浅色模式是白色 tile、深色模式是 `#1e293b`，标志在两种底上都验过。
 - 上线后核对：标签页 favicon、侧栏 36px、登录页 64px、模型广场导航栏、首页亮/暗与手机宽度、首页 base URL 与控制台一致、占位符已全部替换。
