@@ -1,0 +1,210 @@
+<!-- spool home_content · 运维需要替换的占位符（全部写成 [方括号]）：
+     1. https://spool.corp.internal —— base URL，可见 3 处需要替换：hero 的地址块、ANTHROPIC_BASE_URL 行、OPENAI_BASE_URL 行；
+        第 4 处在 hero 下方那句 [base URL：…] 说明里，替换完把整句删掉。
+     2. [登录方式：…] —— 第二节第 1 步，写清是公司 OAuth 还是邮箱账号、首次登录是否自动建号。
+     3. [配额策略：…] —— 第五节，内含 [每月 1 号] 复位日。
+     4. [平台组 / 填负责人] —— 第四节 1 处、第五节 2 处、页脚 1 处，共 4 处。
+     5. [值班群：填群名] —— 第五节 1 处。
+     无 JS、无外部资源；CSS 全部限定在 .spool-home 下。 -->
+<style>
+.spool-home{
+  --paper:#F1F3EC; --band:#E7EBE1; --ink:#101A17; --ink-2:#4A554F;
+  --green:#2E8B6F; --green-ink:#247159; --amber:#C4881B; --hole:#D3D9C9; --rule:#DDE2D5;
+  --panel:#0F1317; --panel-ink:#D9E0D7; --panel-dim:#8C978D;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  background:var(--paper); color:var(--ink); font-family:var(--sans);
+  min-height:100vh; padding:0 16px; font-size:15px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+html.dark .spool-home{
+  --paper:#0F1317; --band:#1C242B; --ink:#C9D1C8; --ink-2:#8A958C; --green-ink:#369C7E;
+  --hole:#1E262B; --rule:#243038; --panel:#202A31; --panel-ink:#D9E0D7; --panel-dim:#8A9690;
+}
+.spool-home .paper{position:relative;max-width:760px;margin:0 auto;padding:30px 0 44px 36px;}
+.spool-home .paper::before{
+  content:"";position:absolute;left:9px;top:30px;bottom:44px;width:6px;
+  background-image:repeating-linear-gradient(to bottom,var(--hole) 0 6px,transparent 6px 30px);
+}
+
+/* header */
+.spool-home .hd{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;}
+.spool-home .brand{display:flex;align-items:center;gap:9px;}
+.spool-home .spool-mark{display:block;width:30px;height:30px;flex:0 0 30px;}
+.spool-home .spool-mark svg{display:block;width:30px;height:30px;}
+.spool-home .word{font-size:27px;font-weight:640;letter-spacing:-.02em;line-height:1;color:var(--ink);}
+.spool-home .sub{font-size:13px;color:var(--ink-2);line-height:1.5;}
+.spool-home .nav{display:flex;flex-wrap:wrap;gap:6px 18px;margin:14px 0 0;padding:0;list-style:none;font-size:14px;}
+.spool-home .nav li{margin:0;}
+.spool-home .hd-rule{height:1px;background:var(--rule);margin:16px 0 0;}
+
+/* links */
+.spool-home a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--green);text-underline-offset:3px;text-decoration-thickness:1px;}
+.spool-home a:hover{color:var(--green-ink);}
+.spool-home a:focus-visible{outline:2px solid var(--green);outline-offset:2px;border-radius:1px;}
+.spool-home .path{font-family:var(--mono);font-size:13.5px;}
+
+/* hero */
+.spool-home .hero{margin:34px 0 0;}
+.spool-home .hero h1{margin:0;font-size:36px;line-height:1.3;font-weight:640;letter-spacing:-.02em;color:var(--ink);max-width:10.6em;text-wrap:balance;}
+.spool-home .hero .lede{margin:16px 0 0;font-size:16.5px;line-height:1.8;color:var(--ink);max-width:32.5em;text-wrap:pretty;}
+
+/* sections */
+.spool-home .sec{margin:44px 0 0;}
+.spool-home .sec h2{margin:0 0 12px;font-size:20px;font-weight:600;line-height:1.4;color:var(--green-ink);letter-spacing:-.01em;}
+.spool-home .sec p{margin:0 0 12px;max-width:38em;}
+.spool-home .sec p.lead-in{margin-bottom:6px;}
+.spool-home .sec p:last-child{margin-bottom:0;}
+/* 小标与脚注：声明在 .sec p / .hero 规则之后，特异性 (0,2,1)，在 hero 与 sec 里表现一致 */
+.spool-home p.cap{margin:0 0 6px;font-size:13px;line-height:1.6;color:var(--ink-2);max-width:none;}
+.spool-home p.note{margin:0 0 12px;font-size:13.5px;color:var(--ink-2);line-height:1.7;max-width:40em;}
+.spool-home p.note:last-child{margin-bottom:0;}
+
+/* greenbar 记录行 */
+.spool-home .rows{margin:0 0 14px -10px;padding:0 10px;list-style:none;font-size:15px;line-height:26px;
+  background-image:repeating-linear-gradient(to bottom,var(--band) 0 26px,transparent 26px 52px);}
+.spool-home .rows li{margin:0;padding:0 0 0 18px;position:relative;max-width:38em;}
+.spool-home .rows li::before{content:"";position:absolute;left:2px;top:11px;width:5px;height:5px;background:var(--green);}
+.spool-home .rows code{background:transparent;padding:0;}
+.spool-home ol.steps{margin:0 0 14px;padding:0;list-style:none;counter-reset:s;}
+.spool-home ol.steps li{counter-increment:s;margin:0 0 8px;padding:0 0 0 26px;position:relative;max-width:38em;}
+.spool-home ol.steps li::before{content:counter(s) ".";position:absolute;left:0;top:0;color:var(--green-ink);font-variant-numeric:tabular-nums;font-weight:600;}
+.spool-home ol.steps li:last-child{margin-bottom:0;}
+
+/* 命令区：带琥珀竖条的块。长行软换行，续行缩进 2ch；点一行整行选中，复制得到的仍是单行 */
+.spool-home .cmd{margin:0 0 12px;background:var(--panel);border-left:3px solid var(--amber);
+  padding:11px 14px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.8;color:var(--panel-ink);}
+html.dark .spool-home .cmd{box-shadow:inset 0 0 0 1px var(--rule);}
+.spool-home .cmd .l{display:block;white-space:pre-wrap;overflow-wrap:anywhere;padding-left:2ch;text-indent:-2ch;}
+.spool-home .cmd .c{display:block;white-space:pre-wrap;overflow-wrap:anywhere;padding-left:2ch;text-indent:-2ch;color:var(--panel-dim);}
+.spool-home .url{font-size:17px;line-height:1.6;letter-spacing:-.01em;}
+.spool-home code{font-family:var(--mono);font-size:13.5px;background:var(--band);padding:1px 4px;color:var(--ink);}
+.spool-home .ph{color:var(--ink-2);}
+
+/* footer */
+.spool-home .ft{margin:48px 0 0;padding:16px 0 0;border-top:1px solid var(--rule);}
+.spool-home .ft .nav{margin:0;}
+.spool-home .ft p{margin:12px 0 0;font-size:13px;color:var(--ink-2);line-height:1.7;max-width:40em;}
+
+@media (max-width:560px){
+  .spool-home .paper{padding-left:24px;}
+  .spool-home .paper::before{left:3px;}
+  .spool-home .hero h1{font-size:27px;}
+  .spool-home .hero .lede{font-size:15.5px;}
+  .spool-home .sec h2{font-size:18px;}
+  .spool-home .url{font-size:14.5px;}
+  .spool-home .cmd{font-size:12.5px;}
+}
+</style>
+
+<div class="spool-home">
+<div class="paper">
+
+  <header class="hd">
+    <div class="brand">
+      <span class="spool-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><path fill="#2E8B6F" fill-rule="evenodd" d="M200 96a160 160 0 1 0 0 320 160 160 0 1 0 0-320Zm0 68a92 92 0 1 1 0 184 92 92 0 1 1 0-184Z"/><rect x="200" y="352" width="280" height="64" fill="#2E8B6F"/><circle cx="200" cy="256" r="40" fill="#C4881B"/></svg></span>
+      <span class="word">spool</span>
+    </div>
+    <span class="sub">spool(8) — 一池上游账号，一个内部端点，按人发 key、按人计账</span>
+  </header>
+  <ul class="nav">
+    <li><a href="/login">登录</a></li>
+    <li><a href="/dashboard">控制台</a></li>
+    <li><a href="/keys">API Keys</a></li>
+    <li><a href="/key-usage">用量查询（不登录）</a></li>
+  </ul>
+  <div class="hd-rule"></div>
+
+  <section class="hero">
+    <h1>你不拥有那台打印机，你只是往里发作业。</h1>
+    <p class="lede">spool 是我们内部的 AI 网关。公司买的上游订阅账号在这边排成一个池，对外只露一个兼容端点。你拿一把自己的 key，改两个环境变量，用量记在你名下。就这些。</p>
+    <p class="cap" style="margin-top:26px">base URL</p>
+    <div class="cmd"><span class="l url" style="user-select:all;-webkit-user-select:all">https://spool.corp.internal</span></div>
+    <p class="note">这一页不跑 JavaScript，所以没有复制按钮。点一下带琥珀竖条的块里的命令行，那一行整行选中，Cmd-C 拿走；灰色的注释行不选中，本来也不用复制。<br><span class="ph">[base URL：以控制台 API Keys 页面显示的为准；本页可见 3 处 https://spool.corp.internal，换的时候一起换，然后删掉这句]</span></p>
+  </section>
+
+  <section class="sec">
+    <h2>这是什么</h2>
+    <p>一台机器，站在你和上游之间。公司买的 Claude / GPT-Codex / Gemini / Antigravity 订阅账号都挂在 spool 后面，按类别组成几个池。这次请求走的是哪个账号，你不需要知道，那是调度的事。</p>
+    <p>你拿到的是一个 OpenAI / Anthropic 兼容的 base URL，和一把只属于你的 key。认这两套协议的客户端都能直接接上：Claude Code、Codex、Cursor、各语言的 SDK。</p>
+    <p>为什么不是每人开一个账号：账号贵、配额零散、人走了要回收、出了事说不清是谁在用。排成池以后，这四件事各自有了答案。</p>
+    <p>spool 不对外、不卖钱、没有套餐页。它跑在自建的 Sub2API 上，代码没改，改的只是名字和这块首页。</p>
+    <p class="note">SPOOL = Simultaneous Peripheral Operations On-Line，IBM 1959 年给打印队列起的名字：一台昂贵的共享设备，很多人往里发作业，用量记在各人名下。六十年后是同一个问题。名字只借典故：spool 不攒批、不排队，请求实时转发。</p>
+  </section>
+
+  <section class="sec">
+    <h2>拿一把 key</h2>
+    <ol class="steps">
+      <li>登录 <a class="path" href="/login">/login</a>。<span class="ph">[登录方式：公司 OAuth 还是邮箱账号、首次登录是否自动建号——管理员填]</span>。这台机器不开放自助注册，要 key 先登录。</li>
+      <li>进 <a class="path" href="/dashboard">/dashboard</a>，打开 <a class="path" href="/keys">/keys</a>，新建一把 key。</li>
+      <li>选分组，这一项必填。一个分组对应一类上游账号（Claude 系、GPT-Codex 系、Gemini 系各归各的），也决定这把 key 打 <code>/v1/models</code> 时看到哪些模型。协议不用管：<code>/v1/messages</code> 和 <code>/v1/responses</code> 网关都收，再按分组翻译给上游。清单以新建表单里的下拉为准；一把 key 只属于一个分组，想用两个池就开两把。</li>
+      <li>给它起个认得出用途的名字：<code>claude-code-mac</code>、<code>cursor</code>、<code>ci-eval</code>。以后要停哪一把，你自己就能定位。</li>
+      <li>key 在 <a class="path" href="/keys">/keys</a> 列表里随时可以整条复制回来，丢了不用重建。也正因为如此，能登录你账号的人就能拿走你所有的 key——登录密码放进密码管理器，key 按用途分开开几把。</li>
+    </ol>
+    <p>按机器或按项目分开开几把。某一把泄漏时只吊销那一路，别的照跑。</p>
+    <p class="lead-in">三条底线：</p>
+    <ul class="rows">
+      <li>不提交进仓库。</li>
+      <li>不贴进公开频道。</li>
+      <li>不把 key 转给别人——对方的用量会记在你头上，包括他半夜跑的那轮压测。</li>
+    </ul>
+  </section>
+
+  <section class="sec">
+    <h2>接上去</h2>
+    <p>改两个环境变量，别的什么都不用动。哪一对，看客户端，不看分组。</p>
+    <p class="cap">Claude Code</p>
+    <div class="cmd"><span class="l" style="user-select:all;-webkit-user-select:all">export ANTHROPIC_BASE_URL=https://spool.corp.internal</span><span class="l" style="user-select:all;-webkit-user-select:all">export ANTHROPIC_AUTH_TOKEN=&lt;你的 key&gt;</span></div>
+    <p class="cap">Codex / Cursor / OpenAI SDK</p>
+    <div class="cmd"><span class="l" style="user-select:all;-webkit-user-select:all">export OPENAI_BASE_URL=https://spool.corp.internal/v1</span><span class="l" style="user-select:all;-webkit-user-select:all">export OPENAI_API_KEY=&lt;你的 key&gt;</span></div>
+    <p class="cap">自检</p>
+    <div class="cmd"><span class="l" style="user-select:all;-webkit-user-select:all">curl -s $OPENAI_BASE_URL/models -H "Authorization: Bearer $OPENAI_API_KEY" | head</span><span class="c"># 回一个模型列表就算接上了。401 是 key 不对；403 / 429 / 503 见「公平使用」。</span><span class="c"># 只配了 ANTHROPIC_* 的，把地址换成 $ANTHROPIC_BASE_URL/v1/models，key 用 $ANTHROPIC_AUTH_TOKEN。</span></div>
+    <p class="lead-in">两条细节会一直引发工单：</p>
+    <ul class="rows">
+      <li>地址末尾不要带斜杠。</li>
+      <li>模型名照 <code>/v1/models</code> 的返回原样填，网关不改名。</li>
+    </ul>
+    <p class="note">以控制台 <a class="path" href="/keys">/keys</a> 页面显示的地址为准。这里写的和那边不一样时，信那边。</p>
+  </section>
+
+  <section class="sec">
+    <h2>池子里有什么</h2>
+    <p>可用模型以 <code>GET /v1/models</code> 的返回为准，那是唯一不会过期的清单。注意范围：它返回的是你这把 key 所属分组能用的模型，不是整池——分组不同，列表不同；要看别的分组，用那个分组的 key 再打一次。这一页不列表，免得过期骗人。</p>
+    <p class="lead-in">池子里大致三类，哪一类归你，看建 key 时选的分组：</p>
+    <ul class="rows">
+      <li>写代码的：Claude 系、GPT-Codex 系。</li>
+      <li>长上下文通用的：Gemini 系。</li>
+      <li>试验性接入的：Antigravity 等，随时可能下线。</li>
+    </ul>
+    <p>model id 直接抄 <code>/v1/models</code> 的返回，不要凭记忆手写——上游改名的频率比你想象的高。</p>
+    <p>某个模型突然 <code>404</code>，先看 message：写着 <code>not available for this group</code> 的，是这个模型不在你分组的白名单里，换分组，或找 <span class="ph">[平台组 / 填负责人]</span> 加；其余的 404 通常是上游改了 id，或者这条线暂时被摘掉了，打一次 <code>/v1/models</code> 核对。</p>
+  </section>
+
+  <section class="sec">
+    <h2>公平使用，以及谁在管</h2>
+    <p>池子是共享的，额度是按人的。用量在控制台看得到；不想登录就用 <a href="/key-usage">用量查询</a>，输入 key 查自己那一份。</p>
+    <p>额度用完不降级、不静默截断——你会看到报错，不会看到胡话。报错先看 body 里的 code，别只看状态码：</p>
+    <ul class="rows">
+      <li><code>429</code> 且 code 带 <code>QUOTA_EXHAUSTED</code> 或 <code>USAGE_LIMIT_EXCEEDED</code>（Codex 那条路上写成 <code>insufficient_quota</code>）：额度用完。退避重试没有用，去找 <span class="ph">[平台组 / 填负责人]</span>。</li>
+      <li><code>429</code> 且 code 是 <code>USER_RPM_EXCEEDED</code> 或 <code>GROUP_RPM_EXCEEDED</code>：限速打满。退避几秒重试。</li>
+      <li><code>403</code> 且 code 是 <code>INSUFFICIENT_BALANCE</code>：账户余额不足。同样去要额度。</li>
+      <li><code>503</code>：池里能跑这个模型的账号暂时都不可用。退避重试；一直 503 就去群里说。</li>
+    </ul>
+    <p class="note"><span class="ph">[配额策略：每人多少额度、由谁批、是否在 [每月 1 号] 复位——由管理员在这里写明，不要让同事靠猜]</span></p>
+    <p>跑批量任务或压测前在群里说一声，错开高峰。不要用交互用的 key 跑 CI，单独开一把。一把 key 对应一个用途。</p>
+    <p>上游账号偶尔会掉。spool 会把它摘掉，换池里别的账号重试；你可能感觉到一次重试的延迟。全都掉了的时候你拿到的是 503，不是变慢。</p>
+    <p>维护：<span class="ph">[平台组 / 填负责人]</span>，值班群 <span class="ph">[值班群：填群名]</span>。故障、加模型、要额度都去那里。修这台机器的人就在群里，他们不介意被问。</p>
+  </section>
+
+  <footer class="ft">
+    <ul class="nav">
+      <li><a href="/login">登录</a></li>
+      <li><a href="/dashboard">控制台</a></li>
+      <li><a href="/keys">API Keys</a></li>
+      <li><a href="/key-usage">用量查询（不登录）</a></li>
+    </ul>
+    <p>spool — 内部服务，不对外提供。跑在自建的 Sub2API 上。出事找 <span class="ph">[平台组 / 填负责人]</span>。</p>
+  </footer>
+
+</div>
+</div>

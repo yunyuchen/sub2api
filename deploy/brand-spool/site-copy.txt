@@ -1,0 +1,2 @@
+site_name: spool
+site_subtitle: spool(8) — 一池上游账号，一个内部端点，按人发 key、按人计账
