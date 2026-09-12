@@ -179,13 +179,28 @@ describe('LbProfiles', () => {
     expect(row.find('.rp-u').classes()).toContain('is-self')
   })
 
-  it('keeps at most eight rows', () => {
-    const many = Array.from({ length: 11 }, (_, index) => ({
+  // 画像与榜单本体同为 Top 50：后端已按 Total Tokens 取前 50 名，这里只兜一层底。
+  // 多出来的行 MUST NOT 渲染，少于 50 行时有多少渲染多少，不补位。
+  it('keeps at most fifty rows and never pads', () => {
+    const many = Array.from({ length: 60 }, (_, index) => ({
       identity: { kind: 'anonymous' as const },
       ordinal: index + 1,
       models: [{ model: `model-${index}`, share_percent: 100 - index }],
     }))
 
-    expect(mountProfiles(many).findAll('[data-testid="leaderboard-profiles-row"]')).toHaveLength(8)
+    expect(mountProfiles(many).findAll('[data-testid="leaderboard-profiles-row"]')).toHaveLength(50)
+    expect(mountProfiles(many.slice(0, 12)).findAll('[data-testid="leaderboard-profiles-row"]')).toHaveLength(12)
+  })
+
+  // 50 行逐行递延会让末行等到 ~3s 才入场；与榜单同样按 4 行一档级联，末行不超过 ~0.7s。
+  it('cascades the reveal four rows per step like the rank list', () => {
+    const many = Array.from({ length: 9 }, (_, index) => ({
+      identity: { kind: 'anonymous' as const },
+      ordinal: index + 1,
+      models: [{ model: `model-${index}`, share_percent: 90 }],
+    }))
+    const rows = mountProfiles(many).findAll('[data-testid="leaderboard-profiles-row"]')
+    const steps = rows.map((row) => (row.element as HTMLElement).style.getPropertyValue('--i'))
+    expect(steps).toEqual(['0', '0', '0', '0', '1', '1', '1', '1', '2'])
   })
 })

@@ -247,7 +247,7 @@ export interface LeaderboardMonth {
   change_percent: number
 }
 
-/** 模型偏好画像：当前 Window 前 8 名各自的 Top 3 模型。占比两档都下发。 */
+/** 模型偏好画像：当前 Window 前 50 名（与榜单本体同一个数）各自的 Top 3 模型。占比两档都下发。 */
 export interface LeaderboardProfileModel {
   model: string
   share_percent: number

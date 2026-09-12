@@ -392,7 +392,7 @@ func (r *usageLogRepository) LeaderboardTopStreak(ctx context.Context, fromDate,
 // LeaderboardUserModelBreakdown 把指定的一小撮 user_id 在 [start, end) 内按 (user_id, model) 聚合，
 // 供模型偏好画像使用：一条 SQL 出这几个人的全部模型，MUST NOT 逐人各查一次（design D22）。
 //
-// userIDs 只会是该 Window Total Tokens 的前 8 名，因此 = ANY 的集合很小；
+// userIDs 只会是该 Window Total Tokens 的前 50 名（与榜单本体同一个数），因此 = ANY 的集合很小；
 // 为空时直接返回空切片，连库都不查。排序保证同一个人的模型按成功请求数倒序、同数按模型名升序，
 // 上层据此取每人的 Top N 而不必再排一次。
 func (r *usageLogRepository) LeaderboardUserModelBreakdown(ctx context.Context, userIDs []int64, start, end time.Time) (results []usagestats.LeaderboardUserModelUsageRow, err error) {

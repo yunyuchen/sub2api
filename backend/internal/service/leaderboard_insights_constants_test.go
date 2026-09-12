@@ -24,6 +24,8 @@ func TestLeaderboardV2ConstantsHoldTogether(t *testing.T) {
 	require.Greater(t, leaderboardRankHistoryRetentionDays, leaderboardRankHistoryDays,
 		"保留期必须覆盖走势天数，否则折线会在保留期边界上断掉")
 	require.Equal(t, 5, leaderboardViewerModelsLimit, "「你的模型偏好」取本人 Top 5")
+	require.Equal(t, LeaderboardTopEntryLimit, leaderboardProfilesLimit,
+		"模型偏好画像的人数与榜单本体的 Top 50 是同一个数，榜上有名的人在画像里都能找到自己")
 	require.Equal(t, 5, leaderboardRhythmLevels, "周内节奏是 0–4 共五档")
 }
 

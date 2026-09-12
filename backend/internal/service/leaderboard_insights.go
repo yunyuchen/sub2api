@@ -43,8 +43,9 @@ const (
 	// leaderboardStreakLookbackDays 是连续活跃的回溯天数，与名次历史的保留期同一个数。
 	leaderboardStreakLookbackDays = 90
 
-	// leaderboardProfilesLimit 是模型偏好画像的用户数（该 Window Total Tokens 前 8 名）。
-	leaderboardProfilesLimit = 8
+	// leaderboardProfilesLimit 是模型偏好画像的用户数：该 Window Total Tokens 前 50 名，
+	// 与榜单本体的 Top 50（LeaderboardTopEntryLimit）是同一个数——榜上有名的人在画像里都能找到自己。
+	leaderboardProfilesLimit = LeaderboardTopEntryLimit
 
 	// leaderboardProfileModelsLimit 是画像里每人取的模型数（Top 3）。
 	leaderboardProfileModelsLimit = 3

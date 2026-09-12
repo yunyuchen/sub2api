@@ -919,14 +919,15 @@ func TestLeaderboardSnapshotService_ExtremesStreakFailureDegradesOnly(t *testing
 	require.Nil(t, cache.byWindow(t, LeaderboardWindowToday).Highlights.Extremes.Streak)
 }
 
-// 画像：每个窗口一条限定 Top 8 的聚合，MUST NOT 为这 8 个人各发一条查询。
+// 画像：每个窗口一条限定 Top 50 的聚合，MUST NOT 为这 50 个人各发一条查询。
 func TestLeaderboardSnapshotService_ProfilesSingleQueryPerWindow(t *testing.T) {
 	require.NoError(t, timezone.Init("UTC"))
 	now := time.Date(2026, 3, 18, 15, 30, 0, 0, time.UTC)
 	todayStart, todayEnd, _ := LeaderboardWindowBounds(LeaderboardWindowToday, now)
 
-	rows := make([]usagestats.LeaderboardAggregateRow, 0, 10)
-	for i := 1; i <= 10; i++ {
+	// 60 个人都有用量：画像只取前 50，第 51–60 名 MUST NOT 进入聚合的 user_id 集合。
+	rows := make([]usagestats.LeaderboardAggregateRow, 0, 60)
+	for i := 1; i <= 60; i++ {
 		rows = append(rows, usagestats.LeaderboardAggregateRow{
 			UserID:      int64(i),
 			TodayTokens: int64(1000 - i*10), TodayRequests: 5,
@@ -947,8 +948,12 @@ func TestLeaderboardSnapshotService_ProfilesSingleQueryPerWindow(t *testing.T) {
 
 	require.Len(t, repo.userModelCalls, 3, "每个窗口一条聚合，三个窗口共三条")
 	todayCall := repo.userModelCalls[0]
-	require.Len(t, todayCall.userIDs, leaderboardProfilesLimit, "只取前 8 名")
-	require.Equal(t, []int64{1, 2, 3, 4, 5, 6, 7, 8}, todayCall.userIDs)
+	require.Len(t, todayCall.userIDs, leaderboardProfilesLimit, "只取前 50 名")
+	wantIDs := make([]int64, 0, leaderboardProfilesLimit)
+	for i := 1; i <= leaderboardProfilesLimit; i++ {
+		wantIDs = append(wantIDs, int64(i))
+	}
+	require.Equal(t, wantIDs, todayCall.userIDs)
 	require.True(t, todayCall.start.Equal(todayStart))
 	require.True(t, todayCall.end.Equal(todayEnd))
 
