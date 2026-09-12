@@ -48,6 +48,10 @@
 .spool-home .spool-bn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(217,119,87,.32);}
 
 /* ---------- hero ---------- */
+.spool-home .spool-warm-hero{min-height:100vh;display:flex;flex-direction:column;}
+.spool-home .spool-warm-hero .spool-hero{flex:1;}
+@media (max-width:1040px){.spool-home .spool-warm-hero{min-height:0;}}
+
 .spool-home .spool-hero{padding:190px 0 255px;display:grid;grid-template-columns:1.1fr .9fr;gap:32px;align-items:start;}
 .spool-home .spool-hero h1{font-size:72px;font-weight:700;letter-spacing:-1.8px;line-height:1.1;}
 .spool-home .spool-l1{color:var(--cream);}
@@ -201,7 +205,7 @@
 <div class="spool-home">
 
   <!-- ===== hero band ===== -->
-  <div class="spool-warm">
+  <div class="spool-warm spool-warm-hero">
     <div class="spool-lay">
       <div class="spool-wrap">
         <nav class="spool-nav">
