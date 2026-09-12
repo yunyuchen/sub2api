@@ -1,203 +1,537 @@
-<!-- spool home_content · 粘贴前把 https://spool.corp.internal 换成你实例的实际地址（共 3 处：hero 地址块、ANTHROPIC_BASE_URL、OPENAI_BASE_URL），以控制台 API Keys 页面显示的为准。 -->
+<!-- spool home_content · 磷光终端 · 定稿。粘贴前把示例地址换成你实例的实际地址，共 3 处：hero 读数窗、ANTHROPIC_BASE_URL、OPENAI_BASE_URL；以控制台 API Keys 页显示的为准。页面不跑 JS；样式全部限定在 .spool-home 之下。 -->
 <style>
 .spool-home{
-  --paper:#F1F3EC; --band:#E7EBE1; --ink:#101A17; --ink-2:#4A554F;
-  --green:#2E8B6F; --green-ink:#247159; --amber:#C4881B; --hole:#D3D9C9; --rule:#DDE2D5;
-  --panel:#0F1317; --panel-ink:#D9E0D7; --panel-dim:#8C978D;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --case:#0B0F14; --band:#0D1319; --panel:#141B21; --panel-2:#0F161C; --well:#080C10;
+  --bezel:#24313A; --rule:#1A242B;
+  --green:#2E8B6F; --phos:#5CD6A8; --phos-dim:#3E9F7E;
+  --amber:#C4881B; --amber-hi:#F0B24A;
+  --fg:#C3D2CC; --dim:#7F8F8A; --hi:#E6F4EC;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-  background:var(--paper); color:var(--ink); font-family:var(--sans);
-  min-height:100vh; padding:0 16px; font-size:15px; line-height:1.75;
-  -webkit-font-smoothing:antialiased;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  position:relative; isolation:isolate; overflow-x:clip;
+  background-color:var(--case); color:var(--fg);
+  font-family:var(--sans); font-size:15px; line-height:1.8;
+  min-height:100vh; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
 }
-html.dark .spool-home{
-  --paper:#0F1317; --band:#1C242B; --ink:#C9D1C8; --ink-2:#8A958C; --green-ink:#369C7E;
-  --hole:#1E262B; --rule:#243038; --panel:#202A31; --panel-ink:#D9E0D7; --panel-dim:#8A9690;
-}
-.spool-home .paper{position:relative;max-width:760px;margin:0 auto;padding:30px 0 44px 36px;}
-.spool-home .paper::before{
-  content:"";position:absolute;left:9px;top:30px;bottom:44px;width:6px;
-  background-image:repeating-linear-gradient(to bottom,var(--hole) 0 6px,transparent 6px 30px);
-}
+.spool-home .sect{position:relative; z-index:1;}
+.spool-home .in{max-width:1240px; margin:0 auto; padding:0 28px;}
 
-/* header */
-.spool-home .hd{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;}
-.spool-home .brand{display:flex;align-items:center;gap:9px;}
-.spool-home .spool-mark{display:block;width:30px;height:30px;flex:0 0 30px;}
-.spool-home .spool-mark svg{display:block;width:30px;height:30px;}
-.spool-home .word{font-size:27px;font-weight:640;letter-spacing:-.02em;line-height:1;color:var(--ink);}
-.spool-home .sub{font-size:13px;color:var(--ink-2);line-height:1.5;}
-.spool-home .nav{display:flex;flex-wrap:wrap;gap:6px 18px;margin:14px 0 0;padding:0;list-style:none;font-size:14px;}
+/* ---------- primitives ---------- */
+.spool-home a{color:var(--hi); text-decoration:none;}
+.spool-home a:hover{color:var(--phos);}
+.spool-home a:focus-visible{outline:2px solid var(--phos); outline-offset:3px;}
+.spool-home code{font-family:var(--mono); font-size:.88em; color:var(--phos); background:rgba(46,139,111,.1); padding:1px 5px; border:1px solid rgba(46,139,111,.2);}
+.spool-home .caret{display:inline-block; width:.52em; height:.74em; vertical-align:-.02em; background:var(--phos); margin-left:.22em; box-shadow:0 0 12px rgba(92,214,168,.6); animation:spool-blink 1.06s steps(1) infinite;}
+.spool-home .caret-a{background:var(--amber-hi); box-shadow:0 0 12px rgba(240,178,74,.55);}
+@keyframes spool-blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+
+/* ---------- top rail ---------- */
+.spool-home .rail{border-bottom:1px solid var(--rule); background:linear-gradient(180deg,#0E141A,#0A0E13);}
+.spool-home .rail .in{display:flex; align-items:center; gap:18px 24px; flex-wrap:wrap; padding-top:13px; padding-bottom:13px;}
+.spool-home .brand{display:flex; align-items:center; gap:11px; margin-right:auto;}
+.spool-home .brand svg{display:block; width:30px; height:30px;}
+.spool-home .wm{font-family:var(--mono); font-size:23px; font-weight:600; letter-spacing:.01em; color:var(--hi); line-height:1;}
+.spool-home .tag{font-family:var(--mono); font-size:11.5px; color:var(--dim); letter-spacing:.04em; padding-top:4px;}
+.spool-home .led{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--phos); box-shadow:0 0 9px rgba(92,214,168,.85); animation:spool-pulse 3.4s ease-in-out infinite;}
+@keyframes spool-pulse{0%,100%{opacity:1}52%{opacity:.34}}
+.spool-home .stat{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px; color:var(--phos-dim); letter-spacing:.05em;}
+.spool-home .nav{display:flex; gap:4px 6px; flex-wrap:wrap; margin:0; padding:0; list-style:none;}
 .spool-home .nav li{margin:0;}
-.spool-home .hd-rule{height:1px;background:var(--rule);margin:16px 0 0;}
+.spool-home .nav a{display:block; padding:5px 11px; border:1px solid transparent; line-height:1.25;}
+.spool-home .nav a:hover{border-color:var(--bezel); background:rgba(46,139,111,.07);}
+.spool-home .nav b{display:block; font-weight:500; font-size:14px;}
+.spool-home .nav span{display:block; font-family:var(--mono); font-size:10.5px; color:var(--dim); letter-spacing:.02em;}
+.spool-home .nav a:hover span{color:var(--phos-dim);}
 
-/* links */
-.spool-home a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--green);text-underline-offset:3px;text-decoration-thickness:1px;}
-.spool-home a:hover{color:var(--green-ink);}
-.spool-home a:focus-visible{outline:2px solid var(--green);outline-offset:2px;border-radius:1px;}
-.spool-home .path{font-family:var(--mono);font-size:13.5px;}
+/* ---------- hero ---------- */
+.spool-home .hero{
+  background-image:
+    radial-gradient(940px 460px at 76% 0%,rgba(46,139,111,.15),transparent 68%),
+    radial-gradient(620px 340px at 2% 6%,rgba(196,136,27,.055),transparent 70%),
+    repeating-linear-gradient(to right,rgba(46,139,111,.05) 0 1px,transparent 1px 92px),
+    repeating-linear-gradient(to bottom,rgba(46,139,111,.035) 0 1px,transparent 1px 92px);
+}
+.spool-home .hero::after{content:""; position:absolute; inset:0; z-index:5; pointer-events:none; background-image:repeating-linear-gradient(to bottom,rgba(0,0,0,.2) 0 1px,transparent 1px 3px);}
+.spool-home .hero .in{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,580px); gap:48px; align-items:center; padding-top:52px; padding-bottom:44px;}
+.spool-home .copy{min-width:0;}
+.spool-home h1{
+  margin:0; font-family:var(--sans); font-weight:800; font-size:clamp(30px,3.5vw,50px);
+  line-height:1.22; letter-spacing:.005em; color:var(--hi);
+  text-shadow:0 0 26px rgba(92,214,168,.28),0 0 3px rgba(92,214,168,.18);
+}
+.spool-home h1 .ln{display:block;}
+.spool-home .lede{margin:20px 0 0; font-size:15.5px; line-height:1.95; color:var(--fg); max-width:33em;}
+.spool-home .spec{margin:22px 0 0; padding:14px 0 0; border-top:1px solid var(--rule); list-style:none;}
+.spool-home .spec li{margin:0 0 3px; display:flex; gap:11px; font-family:var(--mono); font-size:12.5px; line-height:1.85; color:var(--dim);}
+.spool-home .spec li:last-child{margin-bottom:0;}
+.spool-home .spec li b{flex:0 0 32px; font-weight:400; color:var(--phos-dim); letter-spacing:.08em;}
 
-/* hero */
-.spool-home .hero{margin:34px 0 0;}
-.spool-home .hero h1{margin:0;font-size:36px;line-height:1.3;font-weight:640;letter-spacing:-.02em;color:var(--ink);max-width:10.6em;text-wrap:balance;}
-.spool-home .hero .lede{margin:16px 0 0;font-size:16.5px;line-height:1.8;color:var(--ink);max-width:32.5em;text-wrap:pretty;}
+/* readout: base URL */
+.spool-home .prompt{margin:26px 0 0; border:1px solid var(--bezel); background:var(--well); box-shadow:0 0 0 1px rgba(0,0,0,.55),0 18px 40px -28px rgba(0,0,0,.9);}
+.spool-home .urlline{display:flex; align-items:baseline; gap:12px; padding:15px 18px 11px; min-width:0;}
+.spool-home .urlline .dl{font-family:var(--mono); font-size:clamp(17px,1.75vw,25px); color:var(--amber-hi); flex:0 0 auto; user-select:none; -webkit-user-select:none;}
+.spool-home .url{font-family:var(--mono); font-size:clamp(17px,1.8vw,26px); letter-spacing:-.01em; color:var(--hi); text-shadow:0 0 22px rgba(92,214,168,.3); white-space:pre-wrap; overflow-wrap:anywhere; min-width:0;}
+.spool-home .prompt .note{margin:0; padding:9px 18px 11px; border-top:1px solid var(--rule); font-size:12.5px; line-height:1.75; color:var(--dim);}
 
-/* sections */
-.spool-home .sec{margin:44px 0 0;}
-.spool-home .sec h2{margin:0 0 12px;font-size:20px;font-weight:600;line-height:1.4;color:var(--green-ink);letter-spacing:-.01em;}
-.spool-home .sec p{margin:0 0 12px;max-width:38em;}
-.spool-home .sec p.lead-in{margin-bottom:6px;}
-.spool-home .sec p:last-child{margin-bottom:0;}
-/* 小标与脚注：声明在 .sec p / .hero 规则之后，特异性 (0,2,1)，在 hero 与 sec 里表现一致 */
-.spool-home p.cap{margin:0 0 6px;font-size:13px;line-height:1.6;color:var(--ink-2);max-width:none;}
-.spool-home p.note{margin:0 0 12px;font-size:13.5px;color:var(--ink-2);line-height:1.7;max-width:40em;}
-.spool-home p.note:last-child{margin-bottom:0;}
+/* ---------- the machine: rack unit ---------- */
+.spool-home .rack{min-width:0; border:1px solid var(--bezel); background:var(--panel-2); box-shadow:0 0 0 1px rgba(0,0,0,.6),0 26px 60px -30px rgba(0,0,0,.9);}
+.spool-home .bay-hd{display:flex; align-items:center; gap:10px; padding:8px 13px; border-bottom:1px solid var(--rule); background:linear-gradient(180deg,#18212A,#121A21); font-family:var(--mono); font-size:11px; letter-spacing:.08em; color:var(--dim); white-space:nowrap; overflow:hidden;}
+.spool-home .bay-hd b{color:var(--phos-dim); font-weight:600; letter-spacing:.1em;}
+.spool-home .bay-hd .sp{margin-left:auto; letter-spacing:.04em; overflow:hidden; text-overflow:ellipsis;}
+.spool-home .drive{display:flex; align-items:center; gap:22px; padding:18px 20px; background:linear-gradient(180deg,#121A21,#0E151B);}
+.spool-home .drive svg{display:block; width:150px; height:150px; flex:0 0 150px;}
+.spool-home .dr-spin{transform-box:view-box; transform-origin:200px 256px; animation:spool-reel 13s linear infinite;}
+@keyframes spool-reel{to{transform:rotate(360deg)}}
+.spool-home .dr-read{min-width:0;}
+.spool-home .silk{margin:0 0 10px; font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; line-height:1.7; color:var(--dim);}
+.spool-home .silk b{color:var(--phos-dim); font-weight:600;}
+.spool-home .dr-read p{margin:0 0 6px; font-family:var(--mono); font-size:11.5px; letter-spacing:.06em; color:var(--dim); line-height:1.6;}
+.spool-home .dr-read p.silk{margin-bottom:10px;}
+.spool-home .dr-read p b{color:var(--fg); font-weight:500; letter-spacing:.02em;}
+.spool-home .dr-read p.silk b{color:var(--phos-dim); font-weight:600;}
+.spool-home .leds{display:flex; gap:16px; margin:8px 0 0; padding:0; list-style:none;}
+.spool-home .leds li{margin:0; display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:.1em; color:var(--dim);}
+.spool-home .leds i{display:block; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 8px rgba(46,139,111,.8);}
+.spool-home .leds li:nth-child(2) i{background:var(--phos); box-shadow:0 0 8px rgba(92,214,168,.9);}
+.spool-home .leds li:nth-child(3) i{background:var(--amber-hi); box-shadow:0 0 8px rgba(240,178,74,.8); animation:spool-pulse 1.3s ease-in-out infinite;}
 
-/* greenbar 记录行 */
-.spool-home .rows{margin:0 0 14px -10px;padding:0 10px;list-style:none;font-size:15px;line-height:26px;
-  background-image:repeating-linear-gradient(to bottom,var(--band) 0 26px,transparent 26px 52px);}
-.spool-home .rows li{margin:0;padding:0 0 0 18px;position:relative;max-width:38em;}
-.spool-home .rows li::before{content:"";position:absolute;left:2px;top:11px;width:5px;height:5px;background:var(--green);}
-.spool-home .rows code{background:transparent;padding:0;}
-.spool-home ol.steps{margin:0 0 14px;padding:0;list-style:none;counter-reset:s;}
-.spool-home ol.steps li{counter-increment:s;margin:0 0 8px;padding:0 0 0 26px;position:relative;max-width:38em;}
-.spool-home ol.steps li::before{content:counter(s) ".";position:absolute;left:0;top:0;color:var(--green-ink);font-variant-numeric:tabular-nums;font-weight:600;}
-.spool-home ol.steps li:last-child{margin-bottom:0;}
+/* console screen */
+.spool-home .crt{position:relative; overflow:hidden; background:var(--well); border-top:1px solid var(--rule);}
+.spool-home .crt .glass{position:absolute; inset:0; z-index:3; pointer-events:none; background-image:repeating-linear-gradient(to bottom,rgba(92,214,168,.05) 0 1px,transparent 1px 3px);}
+.spool-home .crt .sweep{position:absolute; left:0; right:0; top:0; height:64px; z-index:2; pointer-events:none; background:linear-gradient(to bottom,transparent,rgba(92,214,168,.07),transparent); animation:spool-sweep 6.5s linear infinite;}
+@keyframes spool-sweep{from{transform:translateY(-100%)}to{transform:translateY(560%)}}
+.spool-home .view{box-sizing:border-box; height:226px; overflow:hidden; padding:10px 16px 0; position:relative; z-index:1;}
+.spool-home .log{margin:0; padding:0; list-style:none; font-family:var(--mono); font-size:12px; line-height:24px; color:var(--phos-dim); animation:spool-scroll 14s steps(9,end) infinite;}
+@keyframes spool-scroll{to{transform:translateY(-216px)}}
+.spool-home .log li{margin:0; height:24px; white-space:pre; overflow:hidden;}
+.spool-home .log .k{color:#5C6C68}
+.spool-home .log .ok{color:var(--phos); text-shadow:0 0 10px rgba(92,214,168,.45)}
+.spool-home .log .wr{color:var(--amber-hi); text-shadow:0 0 10px rgba(240,178,74,.4)}
+.spool-home .log .d{color:#5C6C68; font-family:var(--sans); font-size:11.5px; letter-spacing:.02em;}
+.spool-home .ps{margin:0; padding:9px 16px 13px; font-family:var(--mono); font-size:12px; color:var(--phos-dim); border-top:1px solid rgba(46,139,111,.14); position:relative; z-index:1;}
 
-/* 命令区：带琥珀竖条的块。长行软换行，续行缩进 2ch；点一行整行选中，复制得到的仍是单行 */
-.spool-home .cmd{margin:0 0 12px;background:var(--panel);border-left:3px solid var(--amber);
-  padding:11px 14px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.8;color:var(--panel-ink);}
-html.dark .spool-home .cmd{box-shadow:inset 0 0 0 1px var(--rule);}
-.spool-home .cmd .l{display:block;white-space:pre-wrap;overflow-wrap:anywhere;padding-left:2ch;text-indent:-2ch;}
-.spool-home .cmd .c{display:block;white-space:pre-wrap;overflow-wrap:anywhere;padding-left:2ch;text-indent:-2ch;color:var(--panel-dim);}
-.spool-home .url{font-size:17px;line-height:1.6;letter-spacing:-.01em;}
-.spool-home code{font-family:var(--mono);font-size:13.5px;background:var(--band);padding:1px 4px;color:var(--ink);}
-.spool-home .ph{color:var(--ink-2);}
+/* ---------- section shells ---------- */
+.spool-home .body{padding-top:52px; padding-bottom:52px;}
+.spool-home .shd{display:flex; align-items:baseline; gap:8px 16px; flex-wrap:wrap; padding:0 0 16px; border-bottom:1px solid var(--rule); margin-bottom:26px;}
+.spool-home .shd h2{margin:0; font-size:19px; font-weight:700; color:var(--hi); letter-spacing:.01em; line-height:1.3;}
+.spool-home .shd .hint{font-size:13px; color:var(--dim); line-height:1.5;}
+.spool-home .shd .num{margin-left:auto; font-family:var(--mono); font-size:11px; letter-spacing:.18em; color:var(--phos-dim); white-space:nowrap;}
 
-/* footer */
-.spool-home .ft{margin:48px 0 0;padding:16px 0 0;border-top:1px solid var(--rule);}
-.spool-home .ft .nav{margin:0;}
-.spool-home .ft p{margin:12px 0 0;font-size:13px;color:var(--ink-2);line-height:1.7;max-width:40em;}
+/* ---------- pipeline ---------- */
+.spool-home .pipe{background:var(--band);}
+.spool-home .flow{display:grid; grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr) 54px minmax(0,1fr); align-items:stretch;}
+.spool-home .node{border:1px solid var(--rule); background:var(--panel); padding:17px 18px 18px; position:relative; min-width:0;}
+.spool-home .node .n{position:absolute; top:-1px; left:-1px; padding:2px 8px; font-family:var(--mono); font-size:11px; color:var(--case); background:var(--phos-dim); letter-spacing:.06em;}
+.spool-home .node h3{margin:18px 0 0; font-size:17px; font-weight:700; color:var(--hi); line-height:1.4;}
+.spool-home .node .rt{display:inline-block; margin:6px 0 0; font-family:var(--mono); font-size:12px; color:var(--amber-hi);}
+.spool-home .node a.rt:hover{color:var(--phos);}
+.spool-home .node p{margin:9px 0 0; font-size:13.5px; line-height:1.75; color:var(--dim);}
+.spool-home .link{position:relative; display:flex; align-items:center;}
+.spool-home .link::before{content:""; position:absolute; left:0; right:0; top:50%; height:1px; background:linear-gradient(90deg,rgba(46,139,111,.15),rgba(46,139,111,.6),rgba(46,139,111,.15));}
+.spool-home .link i{position:absolute; top:50%; margin-top:-3px; left:0; width:6px; height:6px; background:var(--amber-hi); box-shadow:0 0 9px rgba(240,178,74,.8); animation:spool-travel 2.6s linear infinite;}
+.spool-home .link:nth-of-type(4) i{animation-delay:1.3s}
+@keyframes spool-travel{0%{transform:translateX(0);opacity:0}12%{opacity:1}88%{opacity:1}100%{transform:translateX(48px);opacity:0}}
+@keyframes spool-travel-v{0%{transform:translateY(0);opacity:0}12%{opacity:1}88%{opacity:1}100%{transform:translateY(30px);opacity:0}}
 
-@media (max-width:560px){
-  .spool-home .paper{padding-left:24px;}
-  .spool-home .paper::before{left:3px;}
-  .spool-home .hero h1{font-size:27px;}
-  .spool-home .hero .lede{font-size:15.5px;}
-  .spool-home .sec h2{font-size:18px;}
-  .spool-home .url{font-size:14.5px;}
-  .spool-home .cmd{font-size:12.5px;}
+/* ---------- patch bay (commands) ---------- */
+.spool-home .patch{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px;}
+.spool-home .cell{min-width:0; border:1px solid var(--bezel); background:var(--panel); display:flex; flex-direction:column;}
+.spool-home .cell.wide{grid-column:1 / -1;}
+.spool-home .cell .ch{display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--rule); background:linear-gradient(180deg,#18212A,#131B22);}
+.spool-home .cell .ch b{font-size:13.5px; font-weight:600; color:var(--hi);}
+.spool-home .cell .ch .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.09em; color:var(--dim); margin-left:auto;}
+.spool-home .cell .ch i{display:block; width:6px; height:6px; background:var(--amber); box-shadow:0 0 7px rgba(196,136,27,.7);}
+.spool-home .cmd{margin:0; padding:13px 15px; background:var(--well); border-left:2px solid var(--amber); font-family:var(--mono); font-size:13px; line-height:1.95; color:var(--phos); flex:1; min-width:0;}
+.spool-home .cmd .l{display:block; white-space:pre-wrap; overflow-wrap:anywhere; padding-left:2ch; text-indent:-2ch;}
+.spool-home .cmd .pr{color:var(--amber-hi); user-select:none; -webkit-user-select:none;}
+.spool-home .cmd .v{color:var(--hi);}
+.spool-home .cmd .ph{color:var(--dim);}
+.spool-home .cmd .c{display:block; white-space:pre-wrap; overflow-wrap:anywhere; padding-left:2ch; text-indent:-2ch; color:#5F6F6A; font-size:12.5px;}
+
+/* ---------- bins ---------- */
+.spool-home .bins{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px;}
+.spool-home .bin{border:1px solid var(--rule); border-top:2px solid var(--green); background:var(--panel); padding:17px 18px 18px; min-width:0;}
+.spool-home .bin:nth-child(3){border-top-color:var(--amber);}
+.spool-home .bin h3{margin:0; font-size:16px; font-weight:700; color:var(--hi);}
+.spool-home .bin ul{margin:11px 0 0; padding:0; list-style:none;}
+.spool-home .bin li{margin:0 0 5px; font-family:var(--mono); font-size:13px; color:var(--phos); display:flex; gap:9px; align-items:baseline;}
+.spool-home .bin li::before{content:""; flex:0 0 5px; height:5px; background:var(--green); transform:translateY(-2px);}
+.spool-home .bin:nth-child(3) li{color:var(--amber-hi);}
+.spool-home .bin:nth-child(3) li::before{background:var(--amber);}
+.spool-home .bin p{margin:12px 0 0; font-size:13px; line-height:1.75; color:var(--dim);}
+.spool-home .truth{margin:20px 0 0; border-left:2px solid var(--green); padding:2px 0 2px 15px; font-size:14px; line-height:1.85; color:var(--fg); max-width:64em;}
+
+/* ---------- fault codes ---------- */
+.spool-home .tw{border:1px solid var(--bezel); background:var(--panel-2); overflow-x:auto;}
+.spool-home table.ft{width:100%; margin:0; border-collapse:separate; border-spacing:0;}
+.spool-home table.ft th{text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.16em; font-weight:400; color:var(--dim); padding:10px 16px; background:linear-gradient(180deg,#18212A,#131B22); border-bottom:1px solid var(--bezel); white-space:nowrap;}
+.spool-home table.ft td{padding:13px 16px; border-top:1px solid var(--rule); vertical-align:top; font-size:13.5px; line-height:1.7; color:var(--fg);}
+.spool-home table.ft tr:first-child td{border-top:0;}
+.spool-home .hs{font-family:var(--mono); font-size:20px; line-height:1.2; color:var(--amber-hi); font-variant-numeric:tabular-nums;}
+.spool-home .hs.b{color:var(--phos);}
+.spool-home .hs.c{color:var(--dim);}
+.spool-home .ec{display:block; font-family:var(--mono); font-size:12.5px; line-height:1.85; color:var(--hi); white-space:nowrap;}
+.spool-home .ec.alt{color:var(--dim);}
+.spool-home .chip{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:11px; letter-spacing:.1em; padding:3px 9px; border:1px solid; white-space:nowrap; line-height:1.5;}
+.spool-home .chip i{width:6px; height:6px; border-radius:50%; background:currentColor; font-style:normal;}
+.spool-home .chip.h{color:var(--case); background:var(--amber-hi); border-color:var(--amber-hi); font-weight:700; box-shadow:0 0 12px rgba(240,178,74,.35);}
+.spool-home .chip.b{color:var(--phos); border-color:rgba(92,214,168,.4); background:rgba(92,214,168,.07);}
+.spool-home .chip.c{color:var(--dim); border-color:var(--bezel); background:rgba(127,143,138,.07);}
+.spool-home .act b{color:var(--hi); font-weight:600;}
+.spool-home .tn{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px 28px; margin:18px 0 0;}
+.spool-home .tn p{margin:0; font-size:13px; line-height:1.85; color:var(--dim); border-left:1px solid var(--rule); padding-left:14px;}
+.spool-home .tn b{color:var(--fg); font-weight:600;}
+
+/* ---------- rules plate ---------- */
+.spool-home .plate{border:1px solid var(--amber); background:linear-gradient(180deg,rgba(196,136,27,.07),rgba(196,136,27,.02));}
+.spool-home .hazard{height:12px; background-image:repeating-linear-gradient(45deg,var(--amber) 0 10px,#0B0F14 10px 20px); border-bottom:1px solid var(--amber);}
+.spool-home .rgrid{display:grid; grid-template-columns:repeat(3,minmax(0,1fr));}
+.spool-home .rgrid > div{padding:20px 22px 22px; border-left:1px solid rgba(196,136,27,.35); min-width:0;}
+.spool-home .rgrid > div:first-child{border-left:0;}
+.spool-home .rgrid p{margin:0; font-size:15px; font-weight:600; line-height:1.7; color:var(--hi); padding-left:16px; position:relative;}
+.spool-home .rgrid p::before{content:""; position:absolute; left:0; top:11px; width:7px; height:2px; background:var(--amber-hi);}
+.spool-home .rgrid p.sub{margin-top:6px; font-size:12.5px; font-weight:400; color:var(--dim); padding-left:16px;}
+.spool-home .rgrid p.sub::before{display:none;}
+
+/* ---------- footer ---------- */
+.spool-home .foot{border-top:1px solid var(--rule); background:#080C10;}
+.spool-home .foot .in{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px 40px; align-items:start; padding-top:26px; padding-bottom:36px;}
+.spool-home .foot p{margin:0; font-size:13px; color:var(--dim); line-height:1.8;}
+.spool-home .foot .who{font-family:var(--mono); font-size:12px; color:var(--phos-dim); letter-spacing:.05em;}
+.spool-home .foot .lore{max-width:46em; font-size:12.5px; color:#63736E; margin-top:8px;}
+.spool-home .fnav{margin:0; padding:0; list-style:none; display:flex; flex-wrap:wrap; gap:6px 18px; font-size:13px;}
+.spool-home .fnav li{margin:0;}
+.spool-home .fnav a{color:var(--fg);}
+.spool-home .fnav span{font-family:var(--mono); font-size:11px; color:var(--dim); margin-left:6px;}
+
+/* ---------- responsive ---------- */
+@media (max-width:1100px){
+  .spool-home .hero .in{grid-template-columns:minmax(0,1fr); gap:34px; align-items:start; padding-top:40px;}
+  .spool-home .lede{max-width:none;}
+  .spool-home .rack{max-width:720px;}
+}
+@media (max-width:900px){
+  .spool-home .flow{grid-template-columns:minmax(0,1fr); gap:0;}
+  .spool-home .link{height:34px; justify-content:center;}
+  .spool-home .link::before{left:50%; right:auto; top:0; bottom:0; width:1px; height:auto; background:linear-gradient(180deg,rgba(46,139,111,.2),rgba(46,139,111,.6));}
+  .spool-home .link i{left:50%; margin-left:-3px; top:0; margin-top:0; animation-name:spool-travel-v;}
+  .spool-home .bins{grid-template-columns:minmax(0,1fr);}
+  .spool-home .patch{grid-template-columns:minmax(0,1fr);}
+  .spool-home .rgrid{grid-template-columns:minmax(0,1fr);}
+  .spool-home .rgrid > div{border-left:0; border-top:1px solid rgba(196,136,27,.35);}
+  .spool-home .rgrid > div:first-child{border-top:0;}
+  .spool-home .tn{grid-template-columns:minmax(0,1fr);}
+  .spool-home .foot .in{grid-template-columns:minmax(0,1fr);}
+}
+@media (max-width:680px){
+  .spool-home table.ft,.spool-home table.ft tbody{display:block; width:auto;}
+  .spool-home table.ft thead{display:none;}
+  .spool-home table.ft tr{display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 14px; align-items:center; padding:13px 14px; border-top:1px solid var(--rule);}
+  .spool-home table.ft tr:first-child{border-top:0;}
+  .spool-home table.ft td{display:block; padding:0; border:0; min-width:0;}
+  .spool-home table.ft td:nth-child(3){justify-self:start;}
+  .spool-home table.ft td:nth-child(2),.spool-home table.ft td:nth-child(4){grid-column:1 / -1;}
+  .spool-home table.ft td[data-l]::before{content:attr(data-l); display:block; font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--dim); margin-bottom:2px;}
+  .spool-home .ec{white-space:normal; overflow-wrap:anywhere;}
+}
+@media (max-width:600px){
+  .spool-home .in{padding:0 16px;}
+  .spool-home .body{padding-top:38px; padding-bottom:38px;}
+  .spool-home .hero .in{padding-top:32px; padding-bottom:36px;}
+  .spool-home .drive{gap:14px; padding:14px;}
+  .spool-home .drive svg{width:96px; height:96px; flex:0 0 96px;}
+  .spool-home .spec li{font-size:11.5px; gap:9px;}
+  .spool-home .spec li b{flex:0 0 28px;}
+  .spool-home .urlline{padding:12px 14px 9px; gap:9px;}
+  .spool-home .url{font-size:15.5px;}
+  .spool-home .urlline .dl{font-size:15.5px;}
+  .spool-home .prompt .note{padding:8px 14px 10px;}
+  .spool-home .cmd{font-size:12px;}
+  .spool-home .cmd .c{font-size:11.5px;}
+  .spool-home .view{height:224px; padding:8px 12px 0;}
+  .spool-home .log{font-size:10.5px;}
+  .spool-home .log .d{font-size:10.5px;}
+  .spool-home .rail .in{gap:12px 16px;}
+  .spool-home .nav a{padding:4px 8px;}
+  .spool-home .shd{padding-bottom:14px; margin-bottom:20px;}
+  .spool-home .rgrid > div{padding:16px 16px 18px;}
+}
+@media (prefers-reduced-motion:reduce){
+  .spool-home *,.spool-home *::before,.spool-home *::after{animation:none !important;}
+  .spool-home .crt .sweep{display:none;}
+  .spool-home .caret{opacity:1;}
 }
 </style>
 
 <div class="spool-home">
-<div class="paper">
 
-  <header class="hd">
+<header class="sect rail">
+  <div class="in">
     <div class="brand">
-      <span class="spool-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><path fill="#2E8B6F" fill-rule="evenodd" d="M200 96a160 160 0 1 0 0 320 160 160 0 1 0 0-320Zm0 68a92 92 0 1 1 0 184 92 92 0 1 1 0-184Z"/><rect x="200" y="352" width="280" height="64" fill="#2E8B6F"/><circle cx="200" cy="256" r="40" fill="#C4881B"/></svg></span>
-      <span class="word">spool</span>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="spool"><path fill="#2E8B6F" fill-rule="evenodd" d="M200 96a160 160 0 1 0 0 320 160 160 0 1 0 0-320Zm0 68a92 92 0 1 1 0 184 92 92 0 1 1 0-184Z"/><rect x="200" y="352" width="280" height="64" fill="#2E8B6F"/><circle cx="200" cy="256" r="40" fill="#C4881B"/></svg>
+      <span class="wm">spool</span>
+      <span class="tag">spool(8)</span>
     </div>
-    <span class="sub">spool(8) — 一池上游账号，一个内部端点，按人发 key、按人计账</span>
-  </header>
-  <ul class="nav">
-    <li><a href="/login">登录</a></li>
-    <li><a href="/dashboard">控制台</a></li>
-    <li><a href="/keys">API Keys</a></li>
-    <li><a href="/key-usage">用量查询（不登录）</a></li>
-  </ul>
-  <div class="hd-rule"></div>
+    <span class="stat"><span class="led"></span>内部服务</span>
+    <nav aria-label="主导航">
+      <ul class="nav">
+        <li><a href="/login"><b>登录</b><span>/login</span></a></li>
+        <li><a href="/dashboard"><b>控制台</b><span>/dashboard</span></a></li>
+        <li><a href="/keys"><b>API Keys</b><span>/keys</span></a></li>
+        <li><a href="/key-usage"><b>用量查询</b><span>/key-usage</span></a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
 
-  <section class="hero">
-    <h1>你不拥有那台打印机，你只是往里发作业。</h1>
-    <p class="lede">spool 是我们内部的 AI 网关。公司买的上游订阅账号在这边排成一个池，对外只露一个兼容端点。你拿一把自己的 key，改两个环境变量，用量记在你名下。就这些。</p>
-    <p class="cap" style="margin-top:26px">base URL</p>
-    <div class="cmd"><span class="l url" style="user-select:all;-webkit-user-select:all">https://spool.corp.internal</span></div>
-    <p class="note">这一页不跑 JavaScript，所以没有复制按钮。点一下带琥珀竖条的块里的命令行，那一行整行选中，Cmd-C 拿走；灰色的注释行不选中，本来也不用复制。</p>
-  </section>
+<section class="sect hero">
+  <div class="in">
+    <div class="copy">
+      <h1><span class="ln">你不拥有那台打印机，</span><span class="ln">你只是往里发作业。<span class="caret"></span></span></h1>
+      <p class="lede">spool 是我们内部的 AI 网关。公司买的上游账号在它后面排成一个池，对外只露一个兼容端点。你拿一把自己的 key，改两个环境变量，用量记在你名下。</p>
 
-  <section class="sec">
-    <h2>这是什么</h2>
-    <p>一台机器，站在你和上游之间。公司买的 Claude / GPT-Codex / Gemini / Antigravity 订阅账号都挂在 spool 后面，按类别组成几个池。这次请求走的是哪个账号，你不需要知道，那是调度的事。</p>
-    <p>你拿到的是一个 OpenAI / Anthropic 兼容的 base URL，和一把只属于你的 key。认这两套协议的客户端都能直接接上：Claude Code、Codex、Cursor、各语言的 SDK。</p>
-    <p>为什么不是每人开一个账号：账号贵、配额零散、人走了要回收、出了事说不清是谁在用。排成池以后，这四件事各自有了答案。</p>
-    <p>spool 不对外、不卖钱、没有套餐页。它跑在自建的 Sub2API 上，代码没改，改的只是名字和这块首页。</p>
-    <p class="note">SPOOL = Simultaneous Peripheral Operations On-Line，IBM 1959 年给打印队列起的名字：一台昂贵的共享设备，很多人往里发作业，用量记在各人名下。六十年后是同一个问题。名字只借典故：spool 不攒批、不排队，请求实时转发。</p>
-  </section>
+      <div class="prompt">
+        <div class="bay-hd"><b>BASE URL</b><span>以 /keys 页显示的为准</span><span class="sp">末尾不带斜杠</span></div>
+        <div class="urlline"><span class="dl" aria-hidden="true">$</span><span class="url" style="user-select:all;-webkit-user-select:all">https://spool.corp.internal</span><span class="caret caret-a"></span></div>
+        <p class="note">这一页不跑 JavaScript，所以没有复制按钮。点一下地址或下面任意一行命令，整行选中，Cmd-C 拿走。</p>
+      </div>
 
-  <section class="sec">
-    <h2>拿一把 key</h2>
-    <ol class="steps">
-      <li>登录 <a class="path" href="/login">/login</a>。这台机器不开放自助注册，账号由管理员开通；要 key 先登录。</li>
-      <li>进 <a class="path" href="/dashboard">/dashboard</a>，打开 <a class="path" href="/keys">/keys</a>，新建一把 key。</li>
-      <li>选分组，这一项必填。一个分组对应一类上游账号（Claude 系、GPT-Codex 系、Gemini 系各归各的），也决定这把 key 打 <code>/v1/models</code> 时看到哪些模型。协议不用管：<code>/v1/messages</code> 和 <code>/v1/responses</code> 网关都收，再按分组翻译给上游。清单以新建表单里的下拉为准；一把 key 只属于一个分组，想用两个池就开两把。</li>
-      <li>给它起个认得出用途的名字：<code>claude-code-mac</code>、<code>cursor</code>、<code>ci-eval</code>。以后要停哪一把，你自己就能定位。</li>
-      <li>key 在 <a class="path" href="/keys">/keys</a> 列表里随时可以整条复制回来，丢了不用重建。也正因为如此，能登录你账号的人就能拿走你所有的 key——登录密码放进密码管理器，key 按用途分开开几把。</li>
-    </ol>
-    <p>按机器或按项目分开开几把。某一把泄漏时只吊销那一路，别的照跑。</p>
-    <p class="lead-in">三条底线：</p>
-    <ul class="rows">
-      <li>不提交进仓库。</li>
-      <li>不贴进公开频道。</li>
-      <li>不把 key 转给别人——对方的用量会记在你头上，包括他半夜跑的那轮压测。</li>
+      <ul class="spec">
+        <li><b>池</b>Claude · GPT-Codex · Gemini · Antigravity</li>
+        <li><b>协议</b>OpenAI / Anthropic 兼容，认这两套的客户端直接接上</li>
+        <li><b>计账</b>按人。额度用完会报错，不降级、不静默截断</li>
+      </ul>
+    </div>
+
+    <div class="rack">
+      <div class="bay-hd"><b>DRIVE 0</b><span>上游账号池</span><span class="sp">IBM · 1959</span></div>
+      <div class="drive">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+          <path fill="#2E8B6F" fill-rule="evenodd" d="M200 96a160 160 0 1 0 0 320 160 160 0 1 0 0-320Zm0 68a92 92 0 1 1 0 184 92 92 0 1 1 0-184Z"/>
+          <rect x="200" y="352" width="280" height="64" fill="#2E8B6F"/>
+          <g class="dr-spin"><circle cx="200" cy="256" r="126" fill="none" stroke="#0B0F14" stroke-width="9" stroke-dasharray="3 30" stroke-linecap="round"/></g>
+          <circle cx="200" cy="256" r="40" fill="#C4881B"/>
+        </svg>
+        <div class="dr-read">
+          <p class="silk"><b>SPOOL</b> · SIMULTANEOUS PERIPHERAL<br>OPERATIONS ON-LINE</p>
+          <p><b>一台机器，站在你和上游之间。</b></p>
+          <p>这次请求走哪个账号是调度的事，你不需要知道。</p>
+          <ul class="leds">
+            <li><i></i>PWR</li>
+            <li><i></i>LINK</li>
+            <li><i></i>SPOOL</li>
+          </ul>
+        </div>
+      </div>
+      <div class="crt">
+        <div class="sweep" aria-hidden="true"></div>
+        <div class="glass" aria-hidden="true"></div>
+        <div class="bay-hd"><b>spool/queue</b><span>tty0</span><span class="sp">示例回放 · 非实时</span></div>
+        <div class="view" aria-hidden="true">
+          <ul class="log">
+            <li><span class="k">recv  </span> POST /v1/messages    <span class="d">group=claude</span></li>
+            <li><span class="k">auth  </span> key ok               <span class="d">记在你名下</span></li>
+            <li><span class="k">route </span> pool/claude → <span class="d">池里的某个账号</span></li>
+            <li><span class="k">stream</span> <span class="ok">200 OK</span></li>
+            <li><span class="k">recv  </span> POST /v1/responses   <span class="d">group=codex</span></li>
+            <li><span class="k">route </span> pool/codex → <span class="d">账号掉了，换一个重试</span></li>
+            <li><span class="k">stream</span> <span class="ok">200 OK</span></li>
+            <li><span class="k">limit </span> <span class="wr">429 USER_RPM_EXCEEDED</span>  <span class="d">退避重试</span></li>
+            <li><span class="k">quota </span> <span class="wr">429 QUOTA_EXHAUSTED</span>    <span class="d">重试无用 · 找管理员</span></li>
+            <li><span class="k">recv  </span> POST /v1/messages    <span class="d">group=claude</span></li>
+            <li><span class="k">auth  </span> key ok               <span class="d">记在你名下</span></li>
+            <li><span class="k">route </span> pool/claude → <span class="d">池里的某个账号</span></li>
+            <li><span class="k">stream</span> <span class="ok">200 OK</span></li>
+            <li><span class="k">recv  </span> POST /v1/responses   <span class="d">group=codex</span></li>
+            <li><span class="k">route </span> pool/codex → <span class="d">账号掉了，换一个重试</span></li>
+            <li><span class="k">stream</span> <span class="ok">200 OK</span></li>
+            <li><span class="k">limit </span> <span class="wr">429 USER_RPM_EXCEEDED</span>  <span class="d">退避重试</span></li>
+            <li><span class="k">quota </span> <span class="wr">429 QUOTA_EXHAUSTED</span>    <span class="d">重试无用 · 找管理员</span></li>
+          </ul>
+        </div>
+        <p class="ps">spool@queue:~$<span class="caret"></span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sect pipe">
+  <div class="in body">
+    <div class="shd">
+      <h2>三步接入</h2>
+      <span class="hint">/login → /keys → shell</span>
+      <span class="num">01 · ACCESS</span>
+    </div>
+    <div class="flow">
+      <div class="node">
+        <span class="n">1</span>
+        <h3>登录</h3>
+        <a class="rt" href="/login">/login</a>
+        <p>不开放自助注册，账号由管理员开通。开通后从这里进。</p>
+      </div>
+      <div class="link" aria-hidden="true"><i></i></div>
+      <div class="node">
+        <span class="n">2</span>
+        <h3>建 key</h3>
+        <a class="rt" href="/keys">/keys</a>
+        <p>分组必填，它决定这把 key 能看到哪些模型。一把 key 一个分组。</p>
+      </div>
+      <div class="link" aria-hidden="true"><i></i></div>
+      <div class="node">
+        <span class="n">3</span>
+        <h3>改两个环境变量</h3>
+        <span class="rt">BASE_URL + KEY</span>
+        <p>别的什么都不用动。哪一对，看客户端，不看分组。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sect">
+  <div class="in body">
+    <div class="shd">
+      <h2>接线面板</h2>
+      <span class="hint">改两个环境变量，代码不用动</span>
+      <span class="num">02 · WIRING</span>
+    </div>
+    <div class="patch">
+      <div class="cell">
+        <div class="ch"><i></i><b>Claude Code</b><span class="k">ANTHROPIC</span></div>
+        <div class="cmd"><span class="l"><span class="pr" aria-hidden="true">$ </span><span style="user-select:all;-webkit-user-select:all">export ANTHROPIC_BASE_URL=<span class="v">https://spool.corp.internal</span></span></span><span class="l"><span class="pr" aria-hidden="true">$ </span><span style="user-select:all;-webkit-user-select:all">export ANTHROPIC_AUTH_TOKEN=<span class="ph">&lt;你的 key&gt;</span></span></span></div>
+      </div>
+      <div class="cell">
+        <div class="ch"><i></i><b>Codex / OpenAI SDK</b><span class="k">OPENAI</span></div>
+        <div class="cmd"><span class="l"><span class="pr" aria-hidden="true">$ </span><span style="user-select:all;-webkit-user-select:all">export OPENAI_BASE_URL=<span class="v">https://spool.corp.internal/v1</span></span></span><span class="l"><span class="pr" aria-hidden="true">$ </span><span style="user-select:all;-webkit-user-select:all">export OPENAI_API_KEY=<span class="ph">&lt;你的 key&gt;</span></span></span></div>
+      </div>
+      <div class="cell wide">
+        <div class="ch"><i></i><b>自检</b><span class="k">GET /v1/models</span></div>
+        <div class="cmd"><span class="l"><span class="pr" aria-hidden="true">$ </span><span style="user-select:all;-webkit-user-select:all">curl -s $OPENAI_BASE_URL/models -H "Authorization: Bearer $OPENAI_API_KEY"</span></span><span class="c"># 回一个模型列表就算接上了。401 是 key 不对；403 / 429 / 503 / 404 见下面的故障码。</span><span class="c"># 只配了 ANTHROPIC_* 的：地址换成 $ANTHROPIC_BASE_URL/v1/models，key 用 $ANTHROPIC_AUTH_TOKEN。</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sect pipe">
+  <div class="in body">
+    <div class="shd">
+      <h2>池子里有什么</h2>
+      <span class="hint">哪一类归你，看建 key 时选的分组</span>
+      <span class="num">03 · POOL</span>
+    </div>
+    <div class="bins">
+      <div class="bin">
+        <h3>写代码</h3>
+        <ul><li>Claude 系</li><li>GPT-Codex 系</li></ul>
+        <p>日常写码、改码、跑 agent 的主力。</p>
+      </div>
+      <div class="bin">
+        <h3>长上下文</h3>
+        <ul><li>Gemini 系</li></ul>
+        <p>整本文档、整个仓库一次塞进去的那类活。</p>
+      </div>
+      <div class="bin">
+        <h3>试验性</h3>
+        <ul><li>Antigravity</li></ul>
+        <p>随时可能下线。别把正式流程押在上面。</p>
+      </div>
+    </div>
+    <p class="truth">真正的清单是 <code>GET /v1/models</code> 的返回，范围是你这把 key 所属分组能用的模型，不是整池。model id 照返回原样填，不要凭记忆手写。看不到的模型，就是不在你分组的白名单里。</p>
+  </div>
+</section>
+
+<section class="sect">
+  <div class="in body">
+    <div class="shd">
+      <h2>报错怎么读</h2>
+      <span class="hint">先看 body 里的 code，别只看状态码</span>
+      <span class="num">04 · FAULT CODES</span>
+    </div>
+    <div class="tw">
+      <table class="ft">
+        <thead>
+          <tr><th style="width:84px">HTTP</th><th style="width:290px">BODY CODE</th><th style="width:140px">STATE</th><th>ACTION</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="hs">429</span></td>
+            <td data-l="BODY CODE"><span class="ec">QUOTA_EXHAUSTED</span><span class="ec">USAGE_LIMIT_EXCEEDED</span><span class="ec alt">insufficient_quota（Codex 路径）</span></td>
+            <td><span class="chip h"><i></i>HALT</span></td>
+            <td class="act" data-l="ACTION"><b>额度用完。</b>重试无用，找管理员加额。</td>
+          </tr>
+          <tr>
+            <td><span class="hs b">429</span></td>
+            <td data-l="BODY CODE"><span class="ec">USER_RPM_EXCEEDED</span><span class="ec">GROUP_RPM_EXCEEDED</span></td>
+            <td><span class="chip b"><i></i>BACKOFF</span></td>
+            <td class="act" data-l="ACTION"><b>限速打满。</b>退避几秒重试。</td>
+          </tr>
+          <tr>
+            <td><span class="hs">403</span></td>
+            <td data-l="BODY CODE"><span class="ec">INSUFFICIENT_BALANCE</span></td>
+            <td><span class="chip h"><i></i>HALT</span></td>
+            <td class="act" data-l="ACTION"><b>余额不足。</b>找管理员。</td>
+          </tr>
+          <tr>
+            <td><span class="hs b">503</span></td>
+            <td data-l="BODY CODE"><span class="ec alt">无 code</span></td>
+            <td><span class="chip b"><i></i>BACKOFF</span></td>
+            <td class="act" data-l="ACTION"><b>池里暂时没有能跑这个模型的账号。</b>退避重试；一直 503 就去群里说。</td>
+          </tr>
+          <tr>
+            <td><span class="hs c">404</span></td>
+            <td data-l="BODY CODE"><span class="ec">not available for this group</span></td>
+            <td><span class="chip c"><i></i>CONFIG</span></td>
+            <td class="act" data-l="ACTION"><b>模型不在你分组的白名单里。</b>换分组，或找管理员加。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tn">
+      <p><b>额度用完不降级、不静默截断</b>——你会看到报错，不会看到胡话。401 只有一个意思：key 不对。</p>
+      <p><b>key 丢了不用重建</b>：在 <a href="/keys">/keys</a> 列表里随时可以整条复制回来，不是只显示一次。用量在控制台看得到；不想登录，去 <a href="/key-usage">/key-usage</a> 输 key 查自己那一份。</p>
+    </div>
+  </div>
+</section>
+
+<section class="sect pipe">
+  <div class="in body">
+    <div class="shd">
+      <h2>规矩</h2>
+      <span class="hint">三条，没有例外</span>
+      <span class="num">05 · RULES</span>
+    </div>
+    <div class="plate">
+      <div class="hazard" aria-hidden="true"></div>
+      <div class="rgrid">
+        <div>
+          <p>key 不进仓库、不贴群。</p>
+          <p class="sub">泄漏时只吊销那一路，所以按用途分开开几把；能登录你账号的人就能拿走你所有的 key。</p>
+        </div>
+        <div>
+          <p>跑批量前群里说一声。</p>
+          <p class="sub">错开高峰；CI 单独开一把 key，别用交互那把。</p>
+        </div>
+        <div>
+          <p>额度按人分配，要超提前找管理员。</p>
+          <p class="sub">不要换别人的 key 顶，用量会记在他头上。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="sect foot">
+  <div class="in">
+    <div>
+      <p class="who">spool — 内部服务 · 跑在自建的 Sub2API 上 · 出事找管理员</p>
+      <p class="lore">SPOOL = Simultaneous Peripheral Operations On-Line，IBM 1959 年给打印队列起的名字：一台昂贵的共享设备，很多人往里发作业，用量记在各人名下。名字只借典故：spool 不攒批，请求实时转发。</p>
+    </div>
+    <ul class="fnav">
+      <li><a href="/login">登录<span>/login</span></a></li>
+      <li><a href="/dashboard">控制台<span>/dashboard</span></a></li>
+      <li><a href="/keys">API Keys<span>/keys</span></a></li>
+      <li><a href="/key-usage">用量查询（不登录）<span>/key-usage</span></a></li>
     </ul>
-  </section>
+  </div>
+</footer>
 
-  <section class="sec">
-    <h2>接上去</h2>
-    <p>改两个环境变量，别的什么都不用动。哪一对，看客户端，不看分组。</p>
-    <p class="cap">Claude Code</p>
-    <div class="cmd"><span class="l" style="user-select:all;-webkit-user-select:all">export ANTHROPIC_BASE_URL=https://spool.corp.internal</span><span class="l" style="user-select:all;-webkit-user-select:all">export ANTHROPIC_AUTH_TOKEN=&lt;你的 key&gt;</span></div>
-    <p class="cap">Codex / Cursor / OpenAI SDK</p>
-    <div class="cmd"><span class="l" style="user-select:all;-webkit-user-select:all">export OPENAI_BASE_URL=https://spool.corp.internal/v1</span><span class="l" style="user-select:all;-webkit-user-select:all">export OPENAI_API_KEY=&lt;你的 key&gt;</span></div>
-    <p class="cap">自检</p>
-    <div class="cmd"><span class="l" style="user-select:all;-webkit-user-select:all">curl -s $OPENAI_BASE_URL/models -H "Authorization: Bearer $OPENAI_API_KEY" | head</span><span class="c"># 回一个模型列表就算接上了。401 是 key 不对；403 / 429 / 503 见「公平使用」。</span><span class="c"># 只配了 ANTHROPIC_* 的，把地址换成 $ANTHROPIC_BASE_URL/v1/models，key 用 $ANTHROPIC_AUTH_TOKEN。</span></div>
-    <p class="lead-in">两条细节会一直引发工单：</p>
-    <ul class="rows">
-      <li>地址末尾不要带斜杠。</li>
-      <li>模型名照 <code>/v1/models</code> 的返回原样填，网关不改名。</li>
-    </ul>
-    <p class="note">以控制台 <a class="path" href="/keys">/keys</a> 页面显示的地址为准。这里写的和那边不一样时，信那边。</p>
-  </section>
-
-  <section class="sec">
-    <h2>池子里有什么</h2>
-    <p>可用模型以 <code>GET /v1/models</code> 的返回为准，那是唯一不会过期的清单。注意范围：它返回的是你这把 key 所属分组能用的模型，不是整池——分组不同，列表不同；要看别的分组，用那个分组的 key 再打一次。这一页不列表，免得过期骗人。</p>
-    <p class="lead-in">池子里大致三类，哪一类归你，看建 key 时选的分组：</p>
-    <ul class="rows">
-      <li>写代码的：Claude 系、GPT-Codex 系。</li>
-      <li>长上下文通用的：Gemini 系。</li>
-      <li>试验性接入的：Antigravity 等，随时可能下线。</li>
-    </ul>
-    <p>model id 直接抄 <code>/v1/models</code> 的返回，不要凭记忆手写——上游改名的频率比你想象的高。</p>
-    <p>某个模型突然 <code>404</code>，先看 message：写着 <code>not available for this group</code> 的，是这个模型不在你分组的白名单里，换分组，或找管理员加；其余的 404 通常是上游改了 id，或者这条线暂时被摘掉了，打一次 <code>/v1/models</code> 核对。</p>
-  </section>
-
-  <section class="sec">
-    <h2>公平使用，以及谁在管</h2>
-    <p>池子是共享的，额度是按人的。用量在控制台看得到；不想登录就用 <a href="/key-usage">用量查询</a>，输入 key 查自己那一份。</p>
-    <p>额度用完不降级、不静默截断——你会看到报错，不会看到胡话。报错先看 body 里的 code，别只看状态码：</p>
-    <ul class="rows">
-      <li><code>429</code> 且 code 带 <code>QUOTA_EXHAUSTED</code> 或 <code>USAGE_LIMIT_EXCEEDED</code>（Codex 那条路上写成 <code>insufficient_quota</code>）：额度用完。退避重试没有用，找管理员加额。</li>
-      <li><code>429</code> 且 code 是 <code>USER_RPM_EXCEEDED</code> 或 <code>GROUP_RPM_EXCEEDED</code>：限速打满。退避几秒重试。</li>
-      <li><code>403</code> 且 code 是 <code>INSUFFICIENT_BALANCE</code>：账户余额不足。同样去要额度。</li>
-      <li><code>503</code>：池里能跑这个模型的账号暂时都不可用。退避重试；一直 503 就去群里说。</li>
-    </ul>
-    <p class="note">额度由管理员按人分配。用完了，或者手头的任务明显要超，提前找管理员加，不要换别人的 key 顶。</p>
-    <p>跑批量任务或压测前在群里说一声，错开高峰。不要用交互用的 key 跑 CI，单独开一把。一把 key 对应一个用途。</p>
-    <p>上游账号偶尔会掉。spool 会把它摘掉，换池里别的账号重试；你可能感觉到一次重试的延迟。全都掉了的时候你拿到的是 503，不是变慢。</p>
-    <p>维护：管理员。故障、加模型、要额度都找管理员，他们不介意被问。</p>
-  </section>
-
-  <footer class="ft">
-    <ul class="nav">
-      <li><a href="/login">登录</a></li>
-      <li><a href="/dashboard">控制台</a></li>
-      <li><a href="/keys">API Keys</a></li>
-      <li><a href="/key-usage">用量查询（不登录）</a></li>
-    </ul>
-    <p>spool — 内部服务，不对外提供。跑在自建的 Sub2API 上。出事找管理员。</p>
-  </footer>
-
-</div>
 </div>
