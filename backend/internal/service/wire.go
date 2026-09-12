@@ -380,6 +380,29 @@ func ProvideDashboardAggregationService(repo DashboardAggregationRepository, tim
 	return svc
 }
 
+// ProvideLeaderboardSnapshotService 创建并启动 Leaderboard 快照重建作业。
+// UsageLogRepository 已实现 AggregateLeaderboardWindows，因此天然满足窄接口
+// LeaderboardAggregateRepository。
+func ProvideLeaderboardSnapshotService(
+	usageLogRepo UsageLogRepository,
+	cache LeaderboardCache,
+	timingWheel *TimingWheelService,
+	lockCache LeaderLockCache,
+	db *sql.DB,
+) *LeaderboardSnapshotService {
+	svc := NewLeaderboardSnapshotService(usageLogRepo, cache, timingWheel)
+	svc.SetLeaderLock(lockCache, db)
+	svc.Start()
+	return svc
+}
+
+// ProvideLeaderboardService 创建用户侧榜单查询服务。
+// UserRepository 天然满足窄接口 LeaderboardUserRepository（请求路径上唯一的按 id 批量查询），
+// UsageLogRepository 天然满足 LeaderboardViewerRepository（只服务顶层 viewer 那一块）。
+func ProvideLeaderboardService(cache LeaderboardCache, userRepo UserRepository, usageLogRepo UsageLogRepository) *LeaderboardService {
+	return NewLeaderboardService(cache, userRepo, usageLogRepo)
+}
+
 // ProvideUsageCleanupService 创建并启动使用记录清理任务服务
 func ProvideUsageCleanupService(repo UsageCleanupRepository, timingWheel *TimingWheelService, dashboardAgg *DashboardAggregationService, cfg *config.Config) *UsageCleanupService {
 	svc := NewUsageCleanupService(repo, timingWheel, dashboardAgg, cfg)
@@ -913,6 +936,8 @@ var ProviderSet = wire.NewSet(
 	ProvideSubscriptionExpiryService,
 	ProvideTimingWheelService,
 	ProvideDashboardAggregationService,
+	ProvideLeaderboardSnapshotService,
+	ProvideLeaderboardService,
 	ProvideUsageCleanupService,
 	ProvideDeferredService,
 	NewAntigravityQuotaFetcher,

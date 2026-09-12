@@ -56,6 +56,14 @@ declare module 'vue-router' {
     requiresRiskControl?: boolean
 
     /**
+     * 是否要求 Leaderboard Mode（排行榜模式）不为 off。
+     * fail-closed：仅在公开设置已成功加载、明确为 off 且查看者不是管理员时拦截；
+     * 管理员在 off 档下直链进入 Preview（预览）。
+     * @default false
+     */
+    requiresLeaderboard?: boolean
+
+    /**
      * i18n key for the page title
      */
     titleKey?: string

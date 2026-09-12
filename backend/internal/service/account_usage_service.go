@@ -51,6 +51,32 @@ type UsageLogRepository interface {
 	GetUpstreamEndpointStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8) ([]usagestats.EndpointStat, error)
 	GetGroupStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, requestType *int16, stream *bool, billingType *int8) ([]usagestats.GroupStat, error)
 	GetUserBreakdownStats(ctx context.Context, startTime, endTime time.Time, dim usagestats.UserBreakdownDimension, limit int) ([]usagestats.UserBreakdownItem, error)
+	// AggregateLeaderboardWindows 一次扫描同时产出今日 / 本周 / 本月三个 Window 的按用户聚合，
+	// 供 Leaderboard 的 Snapshot 重建作业使用；INNER JOIN users 过滤禁用与软删除用户，
+	// 请求数按 actual_cost > 0 的成功落账口径统计。
+	AggregateLeaderboardWindows(ctx context.Context, todayStart, weekStart, monthStart time.Time) ([]usagestats.LeaderboardAggregateRow, error)
+	// LeaderboardTopModelsToday 按模型聚合今日成功请求，另给今日全站成功请求总数（占比的分母）。
+	LeaderboardTopModelsToday(ctx context.Context, todayStart, todayEnd time.Time, limit int) ([]usagestats.LeaderboardModelUsageRow, int64, error)
+	// LeaderboardDominantModel 返回某用户某窗口成功请求最多的模型，只在快照重建时对一个用户查一次。
+	LeaderboardDominantModel(ctx context.Context, userID int64, start, end time.Time) (string, error)
+	// LeaderboardDailyBuckets / LeaderboardHourlyBuckets 读仪表盘预聚合表，缺行时返回空切片。
+	LeaderboardDailyBuckets(ctx context.Context, fromDate, toDate time.Time) ([]usagestats.LeaderboardDailyBucketRow, error)
+	LeaderboardHourlyBuckets(ctx context.Context, from, to time.Time) ([]usagestats.LeaderboardHourlyBucketRow, error)
+	// LeaderboardTopStreak 读 usage_dashboard_daily_users 的近 90 天切片，求连续活跃天数最长者。
+	LeaderboardTopStreak(ctx context.Context, fromDate, toDate time.Time) (usagestats.LeaderboardStreakRow, error)
+	// LeaderboardUserModelBreakdown 一条 SQL 出指定 user_id 集合在窗口内的全部模型用量（画像用）。
+	LeaderboardUserModelBreakdown(ctx context.Context, userIDs []int64, start, end time.Time) ([]usagestats.LeaderboardUserModelUsageRow, error)
+	// LeaderboardPlatformsToday 按账号平台聚合今日成功请求，另给今日全站成功请求总数。
+	LeaderboardPlatformsToday(ctx context.Context, todayStart, todayEnd time.Time) ([]usagestats.LeaderboardPlatformUsageRow, int64, error)
+	// LeaderboardWeekdayHourBuckets 读预聚合小时桶并按 (周几, 小时) 求平均，缺行时返回空切片。
+	LeaderboardWeekdayHourBuckets(ctx context.Context, from, to time.Time) ([]usagestats.LeaderboardWeekdayHourRow, error)
+	// LeaderboardViewerModels 只聚合查看者本人在窗口内的模型用量，是请求路径唯一的回源例外。
+	LeaderboardViewerModels(ctx context.Context, userID int64, start, end time.Time, limit int) ([]usagestats.LeaderboardModelUsageRow, int64, error)
+	// UpsertLeaderboardRankHistory / LeaderboardRankHistory / DeleteLeaderboardRankHistoryBefore
+	// 是名次历史的写、读与保留期清理；读只查一个 user_id。
+	UpsertLeaderboardRankHistory(ctx context.Context, rows []usagestats.LeaderboardRankHistoryRow) error
+	LeaderboardRankHistory(ctx context.Context, userID int64, fromDate, toDate time.Time) ([]usagestats.LeaderboardRankHistoryRow, error)
+	DeleteLeaderboardRankHistoryBefore(ctx context.Context, cutoff time.Time) (int64, error)
 	GetAllGroupUsageSummary(ctx context.Context, todayStart time.Time) ([]usagestats.GroupUsageSummary, error)
 	GetAPIKeyUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.APIKeyUsageTrendPoint, error)
 	GetUserUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.UserUsageTrendPoint, error)

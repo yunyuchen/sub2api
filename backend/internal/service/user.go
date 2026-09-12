@@ -27,7 +27,11 @@ type User struct {
 	// ones listed in AllowedGroups. False keeps the default, where every public
 	// group is bindable.
 	RestrictPublicGroups bool
-	TokenVersion         int64 // Incremented on password change to invalidate existing tokens
+	// LeaderboardNamedParticipation 表示 Leaderboard 是否以 username 展示该用户。
+	// 默认 true（见迁移 240 与 ent schema）；用户自己关掉写成 false 之后仍照常参与
+	// 排名，只是以匿名形态「第 N 位」出现。
+	LeaderboardNamedParticipation bool
+	TokenVersion                  int64 // Incremented on password change to invalidate existing tokens
 	// TokenVersionResolved indicates TokenVersion already contains the fingerprint-derived
 	// value expected in JWT claims and refresh-token state.
 	TokenVersionResolved bool

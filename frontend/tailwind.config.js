@@ -1,6 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
+  content: [
+    './index.html',
+    './src/**/*.{vue,js,ts,jsx,tsx}',
+    // 独立的后台 UI 原型自带 node_modules，扫进来会让每次 CSS 转换慢十几秒
+    '!./src/views/admin/__prototype__/**'
+  ],
   darkMode: 'class',
   theme: {
     extend: {

@@ -12,3 +12,6 @@ dist/
 # 忽略缓存
 .cache/
 .vite/
+
+# 独立的后台 UI 原型（自带工具链），不由主应用 lint
+src/views/admin/__prototype__/

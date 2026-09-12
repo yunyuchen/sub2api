@@ -35,7 +35,7 @@
               @click="selectUser(u)"
               class="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-dark-700"
             >
-              <span>{{ u.email }}<span v-if="u.deleted" class="ml-1 text-xs text-gray-400">（{{ t('admin.usage.userDeletedBadge') }}）</span></span>
+              <span>{{ u.username || u.email }}<span v-if="u.deleted" class="ml-1 text-xs text-gray-400">（{{ t('admin.usage.userDeletedBadge') }}）</span></span>
               <span class="ml-2 text-xs text-gray-400">#{{ u.id }}</span>
             </button>
           </div>
@@ -379,7 +379,7 @@ const debounceApiKeySearch = () => {
 
 const selectUser = async (u: SimpleUser) => {
   clearPendingUserSearch()
-  userKeyword.value = u.email
+  userKeyword.value = u.username || u.email
   showUserDropdown.value = false
   filters.value.user_id = u.id
   clearApiKey()
@@ -537,7 +537,7 @@ onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
 })
 
-// 供外部(如用户排行下钻)在程序化设置 user_id 后回显选中的用户邮箱
+// 供外部(如用户排行下钻)在程序化设置 user_id 后回显选中的用户名
 const setUserKeyword = (email: string) => {
   clearPendingUserSearch()
   userKeyword.value = email

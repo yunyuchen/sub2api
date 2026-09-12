@@ -1078,6 +1078,10 @@ func (s *emailBindUserRepoStub) ListWithFilters(context.Context, pagination.Pagi
 	panic("unexpected ListWithFilters call")
 }
 
+func (s *emailBindUserRepoStub) GetByIDs(context.Context, []int64) ([]service.User, error) {
+	return nil, nil
+}
+
 func (s *emailBindUserRepoStub) GetLatestUsedAtByUserIDs(context.Context, []int64) (map[int64]*time.Time, error) {
 	return map[int64]*time.Time{}, nil
 }

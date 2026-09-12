@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prototype:admin": "npm run dev --prefix src/views/admin/__prototype__/ele-admin-plus-ts-pro",
     "check:i18n": "vitest run src/i18n/__tests__/localeKeyCompleteness.spec.ts",
     "build": "pnpm run check:i18n && vue-tsc -b && vite build",
     "preview": "vite preview",

@@ -94,6 +94,9 @@ export interface User {
   balance_notify_enabled: boolean
   balance_notify_threshold: number | null
   balance_notify_extra_emails: NotifyEmailEntry[]
+  // 「在排行榜显示我的昵称」开关，后端默认 true（既有用户已回填 true）；
+  // 关闭时仍参与排名，只是以「第 N 位」的匿名形态出现。字段缺席按 true 读，MUST NOT 写死 false。
+  leaderboard_named_participation?: boolean
   subscriptions?: UserSubscription[] // User's active subscriptions
   last_active_at?: string | null
   created_at: string
@@ -275,6 +278,12 @@ export interface PublicSettings {
   channel_monitor_show_quota?: boolean
   /** When true, user monitor hides the user ranking tab and /users payload. */
   channel_monitor_hide_user_ranking?: boolean
+  /**
+   * 用户排行榜的三档暴露程度，默认 off（fail-closed）。
+   * off：普通用户既不可见也不可访问；anonymous：全员匿名 + 相对百分比；named：默认显示昵称（用户可自行关闭）+ 精确数值。
+   * 枚举值不可登记进 featureFlags.ts 的注册表，见 getLeaderboardMode()。
+   */
+  leaderboard_mode?: 'off' | 'anonymous' | 'named'
   available_channels_enabled: boolean
   model_plaza_enabled: boolean
   model_plaza_require_auth: boolean
@@ -1969,6 +1978,7 @@ export interface GroupStat {
 export interface UserBreakdownItem {
   user_id: number
   email: string
+  username: string
   requests: number
   input_tokens: number
   output_tokens: number

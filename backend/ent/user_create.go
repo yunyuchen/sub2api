@@ -284,6 +284,20 @@ func (_c *UserCreate) SetNillableRestrictPublicGroups(v *bool) *UserCreate {
 	return _c
 }
 
+// SetLeaderboardNamedParticipation sets the "leaderboard_named_participation" field.
+func (_c *UserCreate) SetLeaderboardNamedParticipation(v bool) *UserCreate {
+	_c.mutation.SetLeaderboardNamedParticipation(v)
+	return _c
+}
+
+// SetNillableLeaderboardNamedParticipation sets the "leaderboard_named_participation" field if the given value is not nil.
+func (_c *UserCreate) SetNillableLeaderboardNamedParticipation(v *bool) *UserCreate {
+	if v != nil {
+		_c.SetLeaderboardNamedParticipation(*v)
+	}
+	return _c
+}
+
 // SetBalanceNotifyEnabled sets the "balance_notify_enabled" field.
 func (_c *UserCreate) SetBalanceNotifyEnabled(v bool) *UserCreate {
 	_c.mutation.SetBalanceNotifyEnabled(v)
@@ -654,6 +668,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultRestrictPublicGroups
 		_c.mutation.SetRestrictPublicGroups(v)
 	}
+	if _, ok := _c.mutation.LeaderboardNamedParticipation(); !ok {
+		v := user.DefaultLeaderboardNamedParticipation
+		_c.mutation.SetLeaderboardNamedParticipation(v)
+	}
 	if _, ok := _c.mutation.BalanceNotifyEnabled(); !ok {
 		v := user.DefaultBalanceNotifyEnabled
 		_c.mutation.SetBalanceNotifyEnabled(v)
@@ -750,6 +768,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.RestrictPublicGroups(); !ok {
 		return &ValidationError{Name: "restrict_public_groups", err: errors.New(`ent: missing required field "User.restrict_public_groups"`)}
+	}
+	if _, ok := _c.mutation.LeaderboardNamedParticipation(); !ok {
+		return &ValidationError{Name: "leaderboard_named_participation", err: errors.New(`ent: missing required field "User.leaderboard_named_participation"`)}
 	}
 	if _, ok := _c.mutation.BalanceNotifyEnabled(); !ok {
 		return &ValidationError{Name: "balance_notify_enabled", err: errors.New(`ent: missing required field "User.balance_notify_enabled"`)}
@@ -868,6 +889,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RestrictPublicGroups(); ok {
 		_spec.SetField(user.FieldRestrictPublicGroups, field.TypeBool, value)
 		_node.RestrictPublicGroups = value
+	}
+	if value, ok := _c.mutation.LeaderboardNamedParticipation(); ok {
+		_spec.SetField(user.FieldLeaderboardNamedParticipation, field.TypeBool, value)
+		_node.LeaderboardNamedParticipation = value
 	}
 	if value, ok := _c.mutation.BalanceNotifyEnabled(); ok {
 		_spec.SetField(user.FieldBalanceNotifyEnabled, field.TypeBool, value)
@@ -1421,6 +1446,18 @@ func (u *UserUpsert) UpdateRestrictPublicGroups() *UserUpsert {
 	return u
 }
 
+// SetLeaderboardNamedParticipation sets the "leaderboard_named_participation" field.
+func (u *UserUpsert) SetLeaderboardNamedParticipation(v bool) *UserUpsert {
+	u.Set(user.FieldLeaderboardNamedParticipation, v)
+	return u
+}
+
+// UpdateLeaderboardNamedParticipation sets the "leaderboard_named_participation" field to the value that was provided on create.
+func (u *UserUpsert) UpdateLeaderboardNamedParticipation() *UserUpsert {
+	u.SetExcluded(user.FieldLeaderboardNamedParticipation)
+	return u
+}
+
 // SetBalanceNotifyEnabled sets the "balance_notify_enabled" field.
 func (u *UserUpsert) SetBalanceNotifyEnabled(v bool) *UserUpsert {
 	u.Set(user.FieldBalanceNotifyEnabled, v)
@@ -1867,6 +1904,20 @@ func (u *UserUpsertOne) SetRestrictPublicGroups(v bool) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateRestrictPublicGroups() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRestrictPublicGroups()
+	})
+}
+
+// SetLeaderboardNamedParticipation sets the "leaderboard_named_participation" field.
+func (u *UserUpsertOne) SetLeaderboardNamedParticipation(v bool) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetLeaderboardNamedParticipation(v)
+	})
+}
+
+// UpdateLeaderboardNamedParticipation sets the "leaderboard_named_participation" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateLeaderboardNamedParticipation() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateLeaderboardNamedParticipation()
 	})
 }
 
@@ -2498,6 +2549,20 @@ func (u *UserUpsertBulk) SetRestrictPublicGroups(v bool) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRestrictPublicGroups() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRestrictPublicGroups()
+	})
+}
+
+// SetLeaderboardNamedParticipation sets the "leaderboard_named_participation" field.
+func (u *UserUpsertBulk) SetLeaderboardNamedParticipation(v bool) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetLeaderboardNamedParticipation(v)
+	})
+}
+
+// UpdateLeaderboardNamedParticipation sets the "leaderboard_named_participation" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateLeaderboardNamedParticipation() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateLeaderboardNamedParticipation()
 	})
 }
 

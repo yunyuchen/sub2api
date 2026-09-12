@@ -336,6 +336,9 @@ type UpdateSettingsRequest struct {
 	ChannelMonitorShowQuota              *bool   `json:"channel_monitor_show_quota"`
 	ChannelMonitorHideUserRanking        *bool   `json:"channel_monitor_hide_user_ranking"`
 
+	// Leaderboard feature mode ("off" | "anonymous" | "named")
+	LeaderboardMode *string `json:"leaderboard_mode"`
+
 	// Grok model mapping policy
 	GrokDefaultTextModel           *string `json:"grok_default_text_model"`
 	GrokCrossClientModelMapEnabled *bool   `json:"grok_cross_client_model_map_enabled"`
@@ -787,6 +790,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
+
+	// Leaderboard 模式写入侧严格白名单：非法值直接 400，不落库。
+	// 指针语义保证「未提交该字段」不会触发校验，也不会把已有值刷掉。
+	if req.LeaderboardMode != nil {
+		switch strings.ToLower(strings.TrimSpace(*req.LeaderboardMode)) {
+		case service.LeaderboardModeOff, service.LeaderboardModeAnonymous, service.LeaderboardModeNamed:
+		default:
+			response.BadRequest(c, "Leaderboard mode must be off, anonymous or named")
+			return
+		}
+	}
+
 	loginAgreementMode := strings.ToLower(strings.TrimSpace(req.LoginAgreementMode))
 	if loginAgreementMode == "" {
 		loginAgreementMode = strings.ToLower(strings.TrimSpace(previousSettings.LoginAgreementMode))
@@ -1889,6 +1904,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ChannelMonitorMode
 		}(),
+		LeaderboardMode: func() string {
+			if req.LeaderboardMode != nil {
+				return *req.LeaderboardMode
+			}
+			return previousSettings.LeaderboardMode
+		}(),
 		ChannelMonitorDefaultIntervalSeconds: func() int {
 			if req.ChannelMonitorDefaultIntervalSeconds != nil {
 				return *req.ChannelMonitorDefaultIntervalSeconds
@@ -2374,6 +2395,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ChannelMonitorHideThroughput:         updatedSettings.ChannelMonitorHideThroughput,
 		ChannelMonitorShowQuota:              updatedSettings.ChannelMonitorShowQuota,
 		ChannelMonitorHideUserRanking:        updatedSettings.ChannelMonitorHideUserRanking,
+		LeaderboardMode:                      updatedSettings.LeaderboardMode,
 
 		GrokDefaultTextModel:           updatedSettings.GrokDefaultTextModel,
 		GrokCrossClientModelMapEnabled: updatedSettings.GrokCrossClientModelMapEnabled,

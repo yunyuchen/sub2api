@@ -70,6 +70,45 @@ func (r *usageBatchLogRepoStub) GetGroupStatsWithFilters(context.Context, time.T
 func (r *usageBatchLogRepoStub) GetUserBreakdownStats(context.Context, time.Time, time.Time, usagestats.UserBreakdownDimension, int) ([]usagestats.UserBreakdownItem, error) {
 	return nil, nil
 }
+func (r *usageBatchLogRepoStub) LeaderboardTopModelsToday(context.Context, time.Time, time.Time, int) ([]usagestats.LeaderboardModelUsageRow, int64, error) {
+	return nil, 0, nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardDominantModel(context.Context, int64, time.Time, time.Time) (string, error) {
+	return "", nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardDailyBuckets(context.Context, time.Time, time.Time) ([]usagestats.LeaderboardDailyBucketRow, error) {
+	return nil, nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardHourlyBuckets(context.Context, time.Time, time.Time) ([]usagestats.LeaderboardHourlyBucketRow, error) {
+	return nil, nil
+}
+func (r *usageBatchLogRepoStub) AggregateLeaderboardWindows(context.Context, time.Time, time.Time, time.Time) ([]usagestats.LeaderboardAggregateRow, error) {
+	return nil, nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardTopStreak(context.Context, time.Time, time.Time) (usagestats.LeaderboardStreakRow, error) {
+	return usagestats.LeaderboardStreakRow{}, nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardUserModelBreakdown(context.Context, []int64, time.Time, time.Time) ([]usagestats.LeaderboardUserModelUsageRow, error) {
+	return nil, nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardPlatformsToday(context.Context, time.Time, time.Time) ([]usagestats.LeaderboardPlatformUsageRow, int64, error) {
+	return nil, 0, nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardWeekdayHourBuckets(context.Context, time.Time, time.Time) ([]usagestats.LeaderboardWeekdayHourRow, error) {
+	return nil, nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardViewerModels(context.Context, int64, time.Time, time.Time, int) ([]usagestats.LeaderboardModelUsageRow, int64, error) {
+	return nil, 0, nil
+}
+func (r *usageBatchLogRepoStub) UpsertLeaderboardRankHistory(context.Context, []usagestats.LeaderboardRankHistoryRow) error {
+	return nil
+}
+func (r *usageBatchLogRepoStub) LeaderboardRankHistory(context.Context, int64, time.Time, time.Time) ([]usagestats.LeaderboardRankHistoryRow, error) {
+	return nil, nil
+}
+func (r *usageBatchLogRepoStub) DeleteLeaderboardRankHistoryBefore(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
 func (r *usageBatchLogRepoStub) GetAllGroupUsageSummary(context.Context, time.Time) ([]usagestats.GroupUsageSummary, error) {
 	return nil, nil
 }

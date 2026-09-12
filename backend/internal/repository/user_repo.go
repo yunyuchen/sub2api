@@ -210,6 +210,26 @@ func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*
 	return out, nil
 }
 
+// GetByIDs 按 id 批量取用户。软删除由 SoftDeleteMixin 自动过滤，因此已删用户不会出现在
+// 结果里；status 的判定留给 service 层（Leaderboard 要按响应时刻的当前状态剔除条目）。
+// 刻意不加载 allowed_groups：调用方只需要身份与状态，多一次关联查询没有意义。
+func (r *userRepository) GetByIDs(ctx context.Context, ids []int64) ([]service.User, error) {
+	if len(ids) == 0 {
+		return []service.User{}, nil
+	}
+	rows, err := r.client.User.Query().Where(dbuser.IDIn(ids...)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]service.User, 0, len(rows))
+	for _, row := range rows {
+		if u := userEntityToService(row); u != nil {
+			out = append(out, *u)
+		}
+	}
+	return out, nil
+}
+
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service.User, error) {
 	matches, err := r.client.User.Query().
 		Where(userEmailLookupPredicate(email)).
@@ -319,6 +339,9 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User, field
 	}
 	if fields.RestrictPublicGroups {
 		updateOp = updateOp.SetRestrictPublicGroups(userIn.RestrictPublicGroups)
+	}
+	if fields.LeaderboardNamedParticipation {
+		updateOp = updateOp.SetLeaderboardNamedParticipation(userIn.LeaderboardNamedParticipation)
 	}
 	if fields.BalanceNotifySettings {
 		updateOp = updateOp.
@@ -1533,6 +1556,10 @@ func applyUserEntityToService(dst *service.User, src *dbent.User) {
 	}
 	dst.ID = src.ID
 	dst.SignupSource = src.SignupSource
+	// Create() 不显式写 leaderboard_named_participation，值由 ent 的默认值（true）
+	// 决定，所以必须从落库结果回读；否则刚注册完的这一份内存 User 会带着零值 false，
+	// 注册响应里的开关会显示成「关」，与库里真实的「开」不一致。
+	dst.LeaderboardNamedParticipation = src.LeaderboardNamedParticipation
 	dst.LastLoginAt = src.LastLoginAt
 	dst.LastActiveAt = src.LastActiveAt
 	dst.CreatedAt = src.CreatedAt

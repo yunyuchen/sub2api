@@ -168,6 +168,7 @@ type UserSpendingRankingResponse struct {
 type UserBreakdownItem struct {
 	UserID       int64   `json:"user_id"`
 	Email        string  `json:"email"`
+	Username     string  `json:"username"`
 	Requests     int64   `json:"requests"`
 	InputTokens  int64   `json:"input_tokens"`  // 输入 token 累计
 	OutputTokens int64   `json:"output_tokens"` // 输出 token 累计
@@ -176,6 +177,138 @@ type UserBreakdownItem struct {
 	Cost         float64 `json:"cost"`          // 标准计费
 	ActualCost   float64 `json:"actual_cost"`   // 实际扣除
 	AccountCost  float64 `json:"account_cost"`  // 账号成本
+}
+
+// LeaderboardAggregateRow 是 Leaderboard（排行榜）Snapshot（榜单快照）重建时
+// 一条 SQL 同时产出的三个 Window（榜单窗口）聚合行：一次扫描 usage_logs，
+// 每个窗口各给出 Total Tokens（总 tokens）与 Successful Requests（成功请求数）两个数。
+//
+// 与 UserBreakdownItem 的区别：这里不含身份（email / username）与任何金额，
+// 因为 Snapshot 只记录 user_id 与数值，身份在响应组装时按 users 当前状态渲染。
+// Requests 一律是「成功落账」口径（actual_cost > 0），不是裸 COUNT(*)。
+//
+// InputTokens 与 CacheReadTokens 两列只用来算 Cache Hit Rate（缓存命中率）
+// = cache_read /(input + cache_read)，MUST NOT 参与排名：ZSET 仍然只有两个 Metric。
+//
+// v2 起每个窗口另出六个数、外加两个与窗口无关的「昨日」数，合计十四个：它们只喂
+// Extremes（之最）与 Token 构成，同样 MUST NOT 参与排名。口径分两类，刻意不统一：
+//   - token 求和（Output / CacheCreation / Night / Yesterday）沿用既有 token 列的口径，
+//     即窗口内所有行求和，这样它们与 InputTokens / CacheReadTokens / TotalTokens 以及
+//     管理端 User Breakdown（用户用量明细）的同名列对得上，占比算出来分子分母同源；
+//   - 按请求取值的列（DistinctModels / MaxSingleTokens / MediaRequests / YesterdayRequests）
+//     带成功落账过滤（actual_cost > 0），否则「刷失败请求」就能改写杂食者与单次最大。
+type LeaderboardAggregateRow struct {
+	UserID               int64 `json:"user_id"`
+	TodayTokens          int64 `json:"today_tokens"`            // 今日窗口 Total Tokens
+	TodayRequests        int64 `json:"today_requests"`          // 今日窗口 Successful Requests
+	TodayInputTokens     int64 `json:"today_input_tokens"`      // 今日窗口输入 tokens（只用于命中率）
+	TodayCacheReadTokens int64 `json:"today_cache_read_tokens"` // 今日窗口缓存读取 tokens（只用于命中率）
+	WeekTokens           int64 `json:"week_tokens"`             // 本周窗口 Total Tokens
+	WeekRequests         int64 `json:"week_requests"`           // 本周窗口 Successful Requests
+	WeekInputTokens      int64 `json:"week_input_tokens"`       // 本周窗口输入 tokens（只用于命中率）
+	WeekCacheReadTokens  int64 `json:"week_cache_read_tokens"`  // 本周窗口缓存读取 tokens（只用于命中率）
+	MonthTokens          int64 `json:"month_tokens"`            // 本月窗口 Total Tokens
+	MonthRequests        int64 `json:"month_requests"`          // 本月窗口 Successful Requests
+	MonthInputTokens     int64 `json:"month_input_tokens"`      // 本月窗口输入 tokens（只用于命中率）
+	MonthCacheReadTokens int64 `json:"month_cache_read_tokens"` // 本月窗口缓存读取 tokens（只用于命中率）
+
+	TodayOutputTokens        int64 `json:"today_output_tokens"`         // 今日窗口输出 tokens（话痨 / Token 构成）
+	TodayCacheCreationTokens int64 `json:"today_cache_creation_tokens"` // 今日窗口缓存创建 tokens（Token 构成）
+	TodayNightTokens         int64 `json:"today_night_tokens"`          // 今日窗口 0–6 点（站点时区）的 Total Tokens
+	TodayDistinctModels      int   `json:"today_distinct_models"`       // 今日窗口用过的不同模型数（杂食者）
+	TodayMaxSingleTokens     int64 `json:"today_max_single_tokens"`     // 今日窗口单次请求 tokens 的最大值
+	TodayMediaRequests       int64 `json:"today_media_requests"`        // 今日窗口有图片 / 视频计数的成功请求数（只存不发）
+
+	WeekOutputTokens        int64 `json:"week_output_tokens"`
+	WeekCacheCreationTokens int64 `json:"week_cache_creation_tokens"`
+	WeekNightTokens         int64 `json:"week_night_tokens"`
+	WeekDistinctModels      int   `json:"week_distinct_models"`
+	WeekMaxSingleTokens     int64 `json:"week_max_single_tokens"`
+	WeekMediaRequests       int64 `json:"week_media_requests"`
+
+	MonthOutputTokens        int64 `json:"month_output_tokens"`
+	MonthCacheCreationTokens int64 `json:"month_cache_creation_tokens"`
+	MonthNightTokens         int64 `json:"month_night_tokens"`
+	MonthDistinctModels      int   `json:"month_distinct_models"`
+	MonthMaxSingleTokens     int64 `json:"month_max_single_tokens"`
+	MonthMediaRequests       int64 `json:"month_media_requests"`
+
+	// 「昨日」两列与 Window 无关，只给今日窗口的进步之星当基线；
+	// 它们存在的代价是把扫描下界从 min(月初, 周一) 放宽到 min(月初, 周一, 昨日起点)。
+	YesterdayTokens   int64 `json:"yesterday_tokens"`
+	YesterdayRequests int64 `json:"yesterday_requests"`
+}
+
+// LeaderboardModelUsageRow 是「今日按模型聚合」的一行：Insights（洞察）的模型热度用。
+// SuccessfulRequests 与 LeaderboardAggregateRow 同为成功落账口径（actual_cost > 0），
+// 因此字段名叫 successful_requests，与两张预聚合表的裸 COUNT(*)（requests）刻意不同名。
+type LeaderboardModelUsageRow struct {
+	Model              string `json:"model"`
+	SuccessfulRequests int64  `json:"successful_requests"`
+}
+
+// LeaderboardDailyBucketRow 是 usage_dashboard_daily 的一个日桶（桶边界已是站点时区）。
+// Requests 是该表的 total_requests，即**全部请求**的裸 COUNT(*)——含失败请求的占位记录，
+// 与榜单的 Successful Requests 不是同一个口径，因此字段名叫 Requests。
+//
+// 两个 token 列用于算「每天的缓存命中率」（cache_trend_14），与 TotalTokens 同一次读取：
+// 近 14 天是近 30 天的子集，因此趋势那一块从同一批日桶里切出来，MUST NOT 另查一次。
+type LeaderboardDailyBucketRow struct {
+	Date            time.Time `json:"date"`
+	Requests        int64     `json:"requests"`
+	TotalTokens     int64     `json:"total_tokens"`
+	InputTokens     int64     `json:"input_tokens"`
+	CacheReadTokens int64     `json:"cache_read_tokens"`
+}
+
+// LeaderboardHourlyBucketRow 是 usage_dashboard_hourly 的一个小时桶（桶边界已是站点时区）。
+// Requests 的口径同 LeaderboardDailyBucketRow；两个 token 列用于算今日全站命中率。
+type LeaderboardHourlyBucketRow struct {
+	BucketStart     time.Time `json:"bucket_start"`
+	Requests        int64     `json:"requests"`
+	InputTokens     int64     `json:"input_tokens"`
+	CacheReadTokens int64     `json:"cache_read_tokens"`
+}
+
+// LeaderboardStreakRow 是「连续活跃」之最的结果：截至今日或昨日、连续有用量天数最长的那个人。
+// 来源是 usage_dashboard_daily_users（每天每人一行），不回去扫 usage_logs。
+// 无人满足时返回零值，Days 为 0 即「没有这张卡」。
+type LeaderboardStreakRow struct {
+	UserID int64 `json:"user_id"`
+	Days   int   `json:"days"`
+}
+
+// LeaderboardRankHistoryRow 是 leaderboard_rank_history 的一行：某人某天在今日窗口的两个名次。
+// 只有 user_id、日期与名次，没有身份、没有数值、没有任何金额。
+type LeaderboardRankHistoryRow struct {
+	UserID                 int64     `json:"user_id"`
+	SnapshotDate           time.Time `json:"snapshot_date"`
+	RankTotalTokens        int       `json:"rank_total_tokens"`
+	RankSuccessfulRequests int       `json:"rank_successful_requests"`
+}
+
+// LeaderboardPlatformUsageRow 是「今日按平台聚合」的一行，供 Insights（洞察）的平台分布使用。
+// SuccessfulRequests 与榜单同为成功落账口径（actual_cost > 0）。
+type LeaderboardPlatformUsageRow struct {
+	Platform           string `json:"platform"`
+	SuccessfulRequests int64  `json:"successful_requests"`
+}
+
+// LeaderboardUserModelUsageRow 是「指定 user_id 集合在窗口内按 (user_id, model) 聚合」的一行，
+// 供模型偏好画像使用：一条 SQL 出前 8 名各自的全部模型，MUST NOT 逐人各查一次。
+type LeaderboardUserModelUsageRow struct {
+	UserID             int64  `json:"user_id"`
+	Model              string `json:"model"`
+	SuccessfulRequests int64  `json:"successful_requests"`
+}
+
+// LeaderboardWeekdayHourRow 是「近 28 天按 (周几, 小时) 求平均」的一格，供周内节奏热力图使用。
+// Weekday 用 ISO 周几（1 = 周一 … 7 = 周日），Requests 是该格的平均请求数（向下取整）；
+// 该口径来自 usage_dashboard_hourly 的裸计数，含失败请求的占位记录。
+type LeaderboardWeekdayHourRow struct {
+	Weekday  int   `json:"weekday"`
+	Hour     int   `json:"hour"`
+	Requests int64 `json:"requests"`
 }
 
 // UserBreakdownDimension specifies the dimension to filter for user breakdown.

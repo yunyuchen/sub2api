@@ -193,6 +193,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyChannelMonitorShowQuota:              "false",
 		SettingKeyChannelMonitorHideUserRanking:        "false",
 
+		// Leaderboard default: off（fail-closed，存量站点升级后行为不变）
+		SettingKeyLeaderboardMode: LeaderboardModeOff,
+
 		// Grok compatibility defaults: cross-client mapping stays enabled unless
 		// operators explicitly disable it.
 		SettingKeyGrokDefaultTextModel:           "grok-4.6",
@@ -806,6 +809,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// （与 setting_public.go 公开读取路径保持一致）。
 	result.ChannelMonitorShowQuota = settings[SettingKeyChannelMonitorShowQuota] == "true"
 	result.ChannelMonitorHideUserRanking = isTrueSettingValue(settings[SettingKeyChannelMonitorHideUserRanking])
+
+	// Leaderboard 模式（默认 off；空值与非法值一律 fail-closed 落到 off）
+	result.LeaderboardMode = normalizeLeaderboardMode(settings[SettingKeyLeaderboardMode])
 
 	// Grok default mapping policy
 	result.GrokDefaultTextModel = strings.TrimSpace(settings[SettingKeyGrokDefaultTextModel])

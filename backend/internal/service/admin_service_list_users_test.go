@@ -35,6 +35,10 @@ func (s *userRepoStubForListUsers) ListWithFilters(_ context.Context, params pag
 	}, nil
 }
 
+func (s *userRepoStubForListUsers) GetByIDs(context.Context, []int64) ([]User, error) {
+	return nil, nil
+}
+
 func (s *userRepoStubForListUsers) GetLatestUsedAtByUserIDs(_ context.Context, userIDs []int64) (map[int64]*time.Time, error) {
 	if s.lastUsedErr != nil {
 		return nil, s.lastUsedErr

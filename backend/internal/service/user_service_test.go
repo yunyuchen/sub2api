@@ -239,6 +239,10 @@ func (m *mockUserRepo) ListUserAuthIdentities(context.Context, int64) ([]UserAut
 	copy(out, m.identities)
 	return out, nil
 }
+func (m *mockUserRepo) GetByIDs(context.Context, []int64) ([]User, error) {
+	return nil, nil
+}
+
 func (m *mockUserRepo) GetLatestUsedAtByUserIDs(context.Context, []int64) (map[int64]*time.Time, error) {
 	return map[int64]*time.Time{}, nil
 }

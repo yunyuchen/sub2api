@@ -222,6 +222,10 @@ func (r *contentModerationTestUserRepo) ListWithFilters(ctx context.Context, par
 	panic("unexpected ListWithFilters call")
 }
 
+func (r *contentModerationTestUserRepo) GetByIDs(context.Context, []int64) ([]User, error) {
+	return nil, nil
+}
+
 func (r *contentModerationTestUserRepo) GetLatestUsedAtByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*time.Time, error) {
 	panic("unexpected GetLatestUsedAtByUserIDs call")
 }

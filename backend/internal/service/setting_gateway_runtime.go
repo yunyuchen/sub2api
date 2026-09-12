@@ -51,6 +51,21 @@ const backendModeCacheTTL = 60 * time.Second
 const backendModeErrorTTL = 5 * time.Second
 const backendModeDBTimeout = 5 * time.Second
 
+// cachedLeaderboardMode Leaderboard Mode 的进程内缓存快照。
+// 这里缓存的是归一化之后的档位字符串，读不到 / 出错时一律是 LeaderboardModeOff。
+type cachedLeaderboardMode struct {
+	value     string
+	expiresAt int64 // unix nano
+}
+
+// leaderboardModeCacheTTL 取 5 秒量级（design D12）：guard 面向全体登录用户，
+// 不能每请求裸查一次 settings 表；代价是管理员切换档位后有秒级延迟。
+const leaderboardModeCacheTTL = 5 * time.Second
+
+// leaderboardModeErrorTTL 读不到 / 出错时缓存 off 并缩短 TTL，尽快重试。
+const leaderboardModeErrorTTL = 1 * time.Second
+const leaderboardModeDBTimeout = 5 * time.Second
+
 // cachedGatewayForwardingSettings 缓存网关转发行为设置（进程内缓存，60s TTL）
 type cachedGatewayForwardingSettings struct {
 	openAITTFTMode                   string
@@ -734,6 +749,57 @@ func (s *SettingService) IsBackendModeEnabled(ctx context.Context) bool {
 		return val
 	}
 	return false
+}
+
+// LeaderboardMode 返回当前的 Leaderboard Mode（排行榜模式），取值只会是
+// LeaderboardModeOff / LeaderboardModeAnonymous / LeaderboardModeNamed 之一。
+//
+// 形状照 IsBackendModeEnabled：atomic.Value 快照 + 短 TTL + singleflight 收敛回源，
+// 热路径无锁。与它的区别是方向——排行榜暴露的东西更多，因此读不到、出错或值非法时
+// 一律 fail-closed 缓存 off 并缩短 TTL，MUST NOT 回落到任何更开放的档位。
+func (s *SettingService) LeaderboardMode(ctx context.Context) string {
+	if s == nil || s.settingRepo == nil {
+		return LeaderboardModeOff
+	}
+	if cached, ok := s.leaderboardModeCache.Load().(*cachedLeaderboardMode); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.value
+		}
+	}
+	result, _, _ := s.leaderboardModeSF.Do("leaderboard_mode", func() (any, error) {
+		if cached, ok := s.leaderboardModeCache.Load().(*cachedLeaderboardMode); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached.value, nil
+			}
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), leaderboardModeDBTimeout)
+		defer cancel()
+		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyLeaderboardMode)
+		if err != nil {
+			if errors.Is(err, ErrSettingNotFound) {
+				// 尚未写入过（全新安装 / 存量站点升级）：按默认档 off，用完整 TTL。
+				s.storeLeaderboardModeCache(LeaderboardModeOff, leaderboardModeCacheTTL)
+				return LeaderboardModeOff, nil
+			}
+			slog.Warn("failed to get leaderboard_mode setting", "error", err)
+			s.storeLeaderboardModeCache(LeaderboardModeOff, leaderboardModeErrorTTL)
+			return LeaderboardModeOff, nil
+		}
+		mode := normalizeLeaderboardMode(value)
+		s.storeLeaderboardModeCache(mode, leaderboardModeCacheTTL)
+		return mode, nil
+	})
+	if val, ok := result.(string); ok {
+		return val
+	}
+	return LeaderboardModeOff
+}
+
+func (s *SettingService) storeLeaderboardModeCache(mode string, ttl time.Duration) {
+	s.leaderboardModeCache.Store(&cachedLeaderboardMode{
+		value:     mode,
+		expiresAt: time.Now().Add(ttl).UnixNano(),
+	})
 }
 
 type gatewayForwardingSettingsResult struct {

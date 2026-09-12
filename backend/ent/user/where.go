@@ -150,6 +150,11 @@ func RestrictPublicGroups(v bool) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRestrictPublicGroups, v))
 }
 
+// LeaderboardNamedParticipation applies equality check predicate on the "leaderboard_named_participation" field. It's identical to LeaderboardNamedParticipationEQ.
+func LeaderboardNamedParticipation(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldLeaderboardNamedParticipation, v))
+}
+
 // BalanceNotifyEnabled applies equality check predicate on the "balance_notify_enabled" field. It's identical to BalanceNotifyEnabledEQ.
 func BalanceNotifyEnabled(v bool) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldBalanceNotifyEnabled, v))
@@ -1128,6 +1133,16 @@ func RestrictPublicGroupsEQ(v bool) predicate.User {
 // RestrictPublicGroupsNEQ applies the NEQ predicate on the "restrict_public_groups" field.
 func RestrictPublicGroupsNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldRestrictPublicGroups, v))
+}
+
+// LeaderboardNamedParticipationEQ applies the EQ predicate on the "leaderboard_named_participation" field.
+func LeaderboardNamedParticipationEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldLeaderboardNamedParticipation, v))
+}
+
+// LeaderboardNamedParticipationNEQ applies the NEQ predicate on the "leaderboard_named_participation" field.
+func LeaderboardNamedParticipationNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldLeaderboardNamedParticipation, v))
 }
 
 // BalanceNotifyEnabledEQ applies the EQ predicate on the "balance_notify_enabled" field.

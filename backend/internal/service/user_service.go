@@ -115,6 +115,8 @@ type UserUpdateFields struct {
 	AllowedGroups bool
 	// RestrictPublicGroups 覆盖 restrict_public_groups 列。
 	RestrictPublicGroups bool
+	// LeaderboardNamedParticipation 覆盖 leaderboard_named_participation 列。
+	LeaderboardNamedParticipation bool
 }
 
 // BalanceChange 记录一次余额变更前后的值。
@@ -149,6 +151,10 @@ type UserRepository interface {
 
 	List(ctx context.Context, params pagination.PaginationParams) ([]User, *pagination.PaginationResult, error)
 	ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters UserListFilters) ([]User, *pagination.PaginationResult, error)
+	// GetByIDs 按 id 批量取用户，软删除由 SoftDeleteMixin 自动过滤（已删用户不会返回）。
+	// Leaderboard（排行榜）在响应时用它做一次至多 51 行（Top 50 + 查看者）的查询，
+	// 渲染展示名与参与资格——身份与资格 MUST NOT 冻结进 Snapshot（榜单快照）。
+	GetByIDs(ctx context.Context, ids []int64) ([]User, error)
 	GetLatestUsedAtByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*time.Time, error)
 	GetLatestUsedAtByUserID(ctx context.Context, userID int64) (*time.Time, error)
 	UpdateUserLastActiveAt(ctx context.Context, userID int64, activeAt time.Time) error
@@ -259,6 +265,9 @@ type UpdateProfileRequest struct {
 	Concurrency            *int     `json:"concurrency"`
 	BalanceNotifyEnabled   *bool    `json:"balance_notify_enabled"`
 	BalanceNotifyThreshold *float64 `json:"balance_notify_threshold"`
+	// LeaderboardNamedParticipation 是 Leaderboard（排行榜）的昵称展示开关（默认 true）。
+	// 指针语义：nil 表示本次请求没提交该字段，保持库中现值。
+	LeaderboardNamedParticipation *bool `json:"leaderboard_named_participation"`
 }
 
 type UserAvatar struct {
@@ -549,6 +558,20 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 			user.BalanceNotifyThreshold = req.BalanceNotifyThreshold
 		}
 		fields.BalanceNotifySettings = true
+	}
+
+	if req.LeaderboardNamedParticipation != nil {
+		// 开启昵称展示时校验 username（design D2）：不通过就拒绝开启且不写库。
+		// 这里 MUST NOT 改动个人资料现有的 username 通用校验——那条路径还承载
+		// 注册与 OAuth 回填。关闭则无条件放行：该开关不是「退出排行」，关掉之后
+		// 用户仍然参与排名，只是回退匿名形态。
+		if *req.LeaderboardNamedParticipation {
+			if err := validateLeaderboardUsername(user.Username); err != nil {
+				return nil, oldConcurrency, err
+			}
+		}
+		user.LeaderboardNamedParticipation = *req.LeaderboardNamedParticipation
+		fields.LeaderboardNamedParticipation = true
 	}
 
 	if err := s.userRepo.Update(ctx, user, fields); err != nil {

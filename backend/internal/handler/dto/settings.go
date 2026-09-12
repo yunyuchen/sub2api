@@ -309,6 +309,9 @@ type SystemSettings struct {
 	ChannelMonitorShowQuota              bool   `json:"channel_monitor_show_quota"`
 	ChannelMonitorHideUserRanking        bool   `json:"channel_monitor_hide_user_ranking"`
 
+	// Leaderboard feature mode ("off" | "anonymous" | "named"; default "off")
+	LeaderboardMode string `json:"leaderboard_mode"`
+
 	// Grok model mapping policy (admin settings; empty account mapping falls back to these).
 	GrokDefaultTextModel           string `json:"grok_default_text_model"`
 	GrokCrossClientModelMapEnabled bool   `json:"grok_cross_client_model_map_enabled"`
@@ -419,6 +422,9 @@ type PublicSettings struct {
 	ChannelMonitorHideThroughput         bool   `json:"channel_monitor_hide_throughput"`
 	ChannelMonitorShowQuota              bool   `json:"channel_monitor_show_quota"`
 	ChannelMonitorHideUserRanking        bool   `json:"channel_monitor_hide_user_ranking"`
+
+	// Leaderboard feature mode ("off" | "anonymous" | "named"; default "off")
+	LeaderboardMode string `json:"leaderboard_mode"`
 
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 

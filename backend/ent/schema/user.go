@@ -101,6 +101,12 @@ func (User) Fields() []ent.Field {
 		field.Bool("restrict_public_groups").
 			Default(false),
 
+		// 排行榜昵称展示：为 true 时该用户在 Leaderboard 上以 username 展示（默认行为），
+		// 为 false 时以匿名形态「第 N 位」出现。两种情况都照常参与排名，
+		// 关掉它只是隐藏昵称，不是退出排行。默认 true 与迁移 240 的回填一致。
+		field.Bool("leaderboard_named_participation").
+			Default(true),
+
 		// 余额不足通知
 		field.Bool("balance_notify_enabled").
 			Default(true),

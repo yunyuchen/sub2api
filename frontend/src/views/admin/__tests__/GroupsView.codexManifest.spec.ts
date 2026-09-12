@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminGroup, CodexModelsManifestConfig } from "@/types";
 import GroupsView from "@/views/admin/GroupsView.vue";
 
+const authState = vi.hoisted(() => ({ isSimpleMode: false, isAdmin: true }));
+
 const {
   listGroups,
   getModelsListCandidates,
@@ -46,6 +48,12 @@ vi.mock("@/stores/app", () => ({
     showError: vi.fn(),
     showSuccess: vi.fn(),
   }),
+}));
+
+// GroupsView.vue 的 setup 里还有一个 useAuthStore()，不 mock 就会在没有 Pinia 的
+// 测试环境里抛 getActivePinia，形状照 GroupsView.duplicate.spec.ts。
+vi.mock("@/stores/auth", () => ({
+  useAuthStore: () => authState,
 }));
 
 vi.mock("@/stores/onboarding", () => ({

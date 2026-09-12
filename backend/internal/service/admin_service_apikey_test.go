@@ -116,6 +116,10 @@ func (s *userRepoStubForGroupUpdate) UnbindUserAuthProvider(context.Context, int
 	panic("unexpected")
 }
 
+func (s *userRepoStubForGroupUpdate) GetByIDs(context.Context, []int64) ([]User, error) {
+	return nil, nil
+}
+
 func (s *userRepoStubForGroupUpdate) GetLatestUsedAtByUserIDs(context.Context, []int64) (map[int64]*time.Time, error) {
 	panic("unexpected")
 }

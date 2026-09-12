@@ -136,6 +136,12 @@ type SettingService struct {
 	cyberSessionBlockRuntimeCache atomic.Value // *cachedCyberSessionBlockRuntime
 	cyberSessionBlockRuntimeSF    singleflight.Group
 
+	// leaderboardModeCache 缓存 Leaderboard Mode（*cachedLeaderboardMode）。
+	// 路由 guard 面向全体登录用户，不能每请求裸查一次 settings 表；缓存挂在实例上
+	// 而不是包级变量，测试里每个 SettingService 因此天然互不串味。
+	leaderboardModeCache atomic.Value
+	leaderboardModeSF    singleflight.Group
+
 	// panelRateLimitCache 面板 API 限流配置进程内缓存（*cachedPanelRateLimitSettings）。
 	// 面板每个认证请求都会读取，禁止在热路径上直接访问 DB。
 	panelRateLimitCache atomic.Value

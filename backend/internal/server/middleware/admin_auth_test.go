@@ -178,6 +178,10 @@ func (s *stubUserRepo) ListWithFilters(ctx context.Context, params pagination.Pa
 	panic("unexpected ListWithFilters call")
 }
 
+func (s *stubUserRepo) GetByIDs(context.Context, []int64) ([]service.User, error) {
+	return nil, nil
+}
+
 func (s *stubUserRepo) GetLatestUsedAtByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*time.Time, error) {
 	panic("unexpected GetLatestUsedAtByUserIDs call")
 }

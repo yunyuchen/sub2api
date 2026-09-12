@@ -45,7 +45,8 @@ function collectStaticSourceKeys(source: string): string[] {
 }
 
 function sourceKeys(): string[] {
-  const sourceFiles = import.meta.glob('../../**/*.{ts,vue}', {
+  // 排除独立的后台 UI 原型：它有自己的 i18n，不属于主应用的 locale schema
+  const sourceFiles = import.meta.glob(['../../**/*.{ts,vue}', '!**/__prototype__/**'], {
     query: '?raw',
     import: 'default',
     eager: true

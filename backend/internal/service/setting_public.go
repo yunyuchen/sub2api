@@ -233,6 +233,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyChannelMonitorHideThroughput,
 		SettingKeyChannelMonitorShowQuota,
 		SettingKeyChannelMonitorHideUserRanking,
+		SettingKeyLeaderboardMode,
 		SettingKeyAvailableChannelsEnabled,
 		SettingKeyModelPlazaEnabled,
 		SettingKeyModelPlazaRequireAuth,
@@ -361,6 +362,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ChannelMonitorShowQuota:              settings[SettingKeyChannelMonitorShowQuota] == "true",
 		ChannelMonitorHideUserRanking:        isTrueSettingValue(settings[SettingKeyChannelMonitorHideUserRanking]),
 
+		LeaderboardMode: normalizeLeaderboardMode(settings[SettingKeyLeaderboardMode]),
+
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 
 		ModelPlazaEnabled:       settings[SettingKeyModelPlazaEnabled] == "true",
@@ -383,6 +386,23 @@ const (
 	channelMonitorIntervalFallback = 60
 	defaultChannelMonitorMode      = ChannelMonitorModeV1
 )
+
+// defaultLeaderboardMode 是 Leaderboard Mode 的默认档位。读取侧 fail-closed：
+// 空值与非法值都落到这里，而不是像渠道监控那样落到首档。
+const defaultLeaderboardMode = LeaderboardModeOff
+
+// normalizeLeaderboardMode accepts only off/anonymous/named; empty/invalid → off
+// (fail-closed: leaderboard exposure must never widen because a value is unreadable).
+func normalizeLeaderboardMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case LeaderboardModeAnonymous:
+		return LeaderboardModeAnonymous
+	case LeaderboardModeNamed:
+		return LeaderboardModeNamed
+	default:
+		return defaultLeaderboardMode
+	}
+}
 
 // normalizeChannelMonitorMode accepts only v1/v2; empty/invalid → v1 (safe default).
 func normalizeChannelMonitorMode(raw string) string {
@@ -628,14 +648,18 @@ type PublicSettingsInjectionPayload struct {
 	// ChannelMonitorHideUserRanking hides the user ranking tab and /users payload
 	// from non-admin channel-monitor v2 viewers; default false (visible).
 	ChannelMonitorHideUserRanking bool `json:"channel_monitor_hide_user_ranking"`
-	ChannelMonitorShowQuota       bool `json:"channel_monitor_show_quota"`
-	AvailableChannelsEnabled      bool `json:"available_channels_enabled"`
-	ModelPlazaEnabled             bool `json:"model_plaza_enabled"`
-	ModelPlazaRequireAuth         bool `json:"model_plaza_require_auth"`
-	PluginManagementEnabled       bool `json:"plugin_management_enabled"`
-	AffiliateEnabled              bool `json:"affiliate_enabled"`
-	RiskControlEnabled            bool `json:"risk_control_enabled"`
-	AllowUserViewErrorRequests    bool `json:"allow_user_view_error_requests"`
+	// LeaderboardMode gates the user leaderboard page and its sidebar entry.
+	// Enum, not a boolean flag: featureFlags.ts reads it through a dedicated
+	// enum reader and derives the boolean itself ("off" = hidden).
+	LeaderboardMode            string `json:"leaderboard_mode"`
+	ChannelMonitorShowQuota    bool   `json:"channel_monitor_show_quota"`
+	AvailableChannelsEnabled   bool   `json:"available_channels_enabled"`
+	ModelPlazaEnabled          bool   `json:"model_plaza_enabled"`
+	ModelPlazaRequireAuth      bool   `json:"model_plaza_require_auth"`
+	PluginManagementEnabled    bool   `json:"plugin_management_enabled"`
+	AffiliateEnabled           bool   `json:"affiliate_enabled"`
+	RiskControlEnabled         bool   `json:"risk_control_enabled"`
+	AllowUserViewErrorRequests bool   `json:"allow_user_view_error_requests"`
 }
 
 // GetPublicSettingsForInjection returns public settings in a format suitable for HTML injection.
@@ -711,6 +735,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ChannelMonitorHideThroughput:         settings.ChannelMonitorHideThroughput,
 		ChannelMonitorShowQuota:              settings.ChannelMonitorShowQuota,
 		ChannelMonitorHideUserRanking:        settings.ChannelMonitorHideUserRanking,
+		LeaderboardMode:                      settings.LeaderboardMode,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		ModelPlazaEnabled:                    settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:                settings.ModelPlazaRequireAuth,

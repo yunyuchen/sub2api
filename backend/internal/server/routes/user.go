@@ -154,5 +154,45 @@ func RegisterUserRoutes(
 			monitorV2.GET("/errors", h.ChannelMonitorV2.Errors)
 			monitorV2.GET("/users", h.ChannelMonitorV2.Users)
 		}
+
+		// Leaderboard（排行榜）：聚合读属重查询，与 /usage、channel-monitor-v2 一样叠 Heavy()；
+		// 档位 guard 放在最前，off 档下普通用户连参数校验都到不了（一律 404）。
+		leaderboard := authenticated.Group("/leaderboard")
+		leaderboard.Use(panelRateLimiter.Heavy())
+		leaderboard.Use(leaderboardModeGuard(settingService))
+		{
+			leaderboard.GET("", h.Leaderboard.Get)
+		}
+	}
+}
+
+// leaderboardModeGuard 按 Leaderboard Mode（排行榜模式）决定可见性，fail-closed：
+// 读不到设置、值非法或 settingService 缺失时一律按 off 处理。
+//
+// 档位取自带短 TTL 进程内缓存的读取器（SettingService.LeaderboardMode），不像
+// channelMonitorModeV2Guard 那样每个请求裸查一次 settings 表——Leaderboard 面向全体
+// 登录用户，不该把那处已知的每请求 DB 查询放大。代价是管理员切换档位后有秒级延迟。
+//
+// off 档：普通用户返回 404（403 会确认功能存在），管理员放行并打上 Preview（预览）标记。
+// 该 404 由 handler.AbortLeaderboardNotFound 写出，与 gin 未注册路由的默认响应逐字节
+// 一致——否则「带 reason 的 JSON 信封」本身就透露了这条路由存在。
+func leaderboardModeGuard(settingService *service.SettingService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		mode := service.LeaderboardModeOff
+		if settingService != nil {
+			mode = settingService.LeaderboardMode(c.Request.Context())
+		}
+		// 同一个请求里只读一次档位：handler 复用它组装响应，guard 与响应因此不会分叉。
+		c.Set(handler.LeaderboardModeContextKey, mode)
+
+		if mode == service.LeaderboardModeOff {
+			role, _ := middleware.GetUserRoleFromContext(c)
+			if role != service.RoleAdmin {
+				handler.AbortLeaderboardNotFound(c)
+				return
+			}
+			c.Set(handler.LeaderboardPreviewContextKey, true)
+		}
+		c.Next()
 	}
 }

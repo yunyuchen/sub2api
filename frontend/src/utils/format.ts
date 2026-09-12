@@ -171,6 +171,92 @@ export function formatDateTimeToMinute(
 }
 
 /**
+ * 站点时区下的「HH:MM」。
+ *
+ * 排行榜的状态栏、命令行标题与页脚三处时间都紧挨着 `tz=<站点时区>` 这个 chip，
+ * 用浏览器本地时区渲染会与它自相矛盾（design D4：窗口边界与一切时间都按站点时区）。
+ * 时区名非法（旧后端、首屏占位符）时退回浏览器本地时区，MUST NOT 抛错让整块时间空掉。
+ */
+export function formatTimeToMinuteInTimeZone(
+  date: string | Date | null | undefined,
+  timeZone: string | null | undefined
+): string {
+  const parts = zonedDateTimeParts(date, timeZone)
+  if (!parts) return ''
+  return `${parts.hour}:${parts.minute}`
+}
+
+/**
+ * 站点时区下的「YYYY-MM-DD」，与 mockup 的命令行标题一致。时区处理同上。
+ */
+export function formatDateOnlyInTimeZone(
+  date: string | Date | null | undefined,
+  timeZone: string | null | undefined
+): string {
+  const parts = zonedDateTimeParts(date, timeZone)
+  if (!parts) return ''
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+interface ZonedDateTimeParts {
+  year: string
+  month: string
+  day: string
+  hour: string
+  minute: string
+}
+
+/** 固定用 `en-US` + `h23` 取字段：这里要的是数字本身，不是某个 locale 的排版。 */
+function zonedDateTimeParts(
+  date: string | Date | null | undefined,
+  timeZone: string | null | undefined
+): ZonedDateTimeParts | null {
+  if (!date) return null
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return null
+
+  const options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }
+
+  let parts: Intl.DateTimeFormatPart[]
+  try {
+    parts = new Intl.DateTimeFormat('en-US', timeZone ? { ...options, timeZone } : options)
+      .formatToParts(d)
+  } catch {
+    // 时区名非法：退回浏览器本地时区，总比整块时间消失好。
+    try {
+      parts = new Intl.DateTimeFormat('en-US', options).formatToParts(d)
+    } catch {
+      return null
+    }
+  }
+
+  const pick = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? ''
+  const year = pick('year')
+  const month = pick('month')
+  const day = pick('day')
+  const hour = pick('hour')
+  const minute = pick('minute')
+  if (!year || !month || !day || !hour || !minute) return null
+
+  return {
+    year,
+    month: month.padStart(2, '0'),
+    day: day.padStart(2, '0'),
+    // 少数实现对 hourCycle 的支持有出入，这里再兜一次两位数与 24 点。
+    hour: (hour === '24' ? '00' : hour).padStart(2, '0'),
+    minute: minute.padStart(2, '0')
+  }
+}
+
+/**
  * 格式化为 date 控件值（YYYY-MM-DD，使用本地时间）
  */
 export function formatDateLocalInput(date: Date): string {
@@ -446,4 +532,15 @@ export function formatRelativeWithDateTime(date: string | Date | null | undefine
   }
 
   return `${relativeTime} · ${dateTime}`
+}
+
+/**
+ * 排行榜等社交视图用的紧凑数字：与 formatCompactNumber 相同的阈值，
+ * 但去掉无意义的 ".0"（600.0K → 600K，1.0M → 1M），保留有效小数（1.5M）。
+ */
+export function formatCompactNumberTrimmed(
+  num: number | null | undefined,
+  options?: { allowBillions?: boolean }
+): string {
+  return formatCompactNumber(num, options).replace(/\.0(?=[KMB]$)/, '')
 }

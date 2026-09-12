@@ -53,6 +53,8 @@ const (
 	FieldLastActiveAt = "last_active_at"
 	// FieldRestrictPublicGroups holds the string denoting the restrict_public_groups field in the database.
 	FieldRestrictPublicGroups = "restrict_public_groups"
+	// FieldLeaderboardNamedParticipation holds the string denoting the leaderboard_named_participation field in the database.
+	FieldLeaderboardNamedParticipation = "leaderboard_named_participation"
 	// FieldBalanceNotifyEnabled holds the string denoting the balance_notify_enabled field in the database.
 	FieldBalanceNotifyEnabled = "balance_notify_enabled"
 	// FieldBalanceNotifyThresholdType holds the string denoting the balance_notify_threshold_type field in the database.
@@ -215,6 +217,7 @@ var Columns = []string{
 	FieldLastLoginAt,
 	FieldLastActiveAt,
 	FieldRestrictPublicGroups,
+	FieldLeaderboardNamedParticipation,
 	FieldBalanceNotifyEnabled,
 	FieldBalanceNotifyThresholdType,
 	FieldBalanceNotifyThreshold,
@@ -285,6 +288,8 @@ var (
 	SignupSourceValidator func(string) error
 	// DefaultRestrictPublicGroups holds the default value on creation for the "restrict_public_groups" field.
 	DefaultRestrictPublicGroups bool
+	// DefaultLeaderboardNamedParticipation holds the default value on creation for the "leaderboard_named_participation" field.
+	DefaultLeaderboardNamedParticipation bool
 	// DefaultBalanceNotifyEnabled holds the default value on creation for the "balance_notify_enabled" field.
 	DefaultBalanceNotifyEnabled bool
 	// DefaultBalanceNotifyThresholdType holds the default value on creation for the "balance_notify_threshold_type" field.
@@ -398,6 +403,11 @@ func ByLastActiveAt(opts ...sql.OrderTermOption) OrderOption {
 // ByRestrictPublicGroups orders the results by the restrict_public_groups field.
 func ByRestrictPublicGroups(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRestrictPublicGroups, opts...).ToFunc()
+}
+
+// ByLeaderboardNamedParticipation orders the results by the leaderboard_named_participation field.
+func ByLeaderboardNamedParticipation(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLeaderboardNamedParticipation, opts...).ToFunc()
 }
 
 // ByBalanceNotifyEnabled orders the results by the balance_notify_enabled field.

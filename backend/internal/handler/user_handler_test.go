@@ -117,6 +117,10 @@ func (s *userHandlerRepoStub) RemoveGroupFromAllowedGroups(context.Context, int6
 func (s *userHandlerRepoStub) AddGroupToAllowedGroups(context.Context, int64, int64) error {
 	return nil
 }
+func (s *userHandlerRepoStub) GetByIDs(context.Context, []int64) ([]service.User, error) {
+	return nil, nil
+}
+
 func (s *userHandlerRepoStub) GetLatestUsedAtByUserIDs(context.Context, []int64) (map[int64]*time.Time, error) {
 	return map[int64]*time.Time{}, nil
 }

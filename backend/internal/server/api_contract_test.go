@@ -66,6 +66,7 @@ func TestAPIContracts(t *testing.T) {
 					"balance_notify_threshold": null,
 					"balance_notify_extra_emails": null,
 					"total_recharged": 0,
+					"leaderboard_named_participation": false,
 					"linuxdo_bound": false,
 					"oidc_bound": false,
 					"wechat_bound": false,
@@ -994,6 +995,7 @@ func TestAPIContracts(t *testing.T) {
 					"channel_monitor_show_quota": false,
 					"channel_monitor_hide_user_ranking": false,
 					"channel_monitor_default_interval_seconds": 60,
+					"leaderboard_mode": "off",
 					"available_channels_enabled": false,
 					"model_plaza_enabled": false,
 					"model_plaza_require_auth": false,
@@ -1308,6 +1310,7 @@ func TestAPIContracts(t *testing.T) {
 					"channel_monitor_show_quota": false,
 					"channel_monitor_hide_user_ranking": false,
 					"channel_monitor_default_interval_seconds": 60,
+					"leaderboard_mode": "off",
 					"available_channels_enabled": false,
 					"model_plaza_enabled": false,
 					"model_plaza_require_auth": false,
@@ -1687,6 +1690,10 @@ func (r *stubUserRepo) ListUserAuthIdentities(ctx context.Context, userID int64)
 
 func (r *stubUserRepo) UnbindUserAuthProvider(context.Context, int64, string) error {
 	return errors.New("not implemented")
+}
+
+func (r *stubUserRepo) GetByIDs(context.Context, []int64) ([]service.User, error) {
+	return nil, nil
 }
 
 func (r *stubUserRepo) GetLatestUsedAtByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*time.Time, error) {
@@ -2638,6 +2645,58 @@ func (r *stubUsageLogRepo) GetGroupStatsWithFilters(ctx context.Context, startTi
 
 func (r *stubUsageLogRepo) GetUserBreakdownStats(ctx context.Context, startTime, endTime time.Time, dim usagestats.UserBreakdownDimension, limit int) ([]usagestats.UserBreakdownItem, error) {
 	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) AggregateLeaderboardWindows(ctx context.Context, todayStart, weekStart, monthStart time.Time) ([]usagestats.LeaderboardAggregateRow, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardTopModelsToday(ctx context.Context, todayStart, todayEnd time.Time, limit int) ([]usagestats.LeaderboardModelUsageRow, int64, error) {
+	return nil, 0, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardDominantModel(ctx context.Context, userID int64, start, end time.Time) (string, error) {
+	return "", errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardDailyBuckets(ctx context.Context, fromDate, toDate time.Time) ([]usagestats.LeaderboardDailyBucketRow, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardHourlyBuckets(ctx context.Context, from, to time.Time) ([]usagestats.LeaderboardHourlyBucketRow, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardTopStreak(ctx context.Context, fromDate, toDate time.Time) (usagestats.LeaderboardStreakRow, error) {
+	return usagestats.LeaderboardStreakRow{}, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardUserModelBreakdown(ctx context.Context, userIDs []int64, start, end time.Time) ([]usagestats.LeaderboardUserModelUsageRow, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardPlatformsToday(ctx context.Context, todayStart, todayEnd time.Time) ([]usagestats.LeaderboardPlatformUsageRow, int64, error) {
+	return nil, 0, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardWeekdayHourBuckets(ctx context.Context, from, to time.Time) ([]usagestats.LeaderboardWeekdayHourRow, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardViewerModels(ctx context.Context, userID int64, start, end time.Time, limit int) ([]usagestats.LeaderboardModelUsageRow, int64, error) {
+	return nil, 0, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) UpsertLeaderboardRankHistory(ctx context.Context, rows []usagestats.LeaderboardRankHistoryRow) error {
+	return errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) LeaderboardRankHistory(ctx context.Context, userID int64, fromDate, toDate time.Time) ([]usagestats.LeaderboardRankHistoryRow, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) DeleteLeaderboardRankHistoryBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	return 0, errors.New("not implemented")
 }
 
 func (r *stubUsageLogRepo) GetAPIKeyUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.APIKeyUsageTrendPoint, error) {

@@ -788,6 +788,9 @@ export default {
     updateSuccess: 'Profile updated successfully',
     updateFailed: 'Failed to update profile',
     usernameRequired: 'Username is required',
+    leaderboardNamedParticipation: 'Show my name on the leaderboard',
+    leaderboardNamedParticipationHint: 'On by default. When off you appear on the leaderboard as "Row N" and still take part in the ranking. Showing your name requires a username that passes validation (2-32 characters, not an email address, no reserved words).',
+    leaderboardNamedParticipationRejected: 'Your current username does not meet the leaderboard display requirements.',
     changePassword: 'Change Password',
     currentPassword: 'Current Password',
     newPassword: 'New Password',
@@ -950,6 +953,298 @@ export default {
         username: 'Nickname is currently synced from {providerName}',
       },
     }
+  },
+
+  // User Leaderboard
+  leaderboard: {
+    title: 'Usage Leaderboard',
+    description: 'Usage rankings across all users for the today / this week / this month windows. No costs and no email addresses are shown.',
+    windows: {
+      label: 'Window',
+      today: 'Today',
+      week: 'This week',
+      month: 'This month',
+    },
+    metrics: {
+      label: 'Metric',
+      totalTokens: 'Total tokens',
+      successfulRequests: 'Successful requests',
+    },
+    // The masthead: brand on the left (site name plus one thin word), every dial on the
+    // right. The date moved to the title block, the timezone to the footer and the snapshot
+    // time into the chip, so there are no window / metric / mode / tz / snapshot key labels
+    // here any more. Window / metric appear both here and on the board toolbar, one state.
+    masthead: {
+      brand: 'Leaderboard',
+      // The mode chip only shows up in anonymous mode; named mode is the norm and gets none.
+      modeAnonymous: 'Anonymous',
+      // Minutes until the next rebuild, computed from the rebuild period; dropped entirely
+      // while the snapshot is missing or stale.
+      rebuildIn: '(rebuilds in {minutes}m)',
+      metricTokens: 'tokens',
+      metricRequests: 'requests',
+      theme: 'Theme',
+      themeLight: 'Light',
+      themeDark: 'Dark',
+      backToDashboard: 'Back to dashboard',
+    },
+    // The title block (v3, replaces the v2 command-line title). `leaderboard.title` is already
+    // a leaf string used as the route title (titleKey in router/index.ts), so the block lives
+    // under titleBlock and MUST NOT turn title into an object.
+    titleBlock: {
+      heading: {
+        today: 'Who is using it today',
+        week: 'Who is using it this week',
+        month: 'Who is using it this month',
+      },
+      participantsUnit: 'active',
+    },
+    // The seven chapter numbers are fixed labels, not a running index: when a chapter is not
+    // rendered at all, the remaining numbers MUST NOT be renumbered. The small subtitle next
+    // to a chapter name is gone page-wide, so there is no `sub` any more.
+    chapters: {
+      '01': {
+        name: {
+          today: 'Highlights today',
+          week: 'Highlights this week',
+          month: 'Highlights this month',
+        },
+      },
+      '02': {
+        name: 'Six records',
+      },
+      '03': {
+        name: 'Your position',
+      },
+      '04': {
+        name: 'Board, top 50',
+      },
+      '05': {
+        name: 'Models and platforms',
+      },
+      '06': {
+        name: 'Activity rhythm',
+      },
+      '07': {
+        name: 'Trend and composition',
+      },
+    },
+    extremes: {
+      nightOwl: {
+        label: 'Night owl',
+        unit: 'of their own tokens between 0:00 and 6:00',
+      },
+      rising: {
+        label: 'Rising star',
+        unit: 'vs yesterday',
+      },
+      omnivore: {
+        label: 'Omnivore',
+        unit: 'different models',
+      },
+      talker: {
+        label: 'Talker',
+        unit: 'output token share',
+      },
+      maxSingle: {
+        label: 'Largest single call',
+        unit: 'tokens per request',
+        ratioUnit: '× the median peak',
+        medianNote: '{ratio}× the median',
+      },
+      streak: {
+        label: 'Longest streak',
+        unit: 'days in a row',
+      },
+    },
+    whoami: {
+      // The only "private" marker on the page; the chapter name does not repeat it.
+      note: 'Private to you',
+      // The span comes from the points the chart actually has; never hard-code 14
+      rankTrend: 'Rank, last {span} days',
+      models: 'Your model mix',
+      compare: 'You vs the site',
+      cacheHitRate: 'Cache hit rate',
+      avgTokens: 'Tokens per request',
+      siteValue: 'site {value}',
+      // Added by the v3 report skin
+      rankEyebrow: 'Rank',
+      rankSummary: 'Best #{best} · worst #{worst}',
+      meLabel: 'You',
+      siteLabel: 'Site',
+    },
+    profiles: {
+      note: 'Model mix · top 3',
+      // Added when the top three shares add up to less than 100%
+      more: 'others omitted',
+    },
+    platforms: {
+      note: 'Today requests by platform',
+      // The small text on the right of a legend row: request counts in named mode, gone in
+      // anonymous mode.
+      legendCount: '{count} requests',
+      // The last item is the rounding remainder of the shares, not a platform, so it MUST NOT
+      // be given a request count of its own, and it no longer carries a "remainder" caption.
+      other: 'Other',
+    },
+    rhythm: {
+      note: 'Weekly rhythm · last 4 weeks',
+      weekdays: {
+        mon: 'Mon',
+        tue: 'Tue',
+        wed: 'Wed',
+        thu: 'Thu',
+        fri: 'Fri',
+        sat: 'Sat',
+        sun: 'Sun',
+      },
+    },
+    composition: {
+      note: 'Today token mix across the four kinds',
+      input: 'Input',
+      output: 'Output',
+      cacheCreation: 'Cache creation',
+      cacheRead: 'Cache read',
+    },
+    // `$ cache --trend 14` is the only cache block on the page: the big number is today's
+    // hit rate, the sub line depends on the mode, and the sparkline covers the last 14 days.
+    cacheTrend: {
+      note: 'Site-wide hit rate · last 14 days',
+      sub: 'Cache reads are {rate}% of the input',
+      subNamed: '{hits} tokens served from cache · {inputs} input in total',
+      // With a trend at hand this is just a label: the range is what the sparkline draws.
+      range: 'Today',
+    },
+    highlights: {
+      topTokens: {
+        today: 'Top burner today',
+        week: 'Top burner this week',
+        month: 'Top burner this month',
+      },
+      cacheKing: 'Efficiency star',
+      topRequests: 'Busiest',
+      site: {
+        today: 'Site today',
+        week: 'Site this week',
+        month: 'Site this month',
+      },
+      leadPercent: '{percent}% ahead',
+      dominantModel: 'Best: {model}',
+      // v3 report skin: big number and unit are separate, and the sentences are computed in
+      // the frontend from the response (a clause is dropped whenever its data is missing).
+      topTokensEyebrow: '{label} · most tokens',
+      cacheKingEyebrow: '{label} · best cache hit rate',
+      topRequestsEyebrow: '{label} · most successful requests',
+      runnerUp: '#2',
+      unitTokens: 'tokens',
+      unitShareTokens: 'of site tokens',
+      unitCacheHitRate: 'cache hit rate',
+      unitRequests: 'successful requests',
+      unitShareRequests: 'of site requests',
+      leadSay: '{lead}% ahead of #2 · {share}% of the site',
+      leadSayTie: 'Tied with #2 · {share}% of the site',
+      shareOfSite: '{percent}% of the site',
+      tiedWithSecond: 'Tied with #2',
+      siteRows: {
+        totalTokens: 'Total tokens',
+        successfulRequests: 'Successful requests',
+        participants: 'Active users',
+        peakHour: 'Peak hour',
+        cacheHitRate: 'Cache hit rate',
+      },
+      rowRequests: '{count} requests',
+      rowParticipants: '{count} people',
+    },
+    rank: {
+      // One line under the table, two clauses computed from `entries`; a clause whose data is
+      // missing is dropped whole, and both modes read the same (anonymous mode also gets only
+      // the multiple and the share). Clauses carry no terminator: the frontend joins with ` · `.
+      readout: {
+        lead: 'The leader is {ratio}× of #2',
+        topThreeShare: 'Top three are {percent}% of the site',
+      },
+    },
+    table: {
+      rank: 'Rank',
+      user: 'User',
+      relativeToTop: 'Relative to #1',
+      totalTokens: 'Total tokens',
+      // Short label for the column header and the "your position" tile; the metric
+      // segment keeps the full wording.
+      successfulRequestsShort: 'Successful',
+      relativePercent: '{percent}% of the top entry',
+      // Anonymous mode, viewer row: #1 has no public absolute, so this cell has no value
+      relativeUnknown: 'In anonymous mode the top entry usage is not public, so this row has no percentage relative to #1',
+      selfBadge: 'You',
+    },
+    identity: {
+      // Other people's pseudonym is the leaderboard ordinal, never a user id.
+      anonymous: 'Row {ordinal}',
+      outOfRank: 'Outside top 50',
+    },
+    myRank: {
+      participants: '{count} participants',
+      noUsage: 'No usage in this window',
+      noUsageHint: 'Once you generate usage in this window you will get a rank.',
+      suppressedHint: 'Too few participants to list board rows; anonymity would be meaningless',
+      hint: {
+        gapTokens: '{gap} more tokens to reach the top {rank}',
+        gapRequests: '{gap} more successful requests to reach the top {rank}',
+        relative: 'You are at {percent}% of the top entry; rank {rank} sits at {target}%',
+      },
+    },
+    insights: {
+      modelHeat: {
+        title: 'Models today',
+      },
+      heatmap: {
+        title: 'Activity, last 30 days',
+        legendLow: 'Less',
+        legendHigh: 'More',
+        cellRequests: '{date} · {count} requests',
+        cellRelative: '{date} · {percent}% of the busiest day',
+      },
+      trend: {
+        title: 'Usage trend · last 14 days',
+        sub: '{change} vs the day before',
+        monthTotal: 'Month to date',
+        monthChange: 'vs last month',
+        // Broken axis: T is the third largest of the 14 days; when the maximum is strictly
+        // greater than 5T the axis is compressed at T. Below that threshold the scale stays
+        // linear and this label is not rendered; the sentence under the chart is gone.
+        axisBreak: {
+          label: 'axis compressed at {value}',
+        },
+      },
+      hourly: {
+        title: 'Today by hour',
+        peak: 'Peak at {hour}:00',
+        peakWithRequests: 'Peak at {hour}:00 · {count} requests',
+        barRequests: '{hour}:00 · {count} requests',
+        barRelative: '{hour}:00 · {percent}% of the peak',
+      },
+    },
+    // The footer is one colophon line: `snapshot HH:MM · rebuild every 5m · <tz> · no costs`.
+    // `snapshot` and the timezone name are literals and stay out of i18n (design D4); the
+    // `COLOPHON` mark, "week starts Mon" and `successful_requests = actual_cost > 0` are gone.
+    footer: {
+      rebuild: 'rebuild every 5m',
+      noMoney: 'No costs and no email addresses are shown',
+    },
+    states: {
+      loadFailed: 'Failed to load the leaderboard',
+      empty: 'Nobody has any usage in this window yet',
+      emptyHint: 'The board appears as soon as the first usage is recorded.',
+      suppressed: 'Too few participants to show the board',
+      computing: 'The leaderboard is being computed',
+      computingHint: 'The snapshot is rebuilt every 5 minutes; give it a moment after first enabling the feature.',
+      stale: 'Data has not refreshed for over 15 minutes',
+      staleHint: 'You are looking at the previous snapshot. It refreshes automatically once the background job recovers.',
+    },
+    preview: {
+      banner: 'Preview: not visible to regular users',
+      bannerHint: 'Leaderboard mode is currently "Off", so only admins can reach this page by direct link. Once enabled, admins and regular users see exactly the same data.',
+    },
   },
 
   // Empty States

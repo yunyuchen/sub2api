@@ -25,6 +25,7 @@ const appStore = vi.hoisted(() => ({
   cachedPublicSettings: null as null | {
     payment_enabled?: boolean
     risk_control_enabled?: boolean
+    leaderboard_mode?: 'off' | 'anonymous' | 'named'
     custom_menu_items?: []
   },
   fetchPublicSettings: vi.fn(),
@@ -173,5 +174,111 @@ describe('feature route guard', () => {
     expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
     expect(next).toHaveBeenCalledOnce()
     expect(next).toHaveBeenCalledWith(target)
+  })
+})
+
+// /leaderboard 的守卫与 payment / risk_control 同形状，但多一条:off 档下管理员放行,
+// 由后端返回 preview 响应。普通用户才被拦截。
+describe('leaderboard route guard', () => {
+  beforeEach(() => {
+    authStore.isAuthenticated = true
+    authStore.isAdmin = false
+    authStore.isSimpleMode = false
+    appStore.publicSettingsLoaded = false
+    appStore.cachedPublicSettings = null
+    appStore.fetchPublicSettings.mockReset()
+  })
+
+  it('preloads public settings before deciding access', async () => {
+    const deferred = createDeferred<{ leaderboard_mode: 'named' }>()
+    appStore.fetchPublicSettings.mockImplementation(async () => {
+      const settings = await deferred.promise
+      appStore.cachedPublicSettings = settings
+      appStore.publicSettingsLoaded = true
+      return settings
+    })
+
+    const { navigation, next } = runGuard({ requiresLeaderboard: true }, '/leaderboard')
+
+    await vi.waitFor(() => expect(appStore.fetchPublicSettings).toHaveBeenCalledTimes(1))
+    expect(next).not.toHaveBeenCalled()
+
+    deferred.resolve({ leaderboard_mode: 'named' })
+    await navigation
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('redirects a regular user away when loaded settings say the mode is off', async () => {
+    appStore.cachedPublicSettings = { leaderboard_mode: 'off' }
+    appStore.publicSettingsLoaded = true
+
+    const { navigation, next } = runGuard({ requiresLeaderboard: true }, '/leaderboard')
+    await navigation
+
+    expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('lets an admin through in off mode so the backend can serve the preview', async () => {
+    authStore.isAdmin = true
+    appStore.cachedPublicSettings = { leaderboard_mode: 'off' }
+    appStore.publicSettingsLoaded = true
+
+    const { navigation, next } = runGuard({ requiresLeaderboard: true }, '/leaderboard')
+    await navigation
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it.each([['anonymous'], ['named']] as const)(
+    'lets a regular user through in %s mode',
+    async (mode) => {
+      appStore.cachedPublicSettings = { leaderboard_mode: mode }
+      appStore.publicSettingsLoaded = true
+
+      const { navigation, next } = runGuard({ requiresLeaderboard: true }, '/leaderboard')
+      await navigation
+
+      expect(next).toHaveBeenCalledOnce()
+      expect(next).toHaveBeenCalledWith()
+    }
+  )
+
+  it('does not treat a failed settings load as an explicit off', async () => {
+    appStore.fetchPublicSettings.mockResolvedValue(null)
+
+    const { navigation, next } = runGuard({ requiresLeaderboard: true }, '/leaderboard')
+    await navigation
+
+    expect(appStore.publicSettingsLoaded).toBe(false)
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  // 守卫与侧边栏共用 isLeaderboardVisible()：设置已加载却读不到该键（或值非法）时
+  // 一律按 off 处理，否则入口消失、路由却还进得去。瞬时加载失败是另一回事，见上一条。
+  it('treats a missing leaderboard_mode key as off once settings are loaded', async () => {
+    appStore.cachedPublicSettings = { payment_enabled: true }
+    appStore.publicSettingsLoaded = true
+
+    const { navigation, next } = runGuard({ requiresLeaderboard: true }, '/leaderboard')
+    await navigation
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('treats an invalid leaderboard_mode value as off once settings are loaded', async () => {
+    appStore.cachedPublicSettings = { leaderboard_mode: 'Named' as 'named' }
+    appStore.publicSettingsLoaded = true
+
+    const { navigation, next } = runGuard({ requiresLeaderboard: true }, '/leaderboard')
+    await navigation
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith('/dashboard')
   })
 })

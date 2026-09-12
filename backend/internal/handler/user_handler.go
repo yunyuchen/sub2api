@@ -81,6 +81,9 @@ type UpdateProfileRequest struct {
 	AvatarURL              *string  `json:"avatar_url"`
 	BalanceNotifyEnabled   *bool    `json:"balance_notify_enabled"`
 	BalanceNotifyThreshold *float64 `json:"balance_notify_threshold"`
+	// LeaderboardNamedParticipation 是否在排行榜上以 username 展示本人（默认 true）；
+	// nil 表示本次不改该开关。
+	LeaderboardNamedParticipation *bool `json:"leaderboard_named_participation"`
 }
 
 type userProfileResponse struct {
@@ -174,10 +177,11 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	svcReq := service.UpdateProfileRequest{
-		Username:               req.Username,
-		AvatarURL:              req.AvatarURL,
-		BalanceNotifyEnabled:   req.BalanceNotifyEnabled,
-		BalanceNotifyThreshold: req.BalanceNotifyThreshold,
+		Username:                      req.Username,
+		AvatarURL:                     req.AvatarURL,
+		BalanceNotifyEnabled:          req.BalanceNotifyEnabled,
+		BalanceNotifyThreshold:        req.BalanceNotifyThreshold,
+		LeaderboardNamedParticipation: req.LeaderboardNamedParticipation,
 	}
 	updatedUser, err := h.userService.UpdateProfile(c.Request.Context(), subject.UserID, svcReq)
 	if err != nil {

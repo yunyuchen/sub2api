@@ -420,6 +420,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyChannelMonitorShowQuota] = strconv.FormatBool(settings.ChannelMonitorShowQuota)
 	updates[SettingKeyChannelMonitorHideUserRanking] = strconv.FormatBool(settings.ChannelMonitorHideUserRanking)
 
+	// Leaderboard 模式：写入侧归一化（handler 已做严格白名单，这里兜底非法值）
+	updates[SettingKeyLeaderboardMode] = normalizeLeaderboardMode(settings.LeaderboardMode)
+
 	// Grok model mapping policy
 	if v := strings.TrimSpace(settings.GrokDefaultTextModel); v != "" {
 		updates[SettingKeyGrokDefaultTextModel] = v
@@ -701,6 +704,8 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:     settings.BackendModeEnabled,
 		expiresAt: time.Now().Add(backendModeCacheTTL).UnixNano(),
 	})
+	s.leaderboardModeSF.Forget("leaderboard_mode")
+	s.storeLeaderboardModeCache(normalizeLeaderboardMode(settings.LeaderboardMode), leaderboardModeCacheTTL)
 	gatewayForwardingSF.Forget("gateway_forwarding")
 	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
 		openAITTFTMode:                   normalizeOpenAITTFTMode(settings.OpenAITTFTMode),

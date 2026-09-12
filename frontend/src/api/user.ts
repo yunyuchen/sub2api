@@ -39,6 +39,12 @@ export async function updateProfile(profile: {
   balance_notify_enabled?: boolean
   balance_notify_threshold?: number | null
   balance_notify_extra_emails?: NotifyEmailEntry[]
+  /**
+   * 「在排行榜显示我的昵称」开关（后端默认 true）。置 true 时后端会校验 username
+   * （长度、字符集、邮箱形态、保留词），不通过则返回 400 并拒绝开启，
+   * 且不会改动 username 本身。
+   */
+  leaderboard_named_participation?: boolean
 }): Promise<User> {
   const { data } = await apiClient.put<User>('/user', profile)
   return data

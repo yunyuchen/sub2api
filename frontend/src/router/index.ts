@@ -13,6 +13,7 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { isLeaderboardVisible } from '@/utils/featureFlags'
 
 /**
  * Route definitions with lazy loading
@@ -238,6 +239,19 @@ const routes: RouteRecordRaw[] = [
       title: 'Usage Records',
       titleKey: 'usage.title',
       descriptionKey: 'usage.description'
+    }
+  },
+  {
+    path: '/leaderboard',
+    name: 'Leaderboard',
+    component: () => import('@/views/user/LeaderboardView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      requiresLeaderboard: true,
+      title: 'Leaderboard',
+      titleKey: 'leaderboard.title',
+      descriptionKey: 'leaderboard.description'
     }
   },
   {
@@ -907,7 +921,10 @@ router.beforeEach(async (to, _from, next) => {
   // 公共设置可能尚未加载（App.vue 的 onMounted 异步拉取晚于首次导航，且纯静态部署
   // 无 __APP_CONFIG__ 注入）。此时 cachedPublicSettings 为空会把 payment/risk_control
   // 误判为“未启用”而错误拦截，故这里先确保设置加载完成。
-  if ((to.meta.requiresPayment || to.meta.requiresRiskControl) && !appStore.publicSettingsLoaded) {
+  if (
+    (to.meta.requiresPayment || to.meta.requiresRiskControl || to.meta.requiresLeaderboard) &&
+    !appStore.publicSettingsLoaded
+  ) {
     try {
       await appStore.fetchPublicSettings()
     } catch (error) {
@@ -932,6 +949,20 @@ router.beforeEach(async (to, _from, next) => {
     appStore.cachedPublicSettings?.risk_control_enabled === false
   ) {
     next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
+    return
+  }
+
+  // Leaderboard:off 档对普通用户既不可见也不可访问,管理员直链进入 Preview。
+  // 与上面两支同形状的 fail-closed,但档位走 isLeaderboardVisible()——侧边栏与守卫
+  // 必须用同一个派生布尔,否则设置里出现缺失/非法值时入口消失、路由却还进得去。
+  // publicSettingsLoaded 前置条件保留:瞬时加载失败是未知态,放行交给后端 404 兜底。
+  if (
+    to.meta.requiresLeaderboard &&
+    appStore.publicSettingsLoaded &&
+    !isLeaderboardVisible() &&
+    !authStore.isAdmin
+  ) {
+    next('/dashboard')
     return
   }
 

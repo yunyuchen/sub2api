@@ -7147,6 +7147,88 @@
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.leaderboard.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.leaderboard.description') }}
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div>
+              <label class="input-label">
+                {{ t('admin.settings.features.leaderboard.mode') }}
+              </label>
+              <div class="mt-1.5 inline-flex w-full max-w-md rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-dark-600 dark:bg-dark-900/40">
+                <button
+                  type="button"
+                  class="inline-flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                  :class="
+                    form.leaderboard_mode === 'off'
+                      ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
+                  "
+                  @click="form.leaderboard_mode = 'off'"
+                >
+                  {{ t('admin.settings.features.leaderboard.modeOff') }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                  :class="
+                    form.leaderboard_mode === 'anonymous'
+                      ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
+                  "
+                  @click="form.leaderboard_mode = 'anonymous'"
+                >
+                  {{ t('admin.settings.features.leaderboard.modeAnonymous') }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                  :class="
+                    form.leaderboard_mode === 'named'
+                      ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
+                  "
+                  @click="form.leaderboard_mode = 'named'"
+                >
+                  {{ t('admin.settings.features.leaderboard.modeNamed') }}
+                </button>
+              </div>
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                {{
+                  form.leaderboard_mode === 'named'
+                    ? t('admin.settings.features.leaderboard.modeNamedHint')
+                    : form.leaderboard_mode === 'anonymous'
+                      ? t('admin.settings.features.leaderboard.modeAnonymousHint')
+                      : t('admin.settings.features.leaderboard.modeOffHint')
+                }}
+              </p>
+              <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                {{ t('admin.settings.features.leaderboard.modeHint') }}
+              </p>
+            </div>
+
+            <!-- named 档的两条残余风险:开到最开放的一档时必须让管理员看见代价 -->
+            <div
+              v-if="form.leaderboard_mode === 'named'"
+              class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-900/20"
+            >
+              <p class="text-xs font-medium text-amber-800 dark:text-amber-300">
+                {{ t('admin.settings.features.leaderboard.namedRiskTitle') }}
+              </p>
+              <ul class="mt-1.5 list-disc space-y-1 pl-4 text-xs text-amber-700 dark:text-amber-200">
+                <li>{{ t('admin.settings.features.leaderboard.namedRiskReverseLookup') }}</li>
+                <li>{{ t('admin.settings.features.leaderboard.namedRiskActivityTimeline') }}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.availableChannels.title') }}
             </h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -9812,6 +9894,8 @@ const form = reactive<SettingsForm>({
   channel_monitor_hide_throughput: false,
   channel_monitor_show_quota: false,
   channel_monitor_hide_user_ranking: false,
+  // User Leaderboard 三档暴露程度,默认 off(fail-closed)
+  leaderboard_mode: 'off' as 'off' | 'anonymous' | 'named',
   // Available Channels feature switch
   available_channels_enabled: false,
   // Model Plaza feature switches + description
@@ -10821,6 +10905,13 @@ async function loadSettings() {
     form.channel_monitor_hide_user_ranking = Boolean(
       settings.channel_monitor_hide_user_ranking
     );
+    // 读取侧再归一化一次:库里的空值或历史遗留非法值一律落到 off
+    form.leaderboard_mode =
+      settings.leaderboard_mode === "named"
+        ? "named"
+        : settings.leaderboard_mode === "anonymous"
+          ? "anonymous"
+          : "off";
     form.login_agreement_updated_at =
       settings.login_agreement_updated_at || "2026-03-31";
     form.login_agreement_documents =
@@ -11476,6 +11567,8 @@ async function saveSettings() {
       channel_monitor_hide_throughput: Boolean(form.channel_monitor_hide_throughput),
       channel_monitor_show_quota: Boolean(form.channel_monitor_show_quota),
       channel_monitor_hide_user_ranking: Boolean(form.channel_monitor_hide_user_ranking),
+      // User Leaderboard 三档暴露程度(漏掉这行管理员选了档位也不会被提交)
+      leaderboard_mode: form.leaderboard_mode,
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
       // Model Plaza feature switches + description

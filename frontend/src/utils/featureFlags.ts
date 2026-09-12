@@ -208,3 +208,36 @@ export function isChannelMonitorUserRankingHidden(): boolean {
   const appStore = useAppStore()
   return Boolean(appStore.cachedPublicSettings?.channel_monitor_hide_user_ranking)
 }
+
+/** User Leaderboard 的三档暴露程度，与后端 `leaderboard_mode` 设置同名。 */
+export type LeaderboardMode = 'off' | 'anonymous' | 'named'
+
+const LEADERBOARD_MODES: readonly LeaderboardMode[] = ['off', 'anonymous', 'named']
+
+/**
+ * Leaderboard Mode（排行榜模式）读取器。
+ *
+ * 与 getChannelMonitorMode() 同一形状：枚举设置 MUST NOT 登记进上面的
+ * FeatureFlags 注册表——isFeatureFlagEnabled 只认 `typeof raw === 'boolean'`，
+ * 枚举值会被 cast 成 boolean 后恒为 false，开关等于静默失效。
+ *
+ * 方向与 channel_monitor_mode 相反：这里是 fail-closed。设置未加载、键缺失、
+ * 值非法（含大小写与空格变体）一律返回 'off'——榜单暴露的是用户身份与用量，
+ * 名字一旦公开无法收回，读不到时必须往更保守的方向倒。
+ */
+export function getLeaderboardMode(): LeaderboardMode {
+  const appStore = useAppStore()
+  const raw = appStore.cachedPublicSettings?.leaderboard_mode
+  return LEADERBOARD_MODES.includes(raw as LeaderboardMode) ? (raw as LeaderboardMode) : 'off'
+}
+
+/**
+ * 由 getLeaderboardMode() 派生的布尔 flag（mode !== 'off'），供侧边栏入口使用。
+ * 与 getChannelMonitorMode() / isChannelMonitorV2Mode() 的关系一致。
+ *
+ * 注意：off 档下入口对所有角色隐藏（管理员也不例外），管理员经直链
+ * /leaderboard 进入 Preview（预览），因此这里不做角色分支。
+ */
+export function isLeaderboardVisible(): boolean {
+  return getLeaderboardMode() !== 'off'
+}

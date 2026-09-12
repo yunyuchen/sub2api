@@ -38,6 +38,21 @@ export default {
           hideUserRankingHint:
             'When on, the user Channel Monitor V2 page hides the user ranking tab and the user API returns no ranking rows. Admins still see the ranking.',
         },
+        leaderboard: {
+          title: 'Usage Leaderboard',
+          description: 'A usage ranking for logged-in users, with three increasing exposure levels. Off by default. The board never shows costs or email addresses.',
+          mode: 'Leaderboard mode',
+          modeHint: 'A failed read or an invalid value always falls back to "Off" (fail-closed). A change takes effect within seconds; after first enabling it, allow one 5-minute snapshot cycle.',
+          modeOff: 'Off',
+          modeAnonymous: 'Anonymous',
+          modeNamed: 'Named',
+          modeOffHint: 'Default: regular users see no entry and the endpoint returns 404. Admins can preview the enabled experience via the direct link /leaderboard.',
+          modeAnonymousHint: 'Everyone appears anonymously (viewers see their own username, everyone else is "Row N" by leaderboard ordinal). Other people\'s numbers are shown only as a percentage of the top entry, the participant count is bucketed, and boards with fewer than 5 participants show only the viewer\'s own row.',
+          modeNamedHint: 'The most open level: users show their username by default and can opt out; those who opted out, and those whose username fails validation, appear as "Row N". All numbers and the participant count are exact. Read the residual risks below before enabling.',
+          namedRiskTitle: 'Two residual risks of the named level',
+          namedRiskReverseLookup: 'Users who opted out are shown anonymously but with exact numbers, so someone who already knows a colleague\'s usage can work out which row is theirs. Use the "Anonymous" level if you need stronger protection.',
+          namedRiskActivityTimeline: 'The "Today" window refreshes every 5 minutes, which forms a coarse activity timeline for users shown by name. Name display is on by default, so anyone who does not want this has to turn it off in their profile.',
+        },
         availableChannels: {
           title: 'Available Channels',
           description: 'Show logged-in users an aggregate view of the channels, models and pricing they can access. Disabled by default.',

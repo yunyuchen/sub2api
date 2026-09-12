@@ -15,7 +15,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/__tests__/setup.ts'],
     include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
-    exclude: ['node_modules', 'dist'],
+    // __prototype__ 下是独立的后台 UI 原型（自带 node_modules），不属于主应用
+    exclude: ['node_modules', 'dist', 'src/views/admin/__prototype__/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

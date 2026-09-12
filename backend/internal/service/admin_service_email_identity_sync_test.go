@@ -93,6 +93,10 @@ func (s *emailSyncRepoStub) ListWithFilters(context.Context, pagination.Paginati
 	return nil, nil, fmt.Errorf("unexpected ListWithFilters call")
 }
 
+func (s *emailSyncRepoStub) GetByIDs(context.Context, []int64) ([]User, error) {
+	return nil, nil
+}
+
 func (s *emailSyncRepoStub) GetLatestUsedAtByUserIDs(context.Context, []int64) (map[int64]*time.Time, error) {
 	return map[int64]*time.Time{}, nil
 }

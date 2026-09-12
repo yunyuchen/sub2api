@@ -1,0 +1,1892 @@
+/**
+ * 用量排行榜（/leaderboard）独立页的视觉 token 与动效 —— v3 报表（report）皮肤。
+ *
+ * 只由 `views/user/LeaderboardView.vue` 引入（组件不各自 import），与同目录的
+ * `announcement-markdown.css`、`onboarding.css` 一样是页面级样式，MUST NOT 进全局样式入口：
+ * 所有变量都定义在页面根节点 `.rp` 这一层而不是 `:root`，因此不会与站点既有的 Tailwind
+ * 变量抢名字，其它页面也完全不受影响。
+ *
+ * 取值照已确认的画板移植（scratchpad/leaderboard-design-canvas/v3/gen_taste.py 的 CSS 常量）：
+ * 变量名与画板一字不差（无前缀），类名一律加 `rp-` 前缀 —— 画板里的两字母类名（.sup / .ll /
+ * .cmp / .vs …）MUST NOT 原样搬进代码，那既读不懂也迟早会跟别处撞名。
+ *
+ * 与 v2 相反：**亮色是基色**（变量直接定义在 `.rp` 上），暗色由 `.rp.dark` 覆写；`.dark` 由
+ * 站点既有的 `html.dark` 推导（`main.ts` 的 initThemeClass 与 AppSidebar 的 toggleTheme 都是
+ * `document.documentElement.classList.toggle('dark', ...)`），因此这里同时写上 `html.dark .rp`
+ * —— 页面根节点还没来得及更新 class 时配色也不会与站点错开。
+ * MUST NOT 用 `prefers-color-scheme` 单独判定，那会出现「站点是亮色、本页是暗色」。
+ *
+ * 设计禁令（design-taste-frontend-v1）：零 box-shadow、零 backdrop-filter、零 filter、
+ * 零渐变、零 z-index（除非必须）；圆角只有控件 4–5px、条与热力格 1.5–2px；唯一强调色
+ * （亮 #a8412b / 暗 #e08066），中性冷灰，无 #000 与 rgba(0,0,0,…)。
+ *
+ * 字体自托管：站点 CSP 的 font-src 是 `'self' data:`，woff2 走 vite 资源管线由同源下发，
+ * MUST NOT 为此改 CSP 去放行 fonts.googleapis.com / fonts.gstatic.com。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 自托管字体（拉丁子集的可变字体，OFL-1.1，见 assets/fonts/leaderboard/README.md） */
+/* unicode-range 只覆盖拉丁，中文与 emoji 自然回落到系统字体。               */
+/* ------------------------------------------------------------------ */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../assets/fonts/leaderboard/geist-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../assets/fonts/leaderboard/geist-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ------------------------------------------------------------------ */
+/* 变量：亮色是基色                                                      */
+/* ------------------------------------------------------------------ */
+.rp {
+  --pad: 56px;
+  --mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --bg: #fbfbfc;
+  --bg-sunk: #f3f3f5;
+  --panel: #ffffff;
+  --ink: #18181b;
+  --ink-2: #45454e;
+  --ink-3: #6c6c78;
+  --ink-4: #8d8d99;
+  --line: #e2e2e7;
+  --line-soft: #ececf0;
+  --line-hard: #cfcfd6;
+  --dot: #c3c3cc;
+  --accent: #a8412b;
+  --accent-deep: #8e3523;
+  --accent-a: rgba(168, 65, 43, 1);
+  --accent-b: rgba(168, 65, 43, 0.62);
+  --accent-c: rgba(168, 65, 43, 0.36);
+  --accent-d: rgba(168, 65, 43, 0.18);
+  --accent-wash: rgba(168, 65, 43, 0.055);
+  --accent-edge: rgba(168, 65, 43, 0.28);
+  --heat-0: #eaeaec;
+  --band: rgba(168, 65, 43, 0.05);
+  /* 强调色底上的前景色：亮色下是纸白，暗色下是页面底色（见下方覆写） */
+  --on-accent: #fbfbfc;
+
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Geist', system-ui, -apple-system, 'PingFang SC', 'Noto Sans CJK SC', sans-serif;
+  font-size: 13.5px;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.rp.dark,
+html.dark .rp {
+  --bg: #0b0b0d;
+  --bg-sunk: #141417;
+  --panel: #101013;
+  --ink: #f2f2f4;
+  --ink-2: #bcbcc5;
+  --ink-3: #94949f;
+  --ink-4: #75757f;
+  --line: #26262c;
+  --line-soft: #1d1d22;
+  --line-hard: #3a3a43;
+  --dot: #3d3d46;
+  --accent: #e08066;
+  --accent-deep: #ef9d86;
+  --accent-a: rgba(224, 128, 102, 1);
+  --accent-b: rgba(224, 128, 102, 0.62);
+  --accent-c: rgba(224, 128, 102, 0.38);
+  --accent-d: rgba(224, 128, 102, 0.22);
+  --accent-wash: rgba(224, 128, 102, 0.09);
+  --accent-edge: rgba(224, 128, 102, 0.34);
+  --heat-0: #1a1a1e;
+  --band: #141417;
+  --on-accent: #0b0b0d;
+}
+
+/* ------------------------------------------------------------------ */
+/* 元素基线（只在 .rp 这棵树内生效）                                      */
+/* ------------------------------------------------------------------ */
+.rp *,
+.rp *::before,
+.rp *::after {
+  box-sizing: border-box;
+}
+.rp h1,
+.rp h2,
+.rp h3,
+.rp p,
+.rp ul,
+.rp ol {
+  margin: 0;
+}
+.rp ul,
+.rp ol {
+  padding: 0;
+  list-style: none;
+}
+.rp button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.rp em,
+.rp i {
+  font-style: normal;
+}
+
+/* 数字一律等宽 tabular，列与列之间才对得齐 */
+.rp-n {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.01em;
+}
+
+.rp-icon {
+  flex: none;
+  vertical-align: -2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 骨架：页面与「边注栏 + 内容」两列网格                                   */
+/* ------------------------------------------------------------------ */
+.rp-page {
+  padding: 0 var(--pad) 20px;
+}
+/* ------------------------------------------------------------------ */
+/* 报头（masthead）                                                     */
+/* ------------------------------------------------------------------ */
+.rp-masthead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 24px;
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--line-hard);
+}
+/* 刊头是一行：粗体站名 + 一个细字，不再是两行的 brand + LEADERBOARD。 */
+.rp-brand {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+.rp-brand b {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.025em;
+}
+/* --ink-4 用在 10px 上只有 3.17:1（亮）/ 4.31:1（暗），不满足非大字号 4.5:1；
+   小字一律用 --ink-3（5.01 / 6.55），--ink-4 留给大字与装饰。 */
+.rp-brand-mark {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.01em;
+}
+.rp-dials {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  justify-content: flex-end;
+}
+/* 档位 chip：报头上唯一一个纯文字 chip，只在匿名档出现。 */
+.rp-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.rp-k {
+  color: var(--ink-3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.rp-seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.rp-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rp-seg button + button {
+  border-left: 1px solid var(--line);
+}
+.rp-seg button:hover {
+  color: var(--ink);
+}
+.rp-seg button[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--accent-deep);
+  font-weight: 500;
+}
+.rp-seg button:active {
+  transform: translateY(1px);
+}
+/* 焦点环用唯一强调色，outline 不是 box-shadow，不触碰禁令清单。
+   分段容器 overflow:hidden 会削掉外描边，段内按钮改用内描边。 */
+.rp button:focus-visible,
+.rp a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+.rp-seg button:focus-visible {
+  outline-offset: -2px;
+  border-radius: 0;
+}
+.rp-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--line);
+}
+.rp-snap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.rp-snap-rebuild {
+  color: var(--ink-3);
+}
+.rp-pulse {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: breathe 2.8s ease-in-out infinite;
+}
+.rp-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--panel);
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rp-ghost:hover {
+  border-color: var(--line-hard);
+  color: var(--ink);
+}
+.rp-ghost:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+/* ------------------------------------------------------------------ */
+/* 标题块                                                               */
+/* ------------------------------------------------------------------ */
+.rp-titleblock {
+  padding: 15px 0 2px;
+}
+.rp-h1 {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.18;
+  color: var(--ink);
+}
+.rp-sub {
+  margin-top: 8px;
+  max-width: 62ch;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.65;
+}
+.rp-dotsep {
+  color: var(--ink-4);
+  padding: 0 5px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 章节容器                                                             */
+/* ------------------------------------------------------------------ */
+.rp-chapter {
+  padding-top: 12px;
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.rp-num {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--accent-deep);
+  letter-spacing: 0.1em;
+  margin-right: 10px;
+  vertical-align: 2px;
+}
+.rp-h2 {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.rp-h2row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.rp-h2sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.rp-eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  display: block;
+  margin-bottom: 6px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 01 高亮                                                              */
+/* ------------------------------------------------------------------ */
+.rp-lead-grid {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr 1.12fr;
+  column-gap: 34px;
+  align-items: start;
+}
+.rp-lead .rp-eyebrow {
+  color: var(--accent-deep);
+}
+.rp-who {
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+.rp-big {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 48px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  margin-top: 6px;
+  color: var(--ink);
+}
+.rp-big small {
+  font-size: 14px;
+  color: var(--ink-3);
+  margin-left: 8px;
+  letter-spacing: 0;
+}
+/* 与第 2 名的距离 */
+.rp-cmp {
+  margin-top: 14px;
+  display: grid;
+  row-gap: 5px;
+}
+.rp-cmp-row {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) 58px;
+  align-items: center;
+  column-gap: 11px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.rp-cmp-t {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-cmp-v {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.rp-cmp-row.is-lead .rp-cmp-v {
+  color: var(--ink);
+}
+.rp-cmp-track {
+  height: 9px;
+  background: var(--line-soft);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.rp-cmp-track i {
+  display: block;
+  height: 100%;
+  background: var(--accent-c);
+  transform-origin: left center;
+}
+.rp-cmp-row.is-lead .rp-cmp-track i {
+  background: var(--accent);
+}
+.rp-say {
+  margin-top: 7px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.rp-say b {
+  font-weight: 400;
+  color: var(--accent-deep);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+/* 全站：引导点线对账单 */
+.rp-siteblock {
+  border-left: 1px solid var(--line);
+  padding-left: 26px;
+}
+.rp-ll > li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.rp-dots {
+  flex: 1 1 auto;
+  min-width: 14px;
+  border-bottom: 1px dotted var(--dot);
+  transform: translateY(-3px);
+}
+.rp-ll .rp-ll-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.rp-stack {
+  border-left: 1px solid var(--line);
+  padding-left: 26px;
+  display: flex;
+  flex-direction: column;
+}
+.rp-stack > div + div {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+.rp-mini .rp-who {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-top: 2px;
+  font-weight: 400;
+}
+.rp-mini-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+.rp-mini-v small {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-left: 7px;
+  letter-spacing: 0;
+}
+.rp-note-line {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 4px;
+  line-height: 1.55;
+}
+.rp-you {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: var(--accent);
+  color: var(--on-accent);
+  letter-spacing: 0.02em;
+  vertical-align: 1.5px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 02 之最（阶梯错位由 --i 算，不写死 nth-child）                          */
+/* ------------------------------------------------------------------ */
+.rp-sup {
+  display: grid;
+  grid-template-columns: 1.18fr 1fr 1.26fr;
+  column-gap: 32px;
+  row-gap: 6px;
+}
+.rp-sup > li {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  margin-top: calc(var(--i, 0) * 4px);
+}
+.rp-sup-t {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  letter-spacing: -0.01em;
+}
+.rp-sup-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  letter-spacing: -0.035em;
+  margin-top: 5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.rp-sup-v small {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-left: 6px;
+  letter-spacing: 0;
+}
+.rp-sup-who {
+  font-size: 11.5px;
+  color: var(--accent-deep);
+  margin-top: 3px;
+}
+.rp-sup-who em {
+  color: var(--ink-3);
+}
+
+/* ------------------------------------------------------------------ */
+/* 03 我的位置                                                          */
+/* ------------------------------------------------------------------ */
+.rp-whoami {
+  display: grid;
+  grid-template-columns: 0.82fr 1.8fr;
+  column-gap: 36px;
+  align-items: start;
+}
+/* 右栏（或左栏）整块缺席时两栏收成一栏：`is-single` 的特指度高于断点里的两栏规则，
+   因此在任何宽度下都成立。 */
+.rp-whoami.is-single,
+.rp-two.is-single,
+.rp-comp.is-single,
+.rp-trendwrap.is-single,
+.rp-rhythm.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rp-two.is-single .rp-prof {
+  border-left: 0;
+  padding-left: 0;
+}
+.rp-rank-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 50px;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: var(--ink);
+}
+.rp-of {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: 7px;
+}
+.rp-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 11px;
+  padding: 2.5px 8px;
+  border: 1px dashed var(--line-hard);
+  border-radius: 4px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.rp-chartwrap {
+  border-left: 1px solid var(--line);
+  padding-left: 26px;
+}
+.rp-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.rp-chart .rp-chart-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.rp-chart .rp-chart-area {
+  fill: var(--accent);
+  opacity: 0.08;
+  stroke: none;
+}
+.rp-chart .rp-chart-dot {
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+.rp-chart .rp-chart-dot.is-last {
+  fill: var(--accent);
+  stroke: none;
+}
+.rp-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 5px;
+}
+.rp-subblock {
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line-soft);
+}
+.rp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+.rp-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--panel);
+}
+.rp-chip .rp-chip-p {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-deep);
+}
+.rp-chip.is-lead {
+  border-color: var(--accent-edge);
+  background: var(--accent-wash);
+}
+.rp-vs {
+  display: grid;
+  row-gap: 11px;
+  margin-top: 7px;
+}
+.rp-vs-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 68px;
+  align-items: center;
+  column-gap: 12px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.rp-vs-bars {
+  display: grid;
+  row-gap: 4px;
+}
+.rp-vs-line {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+}
+.rp-vs-line .rp-vs-t {
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.rp-vs-me,
+.rp-vs-all {
+  height: 6px;
+  border-radius: 1px;
+  background: var(--line-soft);
+  position: relative;
+  overflow: hidden;
+}
+.rp-vs-me i,
+.rp-vs-all i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 1px;
+  transform-origin: left center;
+}
+.rp-vs-me i {
+  background: var(--accent);
+}
+/* 对照条与轨道（--line-soft）要过 3:1：--ink-4 叠 0.5 透明度只剩 1.58:1，
+   直接用 --ink-3（约 3.3:1），仍明显弱于强调色的「我」那一根。 */
+.rp-vs-all i {
+  background: var(--ink-3);
+}
+.rp-vs-val {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.rp-vs-val em {
+  display: block;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+/* ------------------------------------------------------------------ */
+/* 04 榜单                                                              */
+/* ------------------------------------------------------------------ */
+.rp-tools {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.rp-lb {
+  border-top: 1px solid var(--line-hard);
+}
+.rp-lb-row {
+  display: grid;
+  grid-template-columns: 48px minmax(112px, 1.2fr) minmax(0, 2.4fr) 96px 74px;
+  align-items: center;
+  column-gap: 16px;
+  padding: 5.5px 10px 5.5px 0;
+  border-bottom: 1px solid var(--line-soft);
+  position: relative;
+  transition: background-color 0.2s ease;
+}
+.rp-lb-row:hover {
+  background: var(--bg-sunk);
+}
+.rp-lb-head {
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+/* 右对齐是一个工具类，MUST NOT 复用入场动画的 `.rp-r`——画板里的两字母类名
+   （`.r` 右对齐）撞上移植后的 `.rp-r`，会让表头那两列单独被 rise 动画到。 */
+.rp-lb-head .rp-right {
+  text-align: right;
+}
+.rp-lb-rank {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.rp-lb-row.is-top .rp-lb-rank {
+  color: var(--accent-deep);
+}
+.rp-lb-name {
+  font-size: 12.5px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-lb-name .rp-anon {
+  color: var(--ink-2);
+}
+.rp-lb-row.is-self {
+  background: var(--accent-wash);
+}
+.rp-lb-row.is-self::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+}
+.rp-lb-num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  text-align: right;
+  color: var(--ink);
+}
+.rp-lb-num.is-dim {
+  color: var(--ink-2);
+}
+.rp-bar {
+  display: block;
+  height: 7px;
+  background: var(--line-soft);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.rp-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent-c);
+  border-radius: 1px;
+  transform-origin: left center;
+}
+.rp-lb-row.is-self .rp-bar-fill {
+  background: var(--accent);
+}
+.rp-lb-row.is-top .rp-bar-fill {
+  background: var(--accent-b);
+}
+.rp-barwrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rp-barwrap .rp-bar {
+  flex: 1 1 auto;
+  min-width: 26px;
+}
+.rp-pc {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--ink-3);
+  width: 36px;
+  text-align: right;
+  flex: none;
+}
+.rp-lb-foot {
+  margin-top: 9px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  line-height: 1.62;
+}
+.rp-lb-foot p {
+  max-width: 62ch;
+}
+
+/* ------------------------------------------------------------------ */
+/* 05 模型与平台                                                        */
+/* ------------------------------------------------------------------ */
+.rp-two {
+  display: grid;
+  grid-template-columns: 1.32fr 1fr;
+  column-gap: 40px;
+  align-items: start;
+}
+.rp-mlist > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px 40px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.rp-nm {
+  font-size: 12px;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.rp-nm span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: none;
+  width: 126px;
+}
+.rp-nm .rp-bar {
+  flex: 1;
+  min-width: 20px;
+}
+.rp-mlist .rp-c {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  text-align: right;
+  color: var(--ink);
+}
+.rp-mlist .rp-p {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  text-align: right;
+  color: var(--ink-3);
+}
+.rp-prof {
+  border-left: 1px solid var(--line);
+  padding-left: 26px;
+}
+.rp-prof li {
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: baseline;
+  padding: 3.5px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.rp-prof li:first-child {
+  border-top: 0;
+}
+.rp-prof .rp-u {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-prof .rp-u.is-self {
+  color: var(--accent-deep);
+}
+.rp-cs {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.rp-cs span {
+  font-size: 10.5px;
+  color: var(--ink-2);
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.rp-cs span b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  color: var(--ink-3);
+  margin-left: 5px;
+}
+.rp-cs .rp-more {
+  border: 0;
+  color: var(--ink-3);
+  padding-left: 0;
+}
+.rp-plat {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.rp-stackbar {
+  display: flex;
+  height: 20px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--line-soft);
+}
+.rp-stackbar i {
+  display: block;
+  transform-origin: left center;
+}
+.rp-sw1 {
+  background: var(--accent-a);
+}
+.rp-sw2 {
+  background: var(--accent-b);
+}
+.rp-sw3 {
+  background: var(--accent-c);
+}
+.rp-sw4 {
+  background: var(--accent-d);
+}
+.rp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  margin-top: 11px;
+}
+.rp-legend > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.rp-sw {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+.rp-legend .rp-legend-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-size: 11.5px;
+}
+.rp-legend em {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 06 活跃节奏                                                          */
+/* ------------------------------------------------------------------ */
+.rp-heat30 {
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  gap: 3px;
+}
+.rp-heat30 i {
+  display: block;
+  height: 24px;
+  border-radius: 1.5px;
+  background: var(--heat-0);
+}
+.rp-heat-ticks {
+  position: relative;
+  height: 14px;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.rp-heat-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.rp-heat-ticks span.is-start {
+  transform: none;
+  left: 0;
+}
+.rp-heat-ticks span.is-end {
+  transform: none;
+  right: 0;
+}
+.rp-rhythm {
+  margin-top: 15px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr);
+  column-gap: 40px;
+  align-items: start;
+}
+.rp-week-grid {
+  display: grid;
+  /* 标签列按内容定宽：zh「周一」两个汉字、en「Mon」三个等宽字符都不换行 */
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 9px;
+  align-items: center;
+  row-gap: 3px;
+}
+.rp-week-lbl {
+  font-size: 10px;
+  color: var(--ink-3);
+  text-align: right;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.rp-week-row {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 3px;
+}
+.rp-week-row i {
+  display: block;
+  height: 15px;
+  border-radius: 1.5px;
+  background: var(--heat-0);
+}
+.rp-hourscale {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 5px;
+  font-size: 9.5px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+}
+.rp-hourscale span {
+  text-align: center;
+}
+.rp-scale-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 12px;
+}
+.rp-scale-key i {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--heat-0);
+}
+.rp-heat30 i.rp-lv1,
+.rp-week-row i.rp-lv1,
+.rp-scale-key i.rp-lv1 {
+  background: var(--accent-d);
+}
+.rp-heat30 i.rp-lv2,
+.rp-week-row i.rp-lv2,
+.rp-scale-key i.rp-lv2 {
+  background: var(--accent-c);
+}
+.rp-heat30 i.rp-lv3,
+.rp-week-row i.rp-lv3,
+.rp-scale-key i.rp-lv3 {
+  background: var(--accent-b);
+}
+.rp-heat30 i.rp-lv4,
+.rp-week-row i.rp-lv4,
+.rp-scale-key i.rp-lv4 {
+  background: var(--accent-a);
+}
+.rp-hbars {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  column-gap: 4px;
+  align-items: end;
+  height: 58px;
+}
+.rp-hbars .rp-b {
+  background: var(--accent-c);
+  border-radius: 1.5px 1.5px 0 0;
+  min-height: 2px;
+  transform-origin: bottom center;
+}
+.rp-hbars .rp-b.is-zero {
+  background: var(--line-soft);
+  height: 2px !important;
+}
+.rp-hbars .rp-b.is-peak {
+  background: var(--accent);
+}
+.rp-hticks {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  column-gap: 4px;
+  margin-top: 6px;
+  font-size: 9.5px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  text-align: center;
+}
+.rp-hticks span.is-on {
+  color: var(--accent-deep);
+}
+.rp-peaknote {
+  margin-top: 9px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  line-height: 1.65;
+  max-width: 44ch;
+}
+.rp-peaknote .rp-icon {
+  margin-right: 5px;
+  color: var(--accent-deep);
+}
+
+/* ------------------------------------------------------------------ */
+/* 07 趋势与构成                                                        */
+/* ------------------------------------------------------------------ */
+.rp-trendwrap {
+  display: grid;
+  grid-template-columns: 3.3fr 1fr;
+  column-gap: 38px;
+  align-items: end;
+}
+.rp-plot {
+  position: relative;
+}
+.rp-bars {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  column-gap: 8px;
+  align-items: end;
+  height: 120px;
+}
+.rp-bars .rp-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 4px;
+}
+.rp-bars .rp-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--ink-3);
+  text-align: center;
+  white-space: nowrap;
+  min-height: 13px;
+  flex: 0 0 auto;
+}
+/* 柱区 = 列高减去读数行与 gap。柱子的百分比高度对这一层求值，100% 正好是柱区满格；
+   直接挂在列上时读数行会把顶部约 14% 的量程压掉（峰值与次峰只差半个像素）。 */
+.rp-bars .rp-barbox {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+}
+.rp-bars .rp-b {
+  flex: 1 1 auto;
+  background: var(--accent-c);
+  border-radius: 1.5px 1.5px 0 0;
+  min-height: 2px;
+  transform-origin: bottom center;
+}
+.rp-bars .rp-col.is-hot .rp-b {
+  background: var(--accent);
+}
+.rp-bars .rp-col.is-hot .rp-v {
+  color: var(--accent-deep);
+}
+.rp-breakline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--line-hard);
+  pointer-events: none;
+}
+.rp-breakline span {
+  position: absolute;
+  left: 0;
+  top: -14px;
+  font-size: 10px;
+  color: var(--ink-3);
+  background: var(--bg);
+  padding: 0 5px;
+  font-family: var(--mono);
+}
+.rp-bar-ticks {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  column-gap: 8px;
+  margin-top: 6px;
+  font-size: 9.5px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  text-align: center;
+}
+.rp-monthbox {
+  border-left: 1px solid var(--line);
+  padding-left: 24px;
+  padding-bottom: 4px;
+}
+.rp-monthbox .rp-month-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.rp-monthbox .rp-month-d {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rp-monthbox .rp-up {
+  color: var(--accent-deep);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.rp-comp {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  column-gap: 40px;
+  align-items: start;
+}
+.rp-cache-row {
+  display: grid;
+  grid-template-columns: 102px minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: center;
+  margin-top: 6px;
+}
+.rp-cache-row .rp-big {
+  font-size: 34px;
+  margin-top: 0;
+  letter-spacing: -0.045em;
+}
+.rp-cache-row .rp-k {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 5px;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 非正常态（加载 / 计算中 / 失败 / 空 / 横幅）                            */
+/* ------------------------------------------------------------------ */
+.rp-banner {
+  border-left: 2px solid var(--accent);
+  background: var(--accent-wash);
+  padding: 11px 14px;
+  margin-top: 12px;
+}
+.rp-banner-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.rp-hint {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.65;
+  margin-top: 4px;
+}
+.rp-empty {
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.rp-skel {
+  background: var(--bg-sunk);
+  border-radius: 2px;
+  height: 11px;
+}
+.rp-skel + .rp-skel {
+  margin-top: 9px;
+}
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--line-hard);
+  border-radius: 5px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--panel);
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rp-btn:hover {
+  color: var(--ink);
+}
+.rp-btn:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+/* ------------------------------------------------------------------ */
+/* 页脚                                                                 */
+/* ------------------------------------------------------------------ */
+.rp-colophon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 24px;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-hard);
+}
+.rp-colophon .rp-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 11px;
+  color: var(--ink-3);
+  line-height: 1.8;
+}
+.rp-colophon .rp-line b {
+  font-weight: 400;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/* 动效：只动 transform，首帧即可读（不用 opacity 入场）                   */
+/* ------------------------------------------------------------------ */
+@keyframes rise {
+  from {
+    transform: translateY(7px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes grow {
+  from {
+    transform: scaleX(0.88);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes growy {
+  from {
+    transform: scaleY(0.9);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.rp-r {
+  animation: rise 0.52s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+.rp-grow {
+  animation: grow 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 60ms + 80ms);
+  transform-origin: left center;
+}
+.rp-growy {
+  animation: growy 0.58s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 60ms + 80ms);
+  transform-origin: bottom center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rp *,
+  .rp *::before,
+  .rp *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 中间宽度：768–1180                                                   */
+/* ------------------------------------------------------------------ */
+@media (max-width: 1180px) {
+  .rp {
+    --pad: 32px;
+  }
+  .rp-lead-grid {
+    grid-template-columns: 1.4fr 1fr;
+    column-gap: 24px;
+    row-gap: 20px;
+  }
+  .rp-lead-grid .rp-siteblock {
+    grid-column: 1 / -1;
+    border-left: 0;
+    padding-left: 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .rp-lead-grid .rp-ll {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 30px;
+  }
+  .rp-sup {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 24px;
+  }
+  .rp-sup > li {
+    margin-top: calc(var(--i, 0) * 6px);
+  }
+  .rp-whoami {
+    grid-template-columns: 0.7fr 1.6fr;
+    column-gap: 26px;
+  }
+  .rp-two,
+  .rp-trendwrap,
+  .rp-comp,
+  .rp-rhythm {
+    column-gap: 26px;
+  }
+  .rp-prof {
+    padding-left: 20px;
+  }
+  .rp-prof li {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+  }
+  .rp-prof .rp-u {
+    text-align: left;
+  }
+  .rp-lb-row {
+    grid-template-columns: 44px minmax(96px, 1.1fr) minmax(0, 1.9fr) 88px 66px;
+    column-gap: 12px;
+  }
+  /* 断轴之上通常有两根柱各带一个读数，而列宽在 768px 处已经收到约 21px
+     （两栏的 `.rp-trendwrap` 左栏再分 14 列），一个紧凑读数（`12.4M`）本身就要 30px：
+     相邻两个读数会直接叠在一起。这里只留峰值那一根，其余各天的值由 `.rp-col` 的 title
+     与图下那一句兜住；`.rp-v` 的 13px 占位保留（用 visibility 而不是 display），柱高不跳变。
+     首末两列的读数贴着自己那一侧对齐，读数 MUST NOT 溢出绘图区。
+     1180–900 之间列宽其实还放得下第二个读数，这里一并收掉是为了不再开第三个断点。 */
+  .rp-bars .rp-v {
+    visibility: hidden;
+  }
+  .rp-bars .rp-col.is-peak .rp-v {
+    visibility: visible;
+  }
+  .rp-bars .rp-col:first-child .rp-v {
+    text-align: left;
+  }
+  .rp-bars .rp-col:last-child .rp-v {
+    text-align: right;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 窄屏：<768 一律单列，边注栏折成章头一行                                 */
+/* ------------------------------------------------------------------ */
+@media (max-width: 767px) {
+  .rp {
+    --pad: 16px;
+  }
+  .rp-page {
+    padding-bottom: 32px;
+  }
+  /* 左块（刊头）与右块（拨盘）各占一行，两块都靠左。 */
+  .rp-masthead {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 0 10px;
+  }
+  .rp-dials {
+    justify-content: flex-start;
+  }
+  .rp-dials .rp-sep {
+    display: none;
+  }
+  .rp-chapter {
+    margin-top: 26px;
+    padding-top: 14px;
+  }
+  .rp-titleblock {
+    padding: 15px 0 2px;
+  }
+  .rp-h1 {
+    font-size: 25px;
+  }
+  .rp-lead-grid,
+  .rp-whoami,
+  .rp-two,
+  .rp-comp,
+  .rp-trendwrap,
+  .rp-rhythm {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 18px;
+  }
+  .rp-stack,
+  .rp-chartwrap,
+  .rp-prof,
+  .rp-monthbox,
+  .rp-siteblock {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 16px;
+  }
+  .rp-lead .rp-big {
+    font-size: 40px;
+  }
+  .rp-sup {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+  .rp-sup > li {
+    margin-top: 0 !important;
+  }
+  .rp-lb-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    row-gap: 6px;
+    column-gap: 10px;
+    padding: 11px 8px 11px 0;
+  }
+  .rp-lb-rank {
+    grid-area: 1 / 1 / 2 / 2;
+  }
+  .rp-lb-name {
+    grid-area: 1 / 2 / 2 / 3;
+  }
+  .rp-lb-tok {
+    grid-area: 1 / 3 / 2 / 4;
+  }
+  .rp-lb-barcell {
+    grid-area: 2 / 1 / 3 / 3;
+  }
+  .rp-lb-req {
+    grid-area: 2 / 3 / 3 / 4;
+  }
+  .rp-lb-row.is-self::before {
+    left: -8px;
+  }
+  /* 视觉隐藏而不是 display:none：窄屏下数据行仍是 role=table 的行，
+     表头留在可访问性树里，两个数值单元格才有列名可念。 */
+  .rp-lb-head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .rp-heat30 {
+    gap: 2px;
+  }
+  .rp-heat30 i {
+    height: 24px;
+  }
+  .rp-week-grid {
+    grid-template-columns: 15px minmax(0, 1fr);
+    column-gap: 6px;
+    row-gap: 2px;
+  }
+  .rp-week-row {
+    gap: 2px;
+  }
+  .rp-week-row i {
+    height: 11px;
+  }
+  .rp-hourscale {
+    gap: 2px;
+    font-size: 9.5px;
+  }
+  .rp-hourscale span:nth-child(even) {
+    visibility: hidden;
+  }
+  .rp-bars {
+    column-gap: 4px;
+    height: 116px;
+  }
+  .rp-bar-ticks {
+    column-gap: 4px;
+    font-size: 9.5px;
+  }
+  .rp-bar-ticks span:nth-child(4n + 3) {
+    visibility: hidden;
+  }
+  .rp-hbars {
+    column-gap: 3px;
+    height: 56px;
+  }
+  .rp-hticks {
+    column-gap: 3px;
+    font-size: 9.5px;
+  }
+  .rp-hticks span:nth-child(even) {
+    visibility: hidden;
+  }
+  .rp-mlist > li {
+    grid-template-columns: minmax(0, 1fr) 38px 38px;
+    column-gap: 9px;
+  }
+  .rp-nm {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .rp-nm span:first-child {
+    width: 100%;
+  }
+  .rp-nm .rp-bar {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+  .rp-vs-row {
+    grid-template-columns: 60px minmax(0, 1fr) 70px;
+    column-gap: 8px;
+  }
+  .rp-cache-row {
+    grid-template-columns: 76px minmax(0, 1fr);
+    column-gap: 14px;
+  }
+  .rp-legend {
+    gap: 7px 18px;
+  }
+  .rp-cmp-row {
+    grid-template-columns: 54px minmax(0, 1fr) 54px;
+    column-gap: 9px;
+  }
+}
+/* Final polish: stronger editorial frame without changing data layout. */
+.rp {
+  --pad: clamp(20px, 4.2vw, 72px);
+}
+
+.rp-page {
+  width: min(100%, 1480px);
+  margin: 0 auto;
+  padding-bottom: 48px;
+}
+
+.rp-masthead {
+  position: relative;
+  padding-top: 18px;
+  padding-bottom: 14px;
+}
+
+.rp-masthead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 56px;
+  height: 3px;
+  background: var(--accent);
+}
+
+.rp-titleblock {
+  padding-top: 28px;
+  padding-bottom: 8px;
+}
+
+.rp-h1 {
+  max-width: 18ch;
+  font-size: clamp(30px, 3.8vw, 54px);
+  font-weight: 560;
+  letter-spacing: -0.055em;
+  line-height: 1.04;
+  text-wrap: balance;
+}
+
+.rp-sub {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.rp-chapter {
+  margin-top: 28px;
+  padding-top: 16px;
+}
+
+.rp-chapter:first-of-type {
+  margin-top: 34px;
+}
+
+.rp-h2row {
+  margin-bottom: 14px;
+}
+
+.rp-h2 {
+  font-size: 16px;
+  font-weight: 560;
+}
+
+.rp-lb-row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.rp-lb-row.is-top .rp-lb-rank {
+  font-weight: 600;
+}
+
+.rp-lb-row.is-self {
+  outline: 1px solid var(--accent-edge);
+  outline-offset: -1px;
+}
+
+.rp-colophon {
+  margin-top: 34px;
+  padding-bottom: 8px;
+}
+
+@media (max-width: 767px) {
+  .rp {
+    background-size: 100% 28px, 28px 100%;
+  }
+
+  .rp-page {
+    padding-bottom: 32px;
+  }
+
+  .rp-titleblock {
+    padding-top: 24px;
+  }
+
+  .rp-h1 {
+    font-size: 34px;
+  }
+
+  .rp-chapter:first-of-type {
+    margin-top: 28px;
+  }
+}
+
+.rp-chartwrap .rp-eyebrow {
+  margin-bottom: 7px;
+}
+
+.rp-chart {
+  min-height: 0;
+}
+
+.rp-chart .rp-chart-line {
+  stroke-width: 1.7;
+}
+
+.rp-chart .rp-chart-area {
+  opacity: 0.09;
+}
+
+.rp-chart .rp-chart-dot {
+  stroke-width: 1.5;
+}
+
+.rp-axis {
+  margin-top: 6px;
+  font-size: 10.5px;
+}
+
+@media (max-width: 767px) {
+  .rp-chartwrap .rp-eyebrow {
+    margin-bottom: 6px;
+  }
+
+  .rp-chart {
+    min-height: 0;
+  }
+}
+
+.rp-chart-line-data {
+  opacity: 0;
+}
+
+.rp-chart-line-smooth {
+  display: block;
+}

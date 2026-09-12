@@ -97,6 +97,7 @@ func provideCleanup(
 	schedulerSnapshot *service.SchedulerSnapshotService,
 	tokenRefresh *service.TokenRefreshService,
 	accountExpiry *service.AccountExpiryService,
+	leaderboardSnapshot *service.LeaderboardSnapshotService,
 	cnProviderBalanceCheck *service.CNProviderBalanceCheckService,
 	codexVersionSync *service.OpenAICodexVersionSyncService,
 	proxyExpiry *service.ProxyExpiryService,
@@ -260,6 +261,12 @@ func provideCleanup(
 			}},
 			{"AccountExpiryService", func() error {
 				accountExpiry.Stop()
+				return nil
+			}},
+			{"LeaderboardSnapshotService", func() error {
+				if leaderboardSnapshot != nil {
+					leaderboardSnapshot.Stop()
+				}
 				return nil
 			}},
 			{"CNProviderBalanceCheckService", func() error {

@@ -124,8 +124,11 @@
             </div>
 
             <div class="rounded-3xl border border-gray-100 bg-gray-50/80 p-5 dark:border-dark-700 dark:bg-dark-900/30">
+              <!-- 昵称展示开关后端默认开启，字段缺席（旧后端）按开启读，
+                   MUST NOT 用 `=== true` 把缺席塌成关闭 -->
               <ProfileEditForm
                 :initial-username="user?.username || ''"
+                :initial-leaderboard-named-participation="user?.leaderboard_named_participation !== false"
                 embedded
               />
             </div>

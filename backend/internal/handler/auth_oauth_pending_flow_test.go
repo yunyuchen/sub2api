@@ -3371,6 +3371,10 @@ func (r *oauthPendingFlowUserRepo) BatchUpdateLimits(context.Context, []int64, *
 	panic("unexpected BatchUpdateLimits call")
 }
 
+func (r *oauthPendingFlowUserRepo) GetByIDs(context.Context, []int64) ([]service.User, error) {
+	return nil, nil
+}
+
 func (r *oauthPendingFlowUserRepo) GetLatestUsedAtByUserIDs(context.Context, []int64) (map[int64]*time.Time, error) {
 	return map[int64]*time.Time{}, nil
 }

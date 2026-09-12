@@ -792,6 +792,9 @@ export default {
     updateSuccess: '资料更新成功',
     updateFailed: '资料更新失败',
     usernameRequired: '用户名不能为空',
+    leaderboardNamedParticipation: '在排行榜显示我的昵称',
+    leaderboardNamedParticipationHint: '默认开启。关闭后你在排行榜上显示为「第 N 位」，仍然参与排名。需要昵称通过校验（2–32 个字符，不能是邮箱形态，不能含保留词）才能显示。',
+    leaderboardNamedParticipationRejected: '当前昵称不符合排行榜的展示要求，无法开启。',
     changePassword: '修改密码',
     currentPassword: '当前密码',
     newPassword: '新密码',
@@ -954,6 +957,291 @@ export default {
         username: '昵称当前来自 {providerName}',
       },
     }
+  },
+
+  // User Leaderboard(用量排行榜)
+  leaderboard: {
+    title: '用量排行榜',
+    description: '按今日、本周和本月三个时间窗口，展示所有用户的用量排名。榜单不展示金额和邮箱地址。',
+    windows: {
+      label: '窗口',
+      today: '今日',
+      week: '本周',
+      month: '本月',
+    },
+    metrics: {
+      label: '排名指标',
+      totalTokens: '总 tokens',
+      successfulRequests: '成功请求数',
+    },
+    // 报头：左刊头（站名 + 一个细字），右一行拨盘。日期进标题块副题、时区进页脚、
+    // 快照时分进右侧 chip，因此这里不再有 window / metric / mode / tz / snapshot 这些键名。
+    // 窗口 / 指标在报头与榜单工具条两处都有，状态同源（都由页面持有）。
+    masthead: {
+      brand: '用量排行榜',
+      // 档位 chip 只在匿名档出现；实名档是常态，不挂任何档位 chip。
+      modeAnonymous: '匿名档',
+      // 「距下一次重建还剩几分钟」，按重建周期现算；快照未生成或已陈旧时整段不渲染。
+      rebuildIn: '（{minutes}m 后重建）',
+      metricTokens: 'tokens',
+      metricRequests: '请求数',
+      theme: '主题',
+      themeLight: '亮',
+      themeDark: '暗',
+      backToDashboard: '返回仪表盘',
+    },
+    // 标题块（v3 取代 v2 的命令行标题）。`leaderboard.title` 已经是路由标题用的叶子字符串
+    // （router/index.ts 的 titleKey），因此这里另起 titleBlock，MUST NOT 把 title 改成对象。
+    titleBlock: {
+      heading: {
+        today: '今天谁在用',
+        week: '本周谁在用',
+        month: '本月谁在用',
+      },
+      participantsUnit: '位活跃',
+    },
+    // 七章的章号是固定编号而不是序号：某一章整章不渲染时其余章号不重排。
+    // 键名里的 `01`–`07` 就是页面上印的那个章号。章名右侧的小字副题已整体去掉，因此没有 `sub`。
+    chapters: {
+      '01': {
+        name: {
+          today: '今日亮点',
+          week: '本周亮点',
+          month: '本月亮点',
+        },
+      },
+      '02': {
+        name: '六项纪录',
+      },
+      '03': {
+        name: '你的排名',
+      },
+      '04': {
+        name: '排行榜（前 50 名）',
+      },
+      '05': {
+        name: '模型与平台',
+      },
+      '06': {
+        name: '活跃节奏',
+      },
+      '07': {
+        name: '趋势与构成',
+      },
+    },
+    extremes: {
+      nightOwl: {
+        label: '深夜活跃',
+        unit: '0–6 点占其自身用量',
+      },
+      rising: {
+        label: '增长之星',
+        unit: '较昨日',
+      },
+      omnivore: {
+        label: '多模型用户',
+        unit: '种不同模型',
+      },
+      talker: {
+        label: '输出占比最高',
+        unit: '输出 token 占比',
+      },
+      maxSingle: {
+        label: '单次请求峰值',
+        unit: 'tokens / 次',
+        ratioUnit: '倍于中位数',
+        medianNote: '中位数的 {ratio} 倍',
+      },
+      streak: {
+        label: '连续活跃',
+        unit: '天不间断',
+      },
+    },
+    whoami: {
+      // 全页只留这一处「仅本人可见」标记，章名旁不再重复一遍。
+      note: '仅本人可见',
+      // 窗口长度由折线实际拿到的点数现算，MUST NOT 写死 14
+      rankTrend: '近 {span} 天排名走势',
+      models: '常用模型',
+      compare: '与全站对比',
+      cacheHitRate: '缓存命中率',
+      avgTokens: '单请求平均 tokens',
+      siteValue: '全站 {value}',
+      // v3 报表皮肤新增
+      rankEyebrow: '当前名次',
+      rankSummary: '最佳 #{best} · 最差 #{worst}',
+      meLabel: '我',
+      siteLabel: '全站',
+    },
+    profiles: {
+      note: '模型偏好 · Top 3',
+      // Top 3 占比之和不足 100% 时补一枚灰字 chip
+      more: '其余略',
+    },
+    platforms: {
+      note: '今日请求按平台',
+      // 图例右侧的小字：实名档是成功请求数，匿名档整段缺席。
+      legendCount: '{count} 次',
+      // 最后一项是各项占比取整后的残差，不是一个平台，因此 MUST NOT 为它编一个请求数，
+      // 也不再为它挂一句「取整残差」的解释。
+      other: '其他',
+    },
+    rhythm: {
+      note: '周内节奏 · 近 4 周',
+      weekdays: {
+        mon: '周一',
+        tue: '周二',
+        wed: '周三',
+        thu: '周四',
+        fri: '周五',
+        sat: '周六',
+        sun: '周日',
+      },
+    },
+    composition: {
+      note: '今日四类 tokens 构成',
+      input: '输入',
+      output: '输出',
+      cacheCreation: '缓存创建',
+      cacheRead: '缓存读取',
+    },
+    // `$ cache --trend 14` 是页面上唯一的缓存区块：大号数字取今日命中率，
+    // 说明行按档位二选一，折线是近 14 天。
+    cacheTrend: {
+      note: '全站命中率 · 近 14 天',
+      sub: '缓存读取占输入 {rate}%',
+      subNamed: '{hits} tokens 命中缓存 · 输入合计 {inputs}',
+      // 有趋势时大号数字下面只是一个标签：区间由右边的折线自己说。
+      range: '今日',
+    },
+    highlights: {
+      topTokens: {
+        today: '今日用量最高',
+        week: '本周用量最高',
+        month: '本月用量最高',
+      },
+      cacheKing: '缓存效率最高',
+      topRequests: '成功请求最多',
+      site: {
+        today: '全站今日',
+        week: '全站本周',
+        month: '全站本月',
+      },
+      leadPercent: '领先 {percent}%',
+      dominantModel: '主要模型：{model}',
+      // v3 报表皮肤：大数字与单位分开，句子由前端按档位现算（缺数据就少一句分句）。
+      topTokensEyebrow: '{label} · tokens 用量最高',
+      cacheKingEyebrow: '{label} · 缓存命中率最高',
+      topRequestsEyebrow: '{label} · 成功请求最多',
+      runnerUp: '第 2 名',
+      unitTokens: 'tokens',
+      unitShareTokens: '占全站 tokens',
+      unitCacheHitRate: '缓存命中率',
+      unitRequests: '成功请求',
+      unitShareRequests: '占全站请求',
+      leadSay: '领先第 2 名 {lead}% · 占全站 {share}%',
+      leadSayTie: '与第 2 名并列 · 占全站 {share}%',
+      shareOfSite: '占全站 {percent}%',
+      tiedWithSecond: '与第 2 名并列',
+      siteRows: {
+        totalTokens: '总 tokens',
+        successfulRequests: '成功请求',
+        participants: '活跃人数',
+        peakHour: '峰值时段',
+        cacheHitRate: '缓存命中率',
+      },
+      rowRequests: '{count} 次',
+      rowParticipants: '{count} 人',
+    },
+    rank: {
+      // 「用户排行」是渠道监控里那张诊断表的名字（见 CONTEXT.md 的 Avoid 列表），这里不借用。
+      // 表下只剩一行解读句，两个分句由前端从 entries 现算，缺数据的分句整句省略，
+      // 两档同形（匿名档也只用倍数与占比）。分句不带句末标点，由前端用 ` · ` 连起来。
+      readout: {
+        lead: '第 1 名是第 2 名的 {ratio} 倍',
+        topThreeShare: '前三名占全站 {percent}%',
+      },
+    },
+    table: {
+      rank: '名次',
+      user: '用户',
+      relativeToTop: '相对第一名',
+      totalTokens: '总 tokens',
+      // 表头与「你的位置」那两个小标签用短词，Metric 分段仍用完整的「成功请求数」。
+      successfulRequestsShort: '成功请求',
+      relativePercent: '第一名的 {percent}%',
+      // 匿名档本人行：第一名的绝对量前端拿不到，这一格只能留占位符
+      relativeUnknown: '匿名档下第一名的用量不公开，无法算出本行相对第一名的百分比',
+      selfBadge: '你',
+    },
+    identity: {
+      // 他人的假名用榜单序号（ordinal），不是 user_id；「第 N 位」读起来是名次口吻，
+      // 与旧的「用户 #N」相比不会被误读成用户编号。
+      anonymous: '第 {ordinal} 位',
+      outOfRank: '榜外用户',
+    },
+    myRank: {
+      participants: '共 {count} 人参与',
+      noUsage: '本时间段暂无用量',
+      noUsageHint: '产生用量后即可获得名次。',
+      suppressedHint: '参与人数过少，为保护匿名性暂不展示榜单',
+      hint: {
+        gapTokens: '再增加 {gap} tokens 即可进入前 {rank}',
+        gapRequests: '再增加 {gap} 次成功请求即可进入前 {rank}',
+        relative: '你为第一名的 {percent}%，第 {rank} 名为 {target}%',
+      },
+    },
+    insights: {
+      modelHeat: {
+        title: '今日模型',
+      },
+      heatmap: {
+        title: '近 30 天活跃度',
+        legendLow: '少',
+        legendHigh: '多',
+        cellRequests: '{date} · {count} 次请求',
+        cellRelative: '{date} · 相对最高日 {percent}%',
+      },
+      trend: {
+        title: '用量趋势 · 近 14 天',
+        sub: '较前一日 {change}',
+        monthTotal: '本月累计',
+        monthChange: '较上月',
+        // 断轴：取 14 天里第三大的值 T，最大值严格大于 5T 时纵轴在 T 处压缩。
+        // 不满足条件时线性，这条标注不渲染；图下那句解释已删，标注本身就说明轴被压缩了。
+        axisBreak: {
+          label: '轴在 {value} 压缩',
+        },
+      },
+      hourly: {
+        title: '今日时段分布',
+        peak: '峰值 {hour}:00',
+        peakWithRequests: '峰值 {hour}:00 · {count} 请求',
+        barRequests: '{hour}:00 · {count} 次请求',
+        barRelative: '{hour}:00 · 相对峰值 {percent}%',
+      },
+    },
+    // 页脚是一行 colophon：`snapshot HH:MM · 每 5 分钟重建 · <站点时区> · 不展示金额与邮箱`。
+    // `snapshot` 与时区名是字面量，不进 i18n（design D4）；`COLOPHON` 字样、
+    // 「一周从周一起算」与 `successful_requests = actual_cost > 0` 已删。
+    footer: {
+      rebuild: '每 5 分钟重建',
+      noMoney: '不展示金额与邮箱',
+    },
+    states: {
+      loadFailed: '榜单加载失败，请稍后重试',
+      empty: '当前时间段还没有用量记录',
+      emptyHint: '产生第一笔用量后，榜单会自动出现。',
+      suppressed: '参与人数不足，暂不展示榜单',
+      computing: '正在生成榜单',
+      computingHint: '榜单每 5 分钟更新一次，首次开启后请稍候。',
+      stale: '榜单已超过 15 分钟未更新',
+      staleHint: '当前显示的是上一版数据，后台恢复后会自动更新。',
+    },
+    preview: {
+      banner: '预览模式：普通用户不可见',
+      bannerHint: '排行榜模式当前为「关闭」，只有管理员能通过直链看到本页。开启后管理员与普通用户看到的数据完全相同。',
+    },
   },
 
   // Empty States

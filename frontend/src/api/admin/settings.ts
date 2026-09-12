@@ -724,6 +724,9 @@ export interface SystemSettings {
   channel_monitor_show_quota?: boolean;
   channel_monitor_hide_user_ranking?: boolean;
 
+  // User Leaderboard 三档暴露程度（off / anonymous / named），默认 off
+  leaderboard_mode?: 'off' | 'anonymous' | 'named';
+
   // Available Channels feature switch
   available_channels_enabled: boolean;
 
@@ -1025,6 +1028,9 @@ export interface UpdateSettingsRequest {
   channel_monitor_hide_throughput?: boolean;
   channel_monitor_show_quota?: boolean;
   channel_monitor_hide_user_ranking?: boolean;
+
+  // User Leaderboard 三档暴露程度（off / anonymous / named），默认 off
+  leaderboard_mode?: 'off' | 'anonymous' | 'named';
 
   // Available Channels feature switch
   available_channels_enabled?: boolean;
