@@ -270,7 +270,7 @@
     <div class="brand">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="spool"><path fill="#2E8B6F" fill-rule="evenodd" d="M200 96a160 160 0 1 0 0 320 160 160 0 1 0 0-320Zm0 68a92 92 0 1 1 0 184 92 92 0 1 1 0-184Z"/><rect x="200" y="352" width="280" height="64" fill="#2E8B6F"/><circle cx="200" cy="256" r="40" fill="#C4881B"/></svg>
       <span class="wm">spool</span>
-      <span class="tag">spool(8)</span>
+      <span class="tag">AI 网关</span>
     </div>
     <span class="stat"><span class="led"></span>内部服务</span>
     <nav aria-label="主导航">
@@ -287,24 +287,24 @@
 <section class="sect hero">
   <div class="in">
     <div class="copy">
-      <h1><span class="ln">你不拥有那台打印机，</span><span class="ln">你只是往里发作业。<span class="caret"></span></span></h1>
-      <p class="lede">spool 是我们内部的 AI 网关。公司买的上游账号在它后面排成一个池，对外只露一个兼容端点。你拿一把自己的 key，改两个环境变量，用量记在你名下。</p>
+      <h1><span class="ln">一个地址，一把 key，</span><span class="ln">接上公司的 AI 模型。<span class="caret"></span></span></h1>
+      <p class="lede">spool 是公司内部的 AI 网关。公司买的上游账号集中在这里，对外只有一个地址。你建一把自己的 key，改两个环境变量，用量按人记。</p>
 
       <div class="prompt">
         <div class="bay-hd"><b>BASE URL</b><span>以 /keys 页显示的为准</span><span class="sp">末尾不带斜杠</span></div>
         <div class="urlline"><span class="dl" aria-hidden="true">$</span><span class="url" style="user-select:all;-webkit-user-select:all">https://spool.corp.internal</span><span class="caret caret-a"></span></div>
-        <p class="note">这一页不跑 JavaScript，所以没有复制按钮。点一下地址或下面任意一行命令，整行选中，Cmd-C 拿走。</p>
+        <p class="note">这一页没有复制按钮。点一下地址或下面任意一行命令，整行会自动选中，再按 Cmd-C。</p>
       </div>
 
       <ul class="spec">
-        <li><b>池</b>Claude · GPT-Codex · Gemini · Antigravity</li>
-        <li><b>协议</b>OpenAI / Anthropic 兼容，认这两套的客户端直接接上</li>
-        <li><b>计账</b>按人。额度用完会报错，不降级、不静默截断</li>
+        <li><b>模型</b>Claude · GPT-Codex · Gemini · Antigravity</li>
+        <li><b>协议</b>兼容 OpenAI 和 Anthropic 两套协议，对应的客户端直接能用</li>
+        <li><b>用量</b>按人统计。额度用完直接报错，不降级、不静默截断</li>
       </ul>
     </div>
 
     <div class="rack">
-      <div class="bay-hd"><b>DRIVE 0</b><span>上游账号池</span><span class="sp">IBM · 1959</span></div>
+      <div class="bay-hd"><b>ACCOUNTS</b><span>公司上游账号</span><span class="sp">示意图</span></div>
       <div class="drive">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
           <path fill="#2E8B6F" fill-rule="evenodd" d="M200 96a160 160 0 1 0 0 320 160 160 0 1 0 0-320Zm0 68a92 92 0 1 1 0 184 92 92 0 1 1 0-184Z"/>
@@ -313,9 +313,9 @@
           <circle cx="200" cy="256" r="40" fill="#C4881B"/>
         </svg>
         <div class="dr-read">
-          <p class="silk"><b>SPOOL</b> · SIMULTANEOUS PERIPHERAL<br>OPERATIONS ON-LINE</p>
-          <p><b>一台机器，站在你和上游之间。</b></p>
-          <p>这次请求走哪个账号是调度的事，你不需要知道。</p>
+          <p class="silk"><b>SPOOL</b> · 内部 AI 网关<br>上游账号统一入口</p>
+          <p><b>请求先到 spool，再转给上游。</b></p>
+          <p>用哪个账号由 spool 自动选，你不用管。</p>
           <ul class="leds">
             <li><i></i>PWR</li>
             <li><i></i>LINK</li>
@@ -326,30 +326,30 @@
       <div class="crt">
         <div class="sweep" aria-hidden="true"></div>
         <div class="glass" aria-hidden="true"></div>
-        <div class="bay-hd"><b>spool/queue</b><span>tty0</span><span class="sp">示例回放 · 非实时</span></div>
+        <div class="bay-hd"><b>请求流程</b><span>转发日志</span><span class="sp">示例回放 · 非实时</span></div>
         <div class="view" aria-hidden="true">
           <ul class="log">
             <li><span class="k">recv  </span> POST /v1/messages    <span class="d">group=claude</span></li>
             <li><span class="k">auth  </span> key ok               <span class="d">记在你名下</span></li>
-            <li><span class="k">route </span> pool/claude → <span class="d">池里的某个账号</span></li>
+            <li><span class="k">route </span> pool/claude → <span class="d">自动选一个账号</span></li>
             <li><span class="k">stream</span> <span class="ok">200 OK</span></li>
             <li><span class="k">recv  </span> POST /v1/responses   <span class="d">group=codex</span></li>
-            <li><span class="k">route </span> pool/codex → <span class="d">账号掉了，换一个重试</span></li>
+            <li><span class="k">route </span> pool/codex → <span class="d">账号不可用，换一个重试</span></li>
             <li><span class="k">stream</span> <span class="ok">200 OK</span></li>
             <li><span class="k">limit </span> <span class="wr">429 USER_RPM_EXCEEDED</span>  <span class="d">退避重试</span></li>
             <li><span class="k">quota </span> <span class="wr">429 QUOTA_EXHAUSTED</span>    <span class="d">重试无用 · 找管理员</span></li>
             <li><span class="k">recv  </span> POST /v1/messages    <span class="d">group=claude</span></li>
             <li><span class="k">auth  </span> key ok               <span class="d">记在你名下</span></li>
-            <li><span class="k">route </span> pool/claude → <span class="d">池里的某个账号</span></li>
+            <li><span class="k">route </span> pool/claude → <span class="d">自动选一个账号</span></li>
             <li><span class="k">stream</span> <span class="ok">200 OK</span></li>
             <li><span class="k">recv  </span> POST /v1/responses   <span class="d">group=codex</span></li>
-            <li><span class="k">route </span> pool/codex → <span class="d">账号掉了，换一个重试</span></li>
+            <li><span class="k">route </span> pool/codex → <span class="d">账号不可用，换一个重试</span></li>
             <li><span class="k">stream</span> <span class="ok">200 OK</span></li>
             <li><span class="k">limit </span> <span class="wr">429 USER_RPM_EXCEEDED</span>  <span class="d">退避重试</span></li>
             <li><span class="k">quota </span> <span class="wr">429 QUOTA_EXHAUSTED</span>    <span class="d">重试无用 · 找管理员</span></li>
           </ul>
         </div>
-        <p class="ps">spool@queue:~$<span class="caret"></span></p>
+        <p class="ps">spool:~$<span class="caret"></span></p>
       </div>
     </div>
   </div>
@@ -367,7 +367,7 @@
         <span class="n">1</span>
         <h3>登录</h3>
         <a class="rt" href="/login">/login</a>
-        <p>不开放自助注册，账号由管理员开通。开通后从这里进。</p>
+        <p>不开放自助注册，账号由管理员创建。拿到账号后从这里登录。</p>
       </div>
       <div class="link" aria-hidden="true"><i></i></div>
       <div class="node">
@@ -381,7 +381,7 @@
         <span class="n">3</span>
         <h3>改两个环境变量</h3>
         <span class="rt">BASE_URL + KEY</span>
-        <p>别的什么都不用动。哪一对，看客户端，不看分组。</p>
+        <p>其他都不用动。用哪一对变量看客户端，和分组无关。</p>
       </div>
     </div>
   </div>
@@ -390,9 +390,9 @@
 <section class="sect">
   <div class="in body">
     <div class="shd">
-      <h2>接线面板</h2>
-      <span class="hint">改两个环境变量，代码不用动</span>
-      <span class="num">02 · WIRING</span>
+      <h2>环境变量</h2>
+      <span class="hint">两个变量，代码不用动</span>
+      <span class="num">02 · CONFIG</span>
     </div>
     <div class="patch">
       <div class="cell">
@@ -414,28 +414,28 @@
 <section class="sect pipe">
   <div class="in body">
     <div class="shd">
-      <h2>池子里有什么</h2>
-      <span class="hint">哪一类归你，看建 key 时选的分组</span>
-      <span class="num">03 · POOL</span>
+      <h2>模型清单</h2>
+      <span class="hint">你能用哪些，看建 key 时选的分组</span>
+      <span class="num">03 · MODELS</span>
     </div>
     <div class="bins">
       <div class="bin">
         <h3>写代码</h3>
         <ul><li>Claude 系</li><li>GPT-Codex 系</li></ul>
-        <p>日常写码、改码、跑 agent 的主力。</p>
+        <p>日常写代码、改代码、跑 agent 主要用这两类。</p>
       </div>
       <div class="bin">
         <h3>长上下文</h3>
         <ul><li>Gemini 系</li></ul>
-        <p>整本文档、整个仓库一次塞进去的那类活。</p>
+        <p>适合一次性读完整份文档或整个仓库。</p>
       </div>
       <div class="bin">
         <h3>试验性</h3>
         <ul><li>Antigravity</li></ul>
-        <p>随时可能下线。别把正式流程押在上面。</p>
+        <p>随时可能下线，不要用在正式流程里。</p>
       </div>
     </div>
-    <p class="truth">真正的清单是 <code>GET /v1/models</code> 的返回，范围是你这把 key 所属分组能用的模型，不是整池。model id 照返回原样填，不要凭记忆手写。看不到的模型，就是不在你分组的白名单里。</p>
+    <p class="truth">真正的清单是 <code>GET /v1/models</code> 的返回。能看到哪些模型，由你这把 key 的分组决定，不是公司全部模型。model id 按返回原样填，不要手写。看不到的模型，说明不在你分组的白名单里。</p>
   </div>
 </section>
 
@@ -456,13 +456,13 @@
             <td><span class="hs">429</span></td>
             <td data-l="BODY CODE"><span class="ec">QUOTA_EXHAUSTED</span><span class="ec">USAGE_LIMIT_EXCEEDED</span><span class="ec alt">insufficient_quota（Codex 路径）</span></td>
             <td><span class="chip h"><i></i>HALT</span></td>
-            <td class="act" data-l="ACTION"><b>额度用完。</b>重试无用，找管理员加额。</td>
+            <td class="act" data-l="ACTION"><b>额度用完。</b>重试没用，找管理员加额度。</td>
           </tr>
           <tr>
             <td><span class="hs b">429</span></td>
             <td data-l="BODY CODE"><span class="ec">USER_RPM_EXCEEDED</span><span class="ec">GROUP_RPM_EXCEEDED</span></td>
             <td><span class="chip b"><i></i>BACKOFF</span></td>
-            <td class="act" data-l="ACTION"><b>限速打满。</b>退避几秒重试。</td>
+            <td class="act" data-l="ACTION"><b>请求太快，触发限速。</b>退避几秒重试。</td>
           </tr>
           <tr>
             <td><span class="hs">403</span></td>
@@ -474,7 +474,7 @@
             <td><span class="hs b">503</span></td>
             <td data-l="BODY CODE"><span class="ec alt">无 code</span></td>
             <td><span class="chip b"><i></i>BACKOFF</span></td>
-            <td class="act" data-l="ACTION"><b>池里暂时没有能跑这个模型的账号。</b>退避重试；一直 503 就去群里说。</td>
+            <td class="act" data-l="ACTION"><b>暂时没有可用账号能跑这个模型。</b>退避重试；一直 503 就在群里反馈。</td>
           </tr>
           <tr>
             <td><span class="hs c">404</span></td>
@@ -486,8 +486,8 @@
       </table>
     </div>
     <div class="tn">
-      <p><b>额度用完不降级、不静默截断</b>——你会看到报错，不会看到胡话。401 只有一个意思：key 不对。</p>
-      <p><b>key 丢了不用重建</b>：在 <a href="/keys">/keys</a> 列表里随时可以整条复制回来，不是只显示一次。用量在控制台看得到；不想登录，去 <a href="/key-usage">/key-usage</a> 输 key 查自己那一份。</p>
+      <p><b>额度用完不降级、不静默截断</b>——你会看到一条明确的报错。401 只有一个意思：key 不对。</p>
+      <p><b>key 丢了不用重建</b>：在 <a href="/keys">/keys</a> 列表里随时能完整复制回来，不是只显示一次。用量在控制台能看到；不想登录，就去 <a href="/key-usage">/key-usage</a> 输 key 查自己那一份。</p>
     </div>
   </div>
 </section>
@@ -495,7 +495,7 @@
 <section class="sect pipe">
   <div class="in body">
     <div class="shd">
-      <h2>规矩</h2>
+      <h2>使用规则</h2>
       <span class="hint">三条，没有例外</span>
       <span class="num">05 · RULES</span>
     </div>
@@ -503,16 +503,16 @@
       <div class="hazard" aria-hidden="true"></div>
       <div class="rgrid">
         <div>
-          <p>key 不进仓库、不贴群。</p>
-          <p class="sub">泄漏时只吊销那一路，所以按用途分开开几把；能登录你账号的人就能拿走你所有的 key。</p>
+          <p>key 不要提交到仓库，也不要发到群里。</p>
+          <p class="sub">按用途分开建几把 key，泄漏时只吊销对应的那一把；能登录你账号的人就能拿到你所有的 key。</p>
         </div>
         <div>
           <p>跑批量前群里说一声。</p>
-          <p class="sub">错开高峰；CI 单独开一把 key，别用交互那把。</p>
+          <p class="sub">错开高峰；CI 单独建一把 key，不要和你平时用的那把混用。</p>
         </div>
         <div>
-          <p>额度按人分配，要超提前找管理员。</p>
-          <p class="sub">不要换别人的 key 顶，用量会记在他头上。</p>
+          <p>额度按人分配，不够用提前找管理员。</p>
+          <p class="sub">不要借用别人的 key，用量会记在他名下。</p>
         </div>
       </div>
     </div>
@@ -522,8 +522,8 @@
 <footer class="sect foot">
   <div class="in">
     <div>
-      <p class="who">spool — 内部服务 · 跑在自建的 Sub2API 上 · 出事找管理员</p>
-      <p class="lore">SPOOL = Simultaneous Peripheral Operations On-Line，IBM 1959 年给打印队列起的名字：一台昂贵的共享设备，很多人往里发作业，用量记在各人名下。名字只借典故：spool 不攒批，请求实时转发。</p>
+      <p class="who">spool — 内部服务 · 跑在自建的 Sub2API 上 · 有问题找管理员</p>
+      <p class="lore">spool 把公司的上游账号集中到一个入口，请求实时转发，不做批处理。</p>
     </div>
     <ul class="fnav">
       <li><a href="/login">登录<span>/login</span></a></li>
