@@ -990,11 +990,6 @@ html.dark .rp {
   color: var(--ink-3);
   margin-left: 5px;
 }
-.rp-cs .rp-more {
-  border: 0;
-  color: var(--ink-3);
-  padding-left: 0;
-}
 .rp-plat {
   margin-top: 14px;
   padding-top: 12px;

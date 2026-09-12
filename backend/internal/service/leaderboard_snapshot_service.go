@@ -448,7 +448,7 @@ func (s *LeaderboardSnapshotService) readLeaderboardTopStreak(ctx context.Contex
 	return &row
 }
 
-// computeLeaderboardProfiles 算该 Window 的模型偏好画像：Total Tokens 前 50 名各自的 Top 3 模型。
+// computeLeaderboardProfiles 算该 Window 的模型偏好画像：Total Tokens 前 50 名各自用过的全部模型及占比。
 // 一条限定这 50 个 user_id 的聚合出全部结果，MUST NOT 逐人各查一次（design D22）。
 // 出错时记日志并返回 nil，该区块降级为不可用，本轮快照照常写入。
 func (s *LeaderboardSnapshotService) computeLeaderboardProfiles(ctx context.Context, window LeaderboardWindow, entries []LeaderboardUserMetrics, start, end time.Time) []LeaderboardProfile {

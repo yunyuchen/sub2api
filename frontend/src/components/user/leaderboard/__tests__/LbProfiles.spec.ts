@@ -5,8 +5,7 @@ import LbProfiles from '../LbProfiles.vue'
 import type { LeaderboardProfile } from '@/api/leaderboard'
 
 const messages: Record<string, string> = {
-  'leaderboard.profiles.note': 'Model mix · top 3',
-  'leaderboard.profiles.more': 'others omitted',
+  'leaderboard.profiles.note': 'Model mix · share',
   'leaderboard.identity.anonymous': 'Row {ordinal}',
   'leaderboard.identity.outOfRank': 'Outside top 50',
   'channelMonitorV2.currentUser': 'Current user',
@@ -69,42 +68,46 @@ function mountProfiles(profiles: LeaderboardProfile[] | null) {
 }
 
 describe('LbProfiles', () => {
-  // 画板里 Top 3 之和不足 100% 的那一行补一枚灰字 chip，MUST NOT 把它读成「只用这三个」。
-  it('adds an "others omitted" chip only when the top three fall well short of 100%', () => {
-    const short = mountProfiles([
+  // 每人列出该窗口用过的全部模型，按后端给的顺序，不截断也不补「其余略」。
+  it('renders every model the backend sends, in order', () => {
+    const wrapper = mountProfiles([
       {
         identity: { kind: 'anonymous' },
         ordinal: 4,
         models: [
-          { model: 'haiku-4-5', share_percent: 20 },
-          { model: 'opus-5', share_percent: 20 },
+          { model: 'haiku-4-5', share_percent: 40 },
+          { model: 'opus-5', share_percent: 30 },
           { model: 'sonnet-5', share_percent: 20 },
+          { model: 'gpt-5.1', share_percent: 7 },
+          { model: 'gemini-3', share_percent: 3 },
         ],
       },
     ])
-    expect(short.find('[data-testid="leaderboard-profiles-more"]').text()).toBe('others omitted')
-    // 正经的 chip 数不受影响
-    expect(short.findAll('[data-testid="leaderboard-profiles-chip"]')).toHaveLength(3)
+    const chips = wrapper.findAll('[data-testid="leaderboard-profiles-chip"]')
+    expect(chips.map((chip) => chip.text())).toEqual([
+      'haiku-4-540%',
+      'opus-530%',
+      'sonnet-520%',
+      'gpt-5.17%',
+      'gemini-33%',
+    ])
+    expect(wrapper.find('[data-testid="leaderboard-profiles-more"]').exists()).toBe(false)
+  })
 
-    // 取整残差（33 + 33 + 33 = 99）不算「还有别的模型」
-    const rounded = mountProfiles([
+  // 后端把占比取整成整数，不足 0.5% 会变成 0：这种模型确实被调过，MUST NOT 显示成 0%。
+  it('shows sub-percent shares as <1% instead of 0%', () => {
+    const wrapper = mountProfiles([
       {
         identity: { kind: 'anonymous' },
         ordinal: 5,
         models: [
-          { model: 'a', share_percent: 33 },
-          { model: 'b', share_percent: 33 },
-          { model: 'c', share_percent: 33 },
+          { model: 'gpt-6-astra', share_percent: 100 },
+          { model: 'gpt-5.6-luna', share_percent: 0 },
         ],
       },
     ])
-    expect(rounded.find('[data-testid="leaderboard-profiles-more"]').exists()).toBe(false)
-
-    // 只有一两个模型时后端已经给全了，不可能有第 4 个
-    const single = mountProfiles([
-      { identity: { kind: 'anonymous' }, ordinal: 6, models: [{ model: 'a', share_percent: 71 }] },
-    ])
-    expect(single.find('[data-testid="leaderboard-profiles-more"]').exists()).toBe(false)
+    const chips = wrapper.findAll('[data-testid="leaderboard-profiles-chip"]')
+    expect(chips[1].text()).toBe('gpt-5.6-luna<1%')
   })
 
   it('renders nothing when the block is absent or empty', () => {
@@ -115,7 +118,7 @@ describe('LbProfiles', () => {
   it('renders the eyebrow and one row per user in named mode', () => {
     const wrapper = mountProfiles(namedProfiles())
 
-    expect(wrapper.find('.rp-eyebrow').text()).toBe('Model mix · top 3')
+    expect(wrapper.find('.rp-eyebrow').text()).toBe('Model mix · share')
 
     const rows = wrapper.findAll('[data-testid="leaderboard-profiles-row"]')
     expect(rows).toHaveLength(2)

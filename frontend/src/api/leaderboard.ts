@@ -247,7 +247,10 @@ export interface LeaderboardMonth {
   change_percent: number
 }
 
-/** 模型偏好画像：当前 Window 前 50 名（与榜单本体同一个数）各自的 Top 3 模型。占比两档都下发。 */
+/**
+ * 模型偏好画像：当前 Window 前 50 名（与榜单本体同一个数）各自用过的全部模型及占比，
+ * 按成功请求降序，后端不截断。占比两档都下发；取整后为 0 表示不足 0.5%（前端显示 <1%）。
+ */
 export interface LeaderboardProfileModel {
   model: string
   share_percent: number

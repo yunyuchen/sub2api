@@ -1,5 +1,5 @@
 <template>
-  <!-- 05 右栏：当前 Window 前 50 名（与榜单本体同一个数）各自的 Top 3 模型。每行一位用户，chip 的左边界对齐成一条轴。
+  <!-- 05 右栏：当前 Window 前 50 名（与榜单本体同一个数）各自用过的全部模型及占比，按成功请求降序。每行一位用户，chip 的左边界对齐成一条轴。
        profiles 与 extremes 同住该 Window 的 highlights，因此 status = computing 时随之缺席；
        整块为 null（旧后端 / 快照在算）或空数组时不渲染任何东西。 -->
   <div v-if="rows.length" class="rp-prof" data-testid="leaderboard-profiles">
@@ -19,11 +19,7 @@
             :key="model.model"
             data-testid="leaderboard-profiles-chip"
           >
-            {{ model.model }}<b>{{ model.share_percent }}%</b>
-          </span>
-          <!-- Top 3 之和不足 100% 时如实说还有别的模型，MUST NOT 把这一行读成「只用这三个」。 -->
-          <span v-if="hasMore(row)" class="rp-more" data-testid="leaderboard-profiles-more">
-            {{ t('leaderboard.profiles.more') }}
+            {{ model.model }}<b>{{ shareLabel(model) }}</b>
           </span>
         </span>
       </li>
@@ -35,7 +31,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useLeaderboardDisplayName } from './displayName'
-import type { LeaderboardProfile } from '@/api/leaderboard'
+import type { LeaderboardProfile, LeaderboardProfileModel } from '@/api/leaderboard'
 
 const { t } = useI18n()
 
@@ -57,19 +53,12 @@ const CASCADE_ROWS_PER_STEP = 4
 /** 展示名与榜单条目、Highlights、Extremes 完全同一套规则，收敛在 `displayName.ts`。 */
 const { displayName } = useLeaderboardDisplayName()
 
-/** 后端每人最多给 3 个模型（`leaderboard_insights.go` 的 `leaderboardProfileModelsLimit`）。 */
-const PROFILE_MODELS_LIMIT = 3
-/** 三个占比各自取整最多差 1.5 个百分点，留 2 个点的余量免得把残差当成「还有别的模型」。 */
-const PROFILE_RESIDUAL_TOLERANCE = 2
-
 /**
- * Top 3 的占比之和明显不足 100%：这一行还有没进 Top 3 的模型。
- * 不足 3 个时后端已经把这个人的模型给全了，不可能有第 4 个。
+ * 后端把占比取整成整数，不足 0.5% 会变成 0：这种模型确实被调过，
+ * 显示成 0% 会读成「没用过」，所以写成 <1%。
  */
-function hasMore(profile: LeaderboardProfile): boolean {
-  if (profile.models.length < PROFILE_MODELS_LIMIT) return false
-  const sum = profile.models.reduce((total, model) => total + model.share_percent, 0)
-  return sum < 100 - PROFILE_RESIDUAL_TOLERANCE
+function shareLabel(model: LeaderboardProfileModel): string {
+  return model.share_percent <= 0 ? '<1%' : `${model.share_percent}%`
 }
 
 /** 本人那一行用强调色，与榜单里的本人行是同一条线索。 */

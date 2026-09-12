@@ -960,9 +960,12 @@ func TestLeaderboardSnapshotService_ProfilesSingleQueryPerWindow(t *testing.T) {
 	profiles := cache.byWindow(t, LeaderboardWindowToday).Highlights.Profiles
 	require.Len(t, profiles, 2, "聚合里没有行的用户不出现在画像里")
 	require.Equal(t, int64(1), profiles[0].UserID)
-	require.Len(t, profiles[0].Models, leaderboardProfileModelsLimit, "每人最多 Top 3")
-	require.Equal(t, LeaderboardProfileModel{Model: "claude-sonnet-5", SharePercent: 50}, profiles[0].Models[0])
-	require.Equal(t, LeaderboardProfileModel{Model: "claude-opus-5", SharePercent: 25}, profiles[0].Models[1])
+	require.Equal(t, []LeaderboardProfileModel{
+		{Model: "claude-sonnet-5", SharePercent: 50},
+		{Model: "claude-opus-5", SharePercent: 25},
+		{Model: "gpt-5.1", SharePercent: 16},
+		{Model: "gemini-3", SharePercent: 8},
+	}, profiles[0].Models, "每人列出全部模型，按成功请求降序，不截断")
 }
 
 // 画像聚合失败只降级本块：本轮三个窗口的快照照常写入。

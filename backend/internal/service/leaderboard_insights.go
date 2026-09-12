@@ -47,9 +47,6 @@ const (
 	// 与榜单本体的 Top 50（LeaderboardTopEntryLimit）是同一个数——榜上有名的人在画像里都能找到自己。
 	leaderboardProfilesLimit = LeaderboardTopEntryLimit
 
-	// leaderboardProfileModelsLimit 是画像里每人取的模型数（Top 3）。
-	leaderboardProfileModelsLimit = 3
-
 	// leaderboardRhythmLookbackDays 是周内节奏的回溯天数（近 4 周）。
 	leaderboardRhythmLookbackDays = 28
 
@@ -145,7 +142,7 @@ type LeaderboardExtremeStreak struct {
 	Days   int   `json:"days"`
 }
 
-// LeaderboardProfile 是模型偏好画像的一行：某个用户与他的 Top 3 模型。
+// LeaderboardProfile 是模型偏好画像的一行：某个用户与他在该窗口用过的全部模型（按成功请求降序，不截断）。
 // 只有 user_id 与占比，身份仍在响应组装时按 users 当前状态渲染。
 type LeaderboardProfile struct {
 	UserID int64                     `json:"user_id"`
@@ -697,10 +694,10 @@ func leaderboardRoundOneDecimal(value float64) float64 {
 }
 
 // buildLeaderboardProfiles 由「Top N 名的 user_id」与一条 (user_id, model) 聚合的结果
-// 拼出模型偏好画像：每人取成功请求最多的前 leaderboardProfileModelsLimit 个模型及占比。
+// 拼出模型偏好画像：每人列出该窗口用过的全部模型及占比，按成功请求降序，不截断。
 //
 // rows 必须已按 (user_id, successful_requests DESC, model ASC) 排好序——仓储层的 ORDER BY
-// 就是这个顺序，因此这里不再排一次。占比的分母是该用户该窗口的成功请求总数（不止 Top 3）。
+// 就是这个顺序，因此这里不再排一次。占比的分母是该用户该窗口的成功请求总数。
 // 某人在该窗口没有任何成功请求时不出现在结果里，而不是给一行空模型。
 func buildLeaderboardProfiles(userIDs []int64, rows []usagestats.LeaderboardUserModelUsageRow) []LeaderboardProfile {
 	if len(userIDs) == 0 || len(rows) == 0 {
@@ -719,11 +716,8 @@ func buildLeaderboardProfiles(userIDs []int64, rows []usagestats.LeaderboardUser
 		if !ok || totals[userID] <= 0 {
 			continue
 		}
-		models := make([]LeaderboardProfileModel, 0, leaderboardProfileModelsLimit)
+		models := make([]LeaderboardProfileModel, 0, len(userRows))
 		for _, row := range userRows {
-			if len(models) >= leaderboardProfileModelsLimit {
-				break
-			}
 			models = append(models, LeaderboardProfileModel{
 				Model:        row.Model,
 				SharePercent: leaderboardRelativePercent(row.SuccessfulRequests, totals[userID]),

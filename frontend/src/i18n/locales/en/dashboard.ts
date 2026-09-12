@@ -1074,9 +1074,8 @@ export default {
       siteLabel: 'Site',
     },
     profiles: {
-      note: 'Model mix · top 3',
-      // Added when the top three shares add up to less than 100%
-      more: 'others omitted',
+      // Every model the user called in the window; shares under 0.5% render as <1%
+      note: 'Model mix · share of successful requests',
     },
     platforms: {
       note: 'Today requests by platform',

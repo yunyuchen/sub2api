@@ -1074,9 +1074,8 @@ export default {
       siteLabel: '全站',
     },
     profiles: {
-      note: '模型偏好 · Top 3',
-      // Top 3 占比之和不足 100% 时补一枚灰字 chip
-      more: '其余略',
+      // 每人列出该窗口用过的全部模型；占比不足 0.5% 的显示为 <1%
+      note: '模型偏好 · 按成功请求占比',
     },
     platforms: {
       note: '今日请求按平台',
