@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>博客 · spool</title>
+<meta name="description" content="spool 网关的接入笔记与排查经验：Claude Code、Codex、桌面客户端配置，以及 API 报错怎么读。">
+<style>
+*,*::before,*::after{box-sizing:border-box;}
+:root{
+  --bg:#1a1a1a; --band:#020617; --accent:#d97757; --accent-2:#f59e0b;
+  --cream:#f5e0c3; --text:#e2e8f0; --muted:#94a3b8; --dim:#64748b;
+  --line:#1e293b; --panel:#0f172a; --well:#0d1117;
+  --blue:#60a5fa; --green:#4ade80;
+  --navh:92px;
+  --sans:"MiSans","Inter",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.6;
+  overflow-x:clip;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:24px 24px;}
+body::after{content:"";position:fixed;top:0;left:50%;transform:translateX(-50%);width:min(100%,1320px);height:620px;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 620px 360px at 50% 0%,rgba(217,119,87,.15),rgba(217,119,87,0) 72%);}
+a{color:inherit;text-decoration:none;}
+svg{display:block;}
+h1,h2,h3,h4,p,ul,ol,figure,table{margin:0;}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
+.sprite{position:absolute;width:0;height:0;overflow:hidden;}
+.ic{width:17px;height:17px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+
+/* ---------- nav ---------- */
+.navwrap{position:sticky;top:0;z-index:60;background:rgba(2,6,23,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line);}
+.wrap{max-width:1320px;margin:0 auto;padding:0 32px;}
+.nav{height:var(--navh);display:flex;align-items:center;justify-content:space-between;gap:24px;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand svg{width:40px;height:40px;}
+.wm{font-size:23px;font-weight:700;letter-spacing:-.4px;color:#fff;}
+.nl{display:flex;align-items:center;gap:26px;}
+.nl a{font-size:16px;color:var(--text);transition:color .2s ease;white-space:nowrap;}
+.nl a:hover{color:#fff;}
+.nl a.cur{color:var(--accent);font-weight:600;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;white-space:nowrap;
+  transition:transform .2s ease,box-shadow .2s ease,background .2s ease,color .2s ease,border-color .2s ease;}
+.nav-login{display:none;}
+.bn{background:var(--accent);color:#fff;font-weight:600;font-size:16px;padding:10px 20px;}
+.bn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(217,119,87,.32);}
+
+/* ---------- page ---------- */
+.page{position:relative;z-index:1;max-width:1320px;margin:0 auto;padding:0 32px;min-height:60vh;}
+.view{display:none;}
+.view.show{display:block;}
+
+/* ---------- list ---------- */
+.phead{padding:64px 0 44px;max-width:760px;}
+.phead h1{font-size:52px;font-weight:700;line-height:1.15;letter-spacing:-1.4px;color:var(--cream);}
+.phead .grad{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+.phead p{margin-top:18px;font-size:19px;line-height:1.7;color:var(--muted);}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;padding-bottom:96px;}
+.card{display:flex;flex-direction:column;background:rgba(15,23,42,.5);border:1px solid var(--line);border-radius:16px;padding:28px;
+  transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease;}
+.card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 14px 32px rgba(0,0,0,.3);}
+.tags{display:flex;flex-wrap:wrap;gap:8px;}
+.tag-chip{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  padding:4px 9px;border-radius:6px;background:rgba(217,119,87,.12);border:1px solid rgba(217,119,87,.28);color:var(--accent);white-space:nowrap;}
+.card h2{margin-top:18px;font-size:21px;font-weight:700;line-height:1.5;color:#fff;transition:color .2s ease;}
+.card:hover h2{color:var(--cream);}
+.card .sum{margin-top:14px;font-size:15px;line-height:1.8;color:var(--muted);flex:1;}
+.card .meta{margin-top:24px;padding-top:18px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.card .date{font-family:var(--mono);font-size:13px;color:var(--dim);}
+.more{display:inline-flex;align-items:center;gap:7px;font-size:14.5px;font-weight:600;color:var(--accent);}
+.more .ar{transition:transform .2s ease;}
+.card:hover .more .ar{transform:translateX(4px);}
+
+/* ---------- article ---------- */
+.art{max-width:840px;margin:0 auto;padding:40px 0 96px;}
+.back{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;color:var(--muted);padding:8px 14px 8px 11px;
+  border:1px solid var(--line);border-radius:9px;background:rgba(15,23,42,.5);transition:color .2s ease,border-color .2s ease;}
+.back:hover{color:var(--accent);border-color:rgba(217,119,87,.45);}
+.back .ic{width:16px;height:16px;}
+.art h1{margin-top:28px;font-size:42px;font-weight:700;line-height:1.25;letter-spacing:-1.1px;color:var(--cream);}
+.art .amt{margin-top:20px;padding-bottom:28px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:12px;}
+.art .amt .date{font-family:var(--mono);font-size:13.5px;color:var(--dim);}
+.artnav{margin-top:64px;padding-top:32px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.pg{display:flex;align-items:center;gap:12px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(15,23,42,.4);transition:border-color .2s ease,transform .2s ease;min-width:0;}
+.pg:hover{border-color:var(--accent);transform:translateY(-2px);}
+.pg.next{justify-content:flex-end;text-align:right;}
+.pg .ic{width:18px;height:18px;color:var(--accent);}
+.pg>span{min-width:0;overflow:hidden;}
+.pg .lbl{display:block;font-size:12px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;}
+.pg .tt{display:block;margin-top:3px;font-size:15px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pg.hide{visibility:hidden;}
+
+/* ---------- prose ---------- */
+.body{margin-top:8px;}
+.body p{margin:18px 0;font-size:16.5px;line-height:1.9;color:var(--text);}
+.body>h2:first-child{margin-top:26px;}
+.body h2{margin:56px 0 0;font-size:27px;font-weight:700;line-height:1.4;letter-spacing:-.5px;color:#fff;
+  padding-bottom:14px;border-bottom:1px solid var(--line);scroll-margin-top:116px;}
+.body h2+p,.body h2+div,.body h2+ol,.body h2+ul,.body h2+.code-block,.body h2+.table-wrap{margin-top:22px;}
+.body h3{margin:38px 0 0;font-size:19px;font-weight:700;line-height:1.5;color:var(--cream);display:flex;align-items:baseline;gap:11px;scroll-margin-top:116px;}
+.body h3::before{content:"";flex:none;width:3px;height:17px;border-radius:2px;background:var(--accent);transform:translateY(1px);}
+.body h3+p,.body h3+div,.body h3+ol,.body h3+ul,.body h3+.code-block,.body h3+.table-wrap{margin-top:16px;}
+.body ul,.body ol{margin:18px 0;padding-left:0;list-style:none;counter-reset:li;}
+.body li{position:relative;padding-left:28px;margin:11px 0;font-size:16.5px;line-height:1.85;color:var(--text);}
+.body ul>li::before{content:"";position:absolute;left:9px;top:12px;width:6px;height:6px;border-radius:50%;background:var(--accent);}
+.body ol>li{counter-increment:li;}
+.body ol>li::before{content:counter(li);position:absolute;left:0;top:3px;width:20px;height:20px;border-radius:6px;
+  background:rgba(217,119,87,.14);color:var(--accent);font-family:var(--mono);font-size:11.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;}
+.body li>strong{color:var(--cream);}
+.body strong{color:#fff;font-weight:600;}
+.body a{color:var(--accent);border-bottom:1px solid rgba(217,119,87,.35);transition:border-color .2s ease,color .2s ease;}
+.body a:hover{color:var(--accent-2);border-bottom-color:var(--accent-2);}
+.body code{font-family:var(--mono);font-size:.875em;padding:2px 6px;border-radius:6px;
+  background:rgba(217,119,87,.09);border:1px solid rgba(217,119,87,.2);color:#eeb195;word-break:break-word;}
+
+/* ---------- code blocks ---------- */
+.code-block{margin:22px 0;background:var(--well);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+.cb-head{display:flex;align-items:center;gap:8px;padding:0 14px 0 16px;height:42px;background:var(--panel);border-bottom:1px solid var(--line);}
+.dot{width:11px;height:11px;border-radius:50%;flex:none;}
+.d1{background:#ef4444;}.d2{background:#eab308;}.d3{background:#22c55e;}
+.cb-lang{margin-left:8px;font-family:var(--mono);font-size:12.5px;color:var(--dim);letter-spacing:.02em;}
+.cb-copy{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:7px;
+  font-size:12.5px;color:var(--muted);border:1px solid var(--line);transition:color .18s ease,border-color .18s ease,background .18s ease;}
+.cb-copy .ic{width:14px;height:14px;}
+.cb-copy:hover{color:var(--accent);border-color:rgba(217,119,87,.45);background:rgba(217,119,87,.08);}
+.cb-copy.done{color:var(--green);border-color:rgba(74,222,128,.45);background:rgba(74,222,128,.08);}
+.code-block pre{margin:0;padding:16px 18px;overflow-x:auto;}
+.code-block code{font-family:var(--mono);font-size:13.5px;line-height:1.85;color:var(--text);
+  background:none;border:0;padding:0;white-space:pre;display:block;}
+
+/* ---------- tables ---------- */
+.table-wrap{margin:22px 0;border:1px solid var(--line);border-radius:12px;overflow:auto;background:rgba(15,23,42,.28);}
+.table-wrap table{width:100%;min-width:560px;border-collapse:separate;border-spacing:0;font-size:14.5px;}
+.table-wrap th,.table-wrap td{padding:14px 18px;text-align:left;line-height:1.7;color:var(--text);vertical-align:top;}
+.table-wrap thead th{background:var(--panel);font-weight:600;color:#fff;white-space:nowrap;}
+.table-wrap tbody td,.table-wrap tbody th{border-top:1px solid var(--line);}
+.table-wrap tbody tr td:first-child{color:var(--cream);font-family:var(--mono);font-size:13px;}
+.table-wrap tbody tr:hover td{background:rgba(217,119,87,.04);}
+
+/* ---------- footer ---------- */
+.ft{position:relative;z-index:1;background:var(--band);border-top:1px solid var(--line);padding:48px 0 0;}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:32px;}
+.fb{display:flex;align-items:center;gap:10px;}
+.fb svg{width:40px;height:40px;}
+.fb .wm{font-size:22px;}
+.tag{margin-top:16px;font-size:15px;line-height:1.7;color:var(--muted);}
+.fc h3{font-size:15px;font-weight:600;color:var(--text);}
+.fc ul{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:14px;}
+.fc a{font-size:15px;color:var(--muted);transition:color .2s ease;}
+.fc a:hover{color:var(--accent);}
+.hr{margin-top:48px;height:1px;background:var(--line);}
+.cp{padding:36px 0 48px;text-align:center;font-size:15px;color:var(--dim);}
+
+/* ---------- responsive ---------- */
+@media (max-width:980px){
+  .grid{grid-template-columns:minmax(0,1fr);}
+  .phead h1{font-size:42px;letter-spacing:-1px;}
+  .art h1{font-size:34px;letter-spacing:-.6px;}
+}
+@media (max-width:900px){
+  .nav-login{display:inline-flex;}
+  .navwrap{position:static;}
+  .wrap,.page{padding:0 24px;}
+  .nav{height:auto;flex-direction:column;align-items:stretch;gap:0;padding:14px 0 0;}
+  .nav-top{display:flex;align-items:center;justify-content:space-between;gap:16px;}
+  .nl{margin:0 -24px;padding:12px 24px 14px;gap:22px;overflow-x:auto;scrollbar-width:none;}
+  .nl::-webkit-scrollbar{display:none;}
+  .nl a{font-size:15px;}
+  .nl a.bn{display:none;}
+  .phead{padding:44px 0 32px;}
+  .phead h1{font-size:34px;letter-spacing:-.5px;}
+  .phead p{font-size:17px;margin-top:14px;}
+  .grid{padding-bottom:64px;gap:20px;}
+  .card{padding:22px;}
+  .art{padding:28px 0 72px;}
+  .art h1{font-size:28px;letter-spacing:-.3px;}
+  .body h2{font-size:23px;margin-top:46px;}
+  .body h3{font-size:18px;}
+  .artnav{grid-template-columns:1fr;}
+  .pg.hide{display:none;}
+  .fg{grid-template-columns:1fr;gap:36px;}
+  .ft{padding-top:40px;}
+  .hr{margin-top:36px;}
+  .cp{padding:28px 0 36px;}
+}
+@media (max-width:560px){
+  .wrap,.page{padding:0 18px;}
+  .nl{margin:0 -18px;padding:12px 18px 14px;}
+  .brand svg{width:34px;height:34px;}
+  .wm{font-size:20px;}
+  .phead h1{font-size:29px;}
+  .card h2{font-size:19px;}
+  .art h1{font-size:25px;}
+  .body p,.body li{font-size:15.5px;}
+  .body h2{font-size:21px;}
+  .code-block pre{padding:14px;}
+  .code-block code{font-size:12.5px;}
+  .cb-head{padding:0 10px 0 12px;height:40px;}
+  .cb-lang{margin-left:6px;font-size:12px;}
+  .table-wrap th,.table-wrap td{padding:12px 14px;}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;}
+}
+</style>
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11.5" height="11.5" rx="2.5"/><path d="M5 15.5V6a2.5 2.5 0 0 1 2.5-2.5H16"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><polyline points="4 12.5 9.5 18 20 6.5"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="M14.5 5 8 12l6.5 7"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="M9.5 5 16 12l-6.5 7"/></symbol>
+</defs></svg>
+
+<div class="navwrap">
+  <div class="wrap">
+    <nav class="nav">
+      <div class="nav-top">
+        <a class="brand" href="/">
+          <svg viewBox="0 0 512 512" role="img" aria-label="spool"><path fill="#d97757" fill-rule="evenodd" d="M200 96a160 160 0 1 0 0 320 160 160 0 1 0 0-320Zm0 68a92 92 0 1 1 0 184 92 92 0 1 1 0-184Z"/><rect x="200" y="352" width="280" height="64" fill="#d97757"/><circle cx="200" cy="256" r="40" fill="#f5e0c3"/></svg>
+          <span class="wm">spool</span>
+        </a>
+        <a class="btn bn nav-login" href="/login">登录</a>
+      </div>
+      <div class="nl">
+        <a href="/">首页</a>
+        <a href="/docs.html">教程</a>
+        <a class="cur" href="/blog.html">博客</a>
+        <a href="/dashboard">控制台</a>
+        <a href="/keys">API Keys</a>
+        <a href="/key-usage">用量查询</a>
+        <a class="btn bn" href="/login">登录</a>
+      </div>
+    </nav>
+  </div>
+</div>
+
+<div class="page">
+
+  <section class="view show" id="list">
+    <div class="phead">
+      <h1>接入笔记与<span class="grad">排查经验</span></h1>
+      <p>把 spool 接进各种客户端时踩过的坑、验证过的命令、以及看懂网关报错的办法，都记在这里。</p>
+    </div>
+    <div class="grid">
+      <a class="card" href="#claude-code-quickstart">
+        <div class="tags"><span class="tag-chip">Claude Code</span><span class="tag-chip">Setup</span></div>
+        <h2>Claude Code 新手指南：安装、接入 spool、第一个项目</h2>
+        <p class="sum">从装 Node.js 到跑通第一个项目，把 Claude Code 接到 spool 网关的完整步骤，含环境变量、模型清单确认和几条踩过的坑。</p>
+        <div class="meta"><span class="date">2026-09-12</span><span class="more">阅读全文 <span class="ar">→</span></span></div>
+      </a>
+      <a class="card" href="#codex-getting-started">
+        <div class="tags"><span class="tag-chip">Codex</span><span class="tag-chip">Setup</span></div>
+        <h2>Codex 入门：CLI 安装、config.toml 与常见坑</h2>
+        <p class="sum">装好 Codex CLI，写一份指向 spool 的 config.toml，以及六个最常把人卡住的配置问题。</p>
+        <div class="meta"><span class="date">2026-09-12</span><span class="more">阅读全文 <span class="ar">→</span></span></div>
+      </a>
+      <a class="card" href="#api-error-codes">
+        <div class="tags"><span class="tag-chip">Error Codes</span><span class="tag-chip">Troubleshooting</span></div>
+        <h2>API 报错怎么读：401 / 403 / 429 / 404 / 503 排查指南</h2>
+        <p class="sum">网关返回的每个状态码对应一种确定的处理方式，其中 429 有两种完全相反的含义，分不清会白白重试到超时。</p>
+        <div class="meta"><span class="date">2026-09-12</span><span class="more">阅读全文 <span class="ar">→</span></span></div>
+      </a>
+      <a class="card" href="#client-setup-guide">
+        <div class="tags"><span class="tag-chip">Clients</span><span class="tag-chip">Setup</span></div>
+        <h2>客户端接入指南：Cherry Studio、Chatbox、CC Switch 怎么填</h2>
+        <p class="sum">两种协议风格决定地址要不要带 /v1，剩下的只是在各个客户端里找到那两个输入框。</p>
+        <div class="meta"><span class="date">2026-09-12</span><span class="more">阅读全文 <span class="ar">→</span></span></div>
+      </a>
+    </div>
+  </section>
+
+  <article class="view post" id="post-claude-code-quickstart" data-slug="claude-code-quickstart" data-title="Claude Code 新手指南：安装、接入 spool、第一个项目">
+    <div class="art">
+      <a class="back" href="#"><svg class="ic"><use href="#i-left"/></svg>返回博客列表</a>
+      <h1>Claude Code 新手指南：安装、接入 spool、第一个项目</h1>
+      <div class="amt">
+        <span class="date">2026-09-12</span>
+        <span class="tags"><span class="tag-chip">Claude Code</span><span class="tag-chip">Setup</span></span>
+      </div>
+      <div class="body">
+<h2>开始之前</h2>
+<p>spool 是团队内部自建自运维的 AI 网关。账号由管理员创建，页面上没有自助注册入口。拿到账号后先在 <a href="/login">/login</a> 登录，再去 <a href="/keys">/keys</a> 建一把 API Key。</p>
+<p>建 Key 的时候必须选一个分组，分组决定这把 Key 能看到哪些模型，也就决定了你在 Claude Code 里能填哪些模型名。Key 建好之后可以随时回 API Keys 列表再复制一次，第一次没存下来也不要紧，不用重新创建。</p>
+<p>整个流程大概十分钟，其中八分钟花在装 Node.js 上。</p>
+
+<h2>装 Node.js 和 Claude Code</h2>
+<p>Claude Code 是 Anthropic 官方的命令行工具，跑在 Node.js 上（需要 18 或更高版本），用 npm 全局安装。</p>
+<h3>macOS</h3>
+<pre><code>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install node
+node -v &amp;&amp; npm -v</code></pre>
+<h3>Windows</h3>
+<p>以管理员身份打开 PowerShell（需要 Windows 10 1809 或更高），用 winget 或 Chocolatey 装 Node.js：</p>
+<pre><code>winget install OpenJS.NodeJS.LTS
+# 或者
+choco install nodejs-lts
+
+node -v
+npm -v</code></pre>
+<h3>装 CLI</h3>
+<pre><code>npm install -g @anthropic-ai/claude-code
+claude --version</code></pre>
+<p>macOS 上装不上，十有八九是全局目录没有写权限。比起直接加 sudo，更省心的做法是把 npm 的全局目录挪到用户目录下，再把它的 bin 加进 PATH，以后升级也不用再要权限。拉包慢可以临时换个源：<code>npm config set registry https://registry.npmmirror.com</code>。</p>
+<p>版本太旧会缺一些命令和参数，隔一阵子更新一次即可。</p>
+
+<h2>接入 spool</h2>
+<p>Claude Code 只认两个东西：网关地址和凭证。地址原样填，<strong>不要加 /v1</strong>，带 /v1 是 OpenAI 风格客户端的写法，两边不要抄串。</p>
+<pre><code># ~/.zshrc 或 ~/.bashrc
+export ANTHROPIC_BASE_URL="https://spool.corp.internal"
+export ANTHROPIC_AUTH_TOKEN="替换成你在 /keys 里创建的 Key"</code></pre>
+<p>写完执行 <code>source ~/.zshrc</code> 让它立刻生效，新开的终端会自动带上。<code>ANTHROPIC_API_KEY</code> 同样被识别，两个变量填一个就行，不用都填，也不要填成两个不一样的值。</p>
+<p>Windows 上写进 PowerShell Profile：先 <code>notepad $PROFILE</code> 打开（文件不存在会自动创建），加两行再重开终端。</p>
+<pre><code>$env:ANTHROPIC_BASE_URL = "https://spool.corp.internal"
+$env:ANTHROPIC_AUTH_TOKEN = "替换成你的 Key"</code></pre>
+<p>如果不想污染全局环境，也可以把这两项写进 <code>~/.claude/settings.json</code> 的 env 字段，只对 Claude Code 生效。机器上同时有别的工具要连别的地址时，这样更干净。</p>
+<p>配没配对用 <code>claude doctor</code> 看一眼，它会顺带检查安装状态和连通性。检测不到凭证时，直接运行 <code>claude</code> 会进入登录引导，但团队里统一用环境变量更省事，也方便换 Key。</p>
+
+<h2>确认自己能用哪些模型</h2>
+<p>模型清单没有第二份真相，以网关返回的为准：</p>
+<pre><code>curl -s https://spool.corp.internal/v1/models \
+  -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN"</code></pre>
+<p>返回的是你这把 Key 所属分组的可用模型。模型 id 原样透传给上游，网关不做改名，所以清单里写什么就填什么。填清单以外的名字会收到 404，消息里带 not available for this group，这时候不是名字拼错，是分组没放行。</p>
+
+<h2>第一个项目</h2>
+<ol>
+<li>cd 到项目目录，确认 git 工作区是干净的，然后直接跑 <code>claude</code>。干净的工作区是你复核它改了什么的前提。</li>
+<li>先执行 <code>/init</code>，让它通读仓库生成 CLAUDE.md。这份文件之后每轮对话都会自动带上，值得花几分钟手工修一遍，把构建命令、测试命令、目录约定写准。</li>
+<li>第一个问题不要让它改代码。先问「这个仓库的入口在哪、测试怎么跑」，看它对代码库的理解对不对，比直接派活更能暴露上下文问题。</li>
+<li>再让它改一处小东西，改完用 <code>git diff</code> 自己过一遍再接受。</li>
+<li>话题切换的时候用 <code>/clear</code> 清掉上下文，旧任务的残留会让它跑偏。想知道花了多少，用 <code>/cost</code>，或者去 <a href="/key-usage">/key-usage</a> 按 Key 查明细。</li>
+</ol>
+<p>用下来最有效的习惯只有一条：一次只交代一件事。任务拆得越碎，它跑偏的概率越低，你复核的成本也越低。让它一口气重构三个模块，最后往往是你自己回滚。</p>
+
+<h2>几条提醒</h2>
+<ul>
+<li>Key 不要写进代码、不要提交到 git，只放在 shell 配置或已被 .gitignore 忽略的 .env 里。</li>
+<li>本地、CI、服务器各建一把 Key，出问题好定位，需要吊销时也不会互相牵连。</li>
+<li>报错先看 HTTP 状态码再看 error.code，401、403、404、429、503 的处理方式完全不同，别一律当成网络抖动重试，具体见《API 报错怎么读》。</li>
+<li>Key 疑似泄露，或者遇到额度、余额相关的报错，都直接找管理员，这类问题在本地改不好。</li>
+</ul>
+      </div>
+      <nav class="artnav" aria-label="文章导航">
+        <a class="pg prev hide" href="#"><svg class="ic"><use href="#i-left"/></svg><span><span class="lbl">上一篇</span><span class="tt"></span></span></a>
+        <a class="pg next hide" href="#"><span><span class="lbl">下一篇</span><span class="tt"></span></span><svg class="ic"><use href="#i-right"/></svg></a>
+      </nav>
+    </div>
+  </article>
+
+  <article class="view post" id="post-codex-getting-started" data-slug="codex-getting-started" data-title="Codex 入门：CLI 安装、config.toml 与常见坑">
+    <div class="art">
+      <a class="back" href="#"><svg class="ic"><use href="#i-left"/></svg>返回博客列表</a>
+      <h1>Codex 入门：CLI 安装、config.toml 与常见坑</h1>
+      <div class="amt">
+        <span class="date">2026-09-12</span>
+        <span class="tags"><span class="tag-chip">Codex</span><span class="tag-chip">Setup</span></span>
+      </div>
+      <div class="body">
+<h2>装 CLI</h2>
+<p>Codex 是 OpenAI 官方的命令行工具，和 Claude Code 一样依赖 Node.js。Node 装好之后：</p>
+<pre><code>npm install -g @openai/codex
+codex --version</code></pre>
+<p>接入 spool 之前，先确认你已经在 <a href="/keys">/keys</a> 建好了 API Key，并且记住它所属的分组，分组决定你能填哪些模型 id。</p>
+<p>它有两种用法：直接敲 <code>codex</code> 进交互式会话，或者用 <code>codex exec</code> 跑一条命令就退出，后者适合塞进脚本。两种用法读的是同一份配置。</p>
+
+<h2>配置目录</h2>
+<p>Codex 的配置在用户目录下的 <code>.codex</code> 文件夹，macOS 和 Linux 是 <code>~/.codex</code>，Windows 是 <code>%USERPROFILE%\.codex</code>。目录不存在就自己建：</p>
+<pre><code>mkdir -p ~/.codex</code></pre>
+<p>Finder 默认不显示点开头的目录，按 Command+Shift+. 可以切换显示，或者干脆全程在终端里操作，反而快。</p>
+
+<h2>config.toml</h2>
+<p>新建 <code>~/.codex/config.toml</code>，写一个指向 spool 的 provider，再把默认 provider 指过去：</p>
+<pre><code>model_provider = "spool"
+model = "MODEL_ID"              # 换成 /v1/models 返回的模型 id
+model_reasoning_effort = "high"
+disable_response_storage = true
+
+[model_providers.spool]
+name = "spool"
+base_url = "https://spool.corp.internal/v1"
+wire_api = "responses"
+env_key = "OPENAI_API_KEY"</code></pre>
+<p>注意 <code>base_url</code> 末尾的 <code>/v1</code>：Codex 走的是 OpenAI 风格接口，这一段必须带上。Claude Code 那边正好相反，填的是不带 /v1 的裸地址。这是两篇教程之间最容易抄串的一行。</p>
+<p><code>disable_response_storage</code> 建议保持打开，走网关时不要依赖服务端的会话存储。<code>model_reasoning_effort</code> 是思考力度，先用默认值跑通再按任务调。config.toml 里还能配审批策略和沙箱级别，那些和接入无关，等能正常对话了再研究。</p>
+
+<h3>凭证放哪</h3>
+<p>两种写法，选一种，不要两种都写。一是环境变量，配合上面的 <code>env_key</code>：</p>
+<pre><code>export OPENAI_BASE_URL="https://spool.corp.internal/v1"
+export OPENAI_API_KEY="替换成你的 Key"</code></pre>
+<p>二是写进 <code>~/.codex/auth.json</code>，适合不想动 shell 配置的机器：</p>
+<pre><code>{
+  "OPENAI_API_KEY": "替换成你的 Key"
+}</code></pre>
+
+<h2>模型 id 怎么定</h2>
+<p>不要凭印象写。网关把模型 id 原样透传给上游，能不能用只取决于你所在分组的白名单：</p>
+<pre><code>curl -s https://spool.corp.internal/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"</code></pre>
+<p>返回里有的才能填。填错会拿到 404，消息里带 not available for this group，这说明模型存在但你的分组没放行，改拼写没用，得找管理员调分组。</p>
+
+<h2>常见坑</h2>
+<ul>
+<li><strong>base_url 漏了 /v1。</strong>最常见的一个，表现是路径 404，或者客户端报一个看起来像网络故障的错。</li>
+<li><strong>表名对不上。</strong><code>[model_providers.spool]</code> 里的 spool 必须和顶部 <code>model_provider</code> 的值一字不差。写错了 Codex 找不到 provider，报的错和连不上网长得很像，能耗掉不少时间。</li>
+<li><strong>改完配置没重启。</strong>Codex 只在启动时读一次配置文件，正在跑的会话不会热加载。改完退出重开，再验证。</li>
+<li><strong>auth.json 和环境变量都配了。</strong>两处同时存在时以哪边为准取决于版本，典型症状是「明明换了 Key 还是旧的在生效」。只留一种。</li>
+<li><strong>TOML 写坏了。</strong>字符串要用英文双引号，表头要顶格，注释用 <code>#</code>。从聊天窗口粘贴时特别留意中文引号和全角空格。</li>
+<li><strong>公司代理拦截。</strong>设了 HTTPS_PROXY 的机器记得把内网域名加进 NO_PROXY，否则请求会先绕出公网再被挡回来。</li>
+</ul>
+
+<h2>跑起来之后</h2>
+<p>Codex 会读工作目录里的 AGENTS.md，把项目约定、构建命令、代码风格写进去，比每次在对话里重复交代靠谱。这份文件和接入无关，但决定了它在你仓库里好不好用。</p>
+<p>如果你同时接了几个网关，或者一个网关里要在不同模型之间来回切，可以在 config.toml 里配多个 provider，用命令行参数指定这次用哪个，省得反复改文件。改哪一种方式都记得重启。</p>
+
+<h2>验证</h2>
+<pre><code>codex exec "用一句话说明你是谁"</code></pre>
+<p>能正常返回就算通了。如果报错，先分清是网关侧还是 Codex 侧：用上面那条 curl 打一次 /v1/models，能返回模型清单就说明 Key 和地址都没问题，剩下的错只可能出在 config.toml。</p>
+<p>再往下就是看状态码：401 是 Key 不对，404 多半是模型名或 base_url，403 是余额，429 和 503 分别对应额度、限速和上游可用性，各自的处理方式见《API 报错怎么读》。</p>
+      </div>
+      <nav class="artnav" aria-label="文章导航">
+        <a class="pg prev hide" href="#"><svg class="ic"><use href="#i-left"/></svg><span><span class="lbl">上一篇</span><span class="tt"></span></span></a>
+        <a class="pg next hide" href="#"><span><span class="lbl">下一篇</span><span class="tt"></span></span><svg class="ic"><use href="#i-right"/></svg></a>
+      </nav>
+    </div>
+  </article>
+
+  <article class="view post" id="post-api-error-codes" data-slug="api-error-codes" data-title="API 报错怎么读：401 / 403 / 429 / 404 / 503 排查指南">
+    <div class="art">
+      <a class="back" href="#"><svg class="ic"><use href="#i-left"/></svg>返回博客列表</a>
+      <h1>API 报错怎么读：401 / 403 / 429 / 404 / 503 排查指南</h1>
+      <div class="amt">
+        <span class="date">2026-09-12</span>
+        <span class="tags"><span class="tag-chip">Error Codes</span><span class="tag-chip">Troubleshooting</span></span>
+      </div>
+      <div class="body">
+<h2>先看两个字段</h2>
+<p>网关的错误都带结构，排查只需要两样东西：HTTP 状态码，和响应体里的 <code>error.code</code> 或 <code>error.type</code>。同一个状态码下语义可能完全不同，尤其是 429，只看状态码会把「该重试」和「重试也没用」混为一谈，这是这套错误码里最贵的一个误判。</p>
+<p>命令行里最快的抓法是加 <code>-i</code> 把响应头一起打出来：</p>
+<pre><code>curl -i https://spool.corp.internal/v1/models \
+  -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN"</code></pre>
+<p>图形客户端经常只显示一句「请求失败」，把原始响应吞掉。这种时候先用 curl 复现一次，拿到真正的状态码再判断，比在客户端里反复点重试有用得多。</p>
+
+<h2>401 凭证不对</h2>
+<p>Key 写错、被删、已过期，或者压根没传上去。先排除几种低级情况：复制时带了首尾空格或换行、环境变量名拼错、shell 配置改了但没有 <code>source</code>、客户端里存的还是上一把 Key、同时设了两个变量而它们的值不一样。确认无误后回 <a href="/keys">/keys</a>，列表里随时可以重新复制完整的 Key，不需要重新创建，也不用担心之前没保存。</p>
+
+<h2>403 + INSUFFICIENT_BALANCE 余额不足</h2>
+<p>账户余额已经低于可用线，请求在到达上游之前就被拦下了。这不是你能在客户端里改好的事，换模型、换客户端都没用，找管理员。</p>
+
+<h2>429 要分两种看</h2>
+<h3>额度用完：QUOTA_EXHAUSTED / USAGE_LIMIT_EXCEEDED</h3>
+<p>走 Codex 的 OpenAI 风格路径时，同一类情况的 type 是 <code>insufficient_quota</code>。这几个码的含义是配额已经耗尽，<strong>重试没有任何意义</strong>，等一会儿也不会自己好。脚本里尤其要把它和限速区分开，否则会在一个必然失败的请求上一直退避重试到超时，日志里还只留下一串 429，看不出真正原因。处理方式只有一个：找管理员加额度。</p>
+<h3>限速：USER_RPM_EXCEEDED / GROUP_RPM_EXCEEDED</h3>
+<p>单位时间内请求数超了。前者是你这把 Key 自己超的，后者是整个分组一起超的。这种是暂时的，退避重试就行，建议指数退避加随机抖动，别用固定间隔硬打，固定间隔的并发很容易在下一个窗口再次一起撞上。如果看到的是 GROUP，说明同组同事也在跑，跟他们说一声比继续重试有效。</p>
+
+<h2>404 模型不在分组白名单</h2>
+<p>消息里带 not available for this group，意思是模型名本身没问题，但你这把 Key 所在的分组没放行它。不要改拼写反复试，直接问网关：</p>
+<pre><code>curl -s https://spool.corp.internal/v1/models \
+  -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN"</code></pre>
+<p>返回的就是你能用的全部模型，id 原样透传，清单里怎么写就怎么填。确实需要清单之外的模型，找管理员调整分组。</p>
+
+<h2>503 暂时没有可用上游</h2>
+<p>当前没有可调度的上游账号，可能是都在忙，也可能是都被临时标记为不可用。和限速一样退避重试，持续几分钟不恢复就告诉管理员，这通常意味着上游侧需要人介入。</p>
+
+<h2>一张对照表</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>状态码</th><th>关键字段</th><th>含义</th><th>怎么办</th></tr></thead>
+<tbody>
+<tr><td>401</td><td>—</td><td>Key 不对或没传</td><td>回 /keys 重新复制</td></tr>
+<tr><td>403</td><td>INSUFFICIENT_BALANCE</td><td>余额不足</td><td>找管理员</td></tr>
+<tr><td>429</td><td>QUOTA_EXHAUSTED / USAGE_LIMIT_EXCEEDED（Codex 路径为 insufficient_quota）</td><td>额度用完</td><td>别重试，找管理员</td></tr>
+<tr><td>429</td><td>USER_RPM_EXCEEDED / GROUP_RPM_EXCEEDED</td><td>触发限速</td><td>退避后重试</td></tr>
+<tr><td>404</td><td>not available for this group</td><td>模型不在分组白名单</td><td>查 /v1/models</td></tr>
+<tr><td>503</td><td>—</td><td>暂时没有可用上游账号</td><td>退避后重试</td></tr>
+</tbody>
+</table></div>
+
+<h2>写重试逻辑时</h2>
+<p>只对 429 限速和 503 重试，其余一律立刻失败，并把 <code>error.code</code> 原样打进日志。把 429 当成一类统一重试，是最容易踩的坑。另外流式请求的错误可能在连接建立之后才以事件的形式发回来，客户端不要只在收到响应头那一刻判断成败，否则会出现「开头是 200，中途断了，程序却认为成功」。</p>
+
+<h2>需要找管理员的时候</h2>
+<p>把这几样一起给出来，一轮就能定位：出错时间、状态码、error.code、用的模型 id、Key 的名称（不是 Key 本身）、以及是哪个客户端。<strong>任何情况下都不要把完整的 Key 贴进聊天窗口</strong>，需要确认是不是 Key 的问题，说名称就够了。</p>
+      </div>
+      <nav class="artnav" aria-label="文章导航">
+        <a class="pg prev hide" href="#"><svg class="ic"><use href="#i-left"/></svg><span><span class="lbl">上一篇</span><span class="tt"></span></span></a>
+        <a class="pg next hide" href="#"><span><span class="lbl">下一篇</span><span class="tt"></span></span><svg class="ic"><use href="#i-right"/></svg></a>
+      </nav>
+    </div>
+  </article>
+
+  <article class="view post" id="post-client-setup-guide" data-slug="client-setup-guide" data-title="客户端接入指南：Cherry Studio、Chatbox、CC Switch 怎么填">
+    <div class="art">
+      <a class="back" href="#"><svg class="ic"><use href="#i-left"/></svg>返回博客列表</a>
+      <h1>客户端接入指南：Cherry Studio、Chatbox、CC Switch 怎么填</h1>
+      <div class="amt">
+        <span class="date">2026-09-12</span>
+        <span class="tags"><span class="tag-chip">Clients</span><span class="tag-chip">Setup</span></span>
+      </div>
+      <div class="body">
+<h2>只需要记住一条规则</h2>
+<p>spool 同时兼容两种协议风格，填地址的时候按客户端类型选：</p>
+<ul>
+<li><strong>Anthropic 风格</strong>（Claude API、Claude Code）：<code>https://spool.corp.internal</code>，原样填，不加后缀。</li>
+<li><strong>OpenAI 风格</strong>（OpenAI API、Codex、绝大多数第三方客户端）：<code>https://spool.corp.internal/v1</code>。</li>
+</ul>
+<p>Key 在 <a href="/keys">/keys</a> 创建，同一把 Key 两种风格都能用，不需要为不同模型族分别建。列表里随时能再复制一次，不用担心弹窗关掉就没了。</p>
+<p>还有一条同样重要：模型 id 由网关原样透传，能用哪些取决于 Key 所属的分组。填之前先拿清单，省掉一整轮猜名字：</p>
+<pre><code>curl -s https://spool.corp.internal/v1/models \
+  -H "Authorization: Bearer 你的Key"</code></pre>
+
+<h2>Cherry Studio</h2>
+<p>桌面客户端，Windows / macOS / Linux 都有。</p>
+<ol>
+<li>点左下角齿轮进设置，左侧选「模型服务」。</li>
+<li>在列表底部点添加，服务商类型选 <strong>OpenAI</strong>，名称随便填一个自己能认出来的，比如 spool。</li>
+<li>API 地址填 <code>https://spool.corp.internal/v1</code>，API Key 填你的 Key。</li>
+<li>Cherry Studio 不会自动拉取模型列表，需要在服务商详情页手动「添加模型」，把 /v1/models 返回的 id 一条条填进去。填的是 id，不是展示名。</li>
+<li>打开详情面板右上角的启用开关，回到对话界面，从模型下拉里选中刚加的那个。</li>
+</ol>
+<p>想用 Anthropic 原生风格，把服务商类型换成 Anthropic，地址改成不带 /v1 的那个，其余一样。</p>
+
+<h2>Chatbox</h2>
+<p>跨平台，桌面端和手机端配置方式一致。进设置里的模型页，按你要用的模型族选提供方：</p>
+<ul>
+<li>Claude 系列：提供方选「Claude API」，API 地址填 <code>https://spool.corp.internal</code>。</li>
+<li>GPT 系列：提供方选「OpenAI API」，API 地址填 <code>https://spool.corp.internal/v1</code>。</li>
+</ul>
+<p>两种都用同一把 Key，模型名从 /v1/models 里抄。保存后新建一个会话发条消息，能回就是通了。手机端如果连的是内网地址，记得先确认设备在公司网络或已经连上内网通道，不然会卡在连接超时，跟配置本身没关系。</p>
+<p>有些客户端会自己在你填的地址后面补路径。如果照上面填完立刻 404，把 /v1 加上或者去掉再试一次，多数情况就是这一段重复或者缺失。判断依据很简单：报 404 而不是 401，说明 Key 是对的，问题在路径。</p>
+
+<h2>CC Switch</h2>
+<p>这个不是聊天客户端，而是管命令行工具配置的桌面应用。它直接改写 <code>~/.claude/settings.json</code> 和 <code>~/.codex/config.toml</code>、<code>~/.codex/auth.json</code>，用来在多个供应商之间一键切换。手上同时接了几个网关的人值得装一个。</p>
+<p>前提是本机已经装好了对应的 CLI，否则它没有可管的对象。</p>
+<h3>Claude Code 供应商</h3>
+<ul>
+<li>名称：spool</li>
+<li>ANTHROPIC_BASE_URL：<code>https://spool.corp.internal</code></li>
+<li>ANTHROPIC_AUTH_TOKEN：你的 Key</li>
+</ul>
+<h3>Codex 供应商</h3>
+<ul>
+<li>名称：spool</li>
+<li>base_url：<code>https://spool.corp.internal/v1</code></li>
+<li>wire_api：<code>responses</code></li>
+<li>model：/v1/models 里的某个 id</li>
+<li>OPENAI_API_KEY：你的 Key</li>
+</ul>
+<p>切换只是改文件，已经开着的 CLI 不会感知到。切完记得把终端里的 claude 或 codex 退出重开，否则你会看到「明明切过去了还是走旧配置」。另外它改的是全局配置文件，如果你之前手动在这些文件里写过别的东西，切换前先备份一份。</p>
+
+<h2>其他 OpenAI 兼容的客户端和 SDK</h2>
+<p>规则完全一样：地址 <code>https://spool.corp.internal/v1</code>，凭证放 <code>OPENAI_API_KEY</code>。官方 SDK 里就是 <code>base_url</code> 和 <code>api_key</code> 两个参数，IDE 插件通常叫「自定义 API 地址」或「Custom endpoint」。凡是能填这两项的，都能接。</p>
+
+<h2>验证和排错</h2>
+<p>任何客户端配完，都用同一个动作验证：新建会话，发一条最短的消息，别一上来就贴长文档试。失败时看状态码，401 是 Key，404 多半是模型名或地址里的 /v1，403 是余额，429 和 503 分别对应额度、限速和上游可用性，逐个的判断方法见《API 报错怎么读》。额度和余额相关的报错在客户端里改不好，找管理员。</p>
+<p>最后一条：手机上的客户端和共用的机器同样在存你的 Key。这类设备单独建一把，不要和本地开发共用，丢了也只需要吊销一把。</p>
+      </div>
+      <nav class="artnav" aria-label="文章导航">
+        <a class="pg prev hide" href="#"><svg class="ic"><use href="#i-left"/></svg><span><span class="lbl">上一篇</span><span class="tt"></span></span></a>
+        <a class="pg next hide" href="#"><span><span class="lbl">下一篇</span><span class="tt"></span></span><svg class="ic"><use href="#i-right"/></svg></a>
+      </nav>
+    </div>
+  </article>
+
+</div>
+
+<footer class="ft">
+  <div class="wrap">
+    <div class="fg">
+      <div>
+        <div class="fb">
+          <svg viewBox="0 0 512 512" role="img" aria-label="spool"><path fill="#d97757" fill-rule="evenodd" d="M200 96a160 160 0 1 0 0 320 160 160 0 1 0 0-320Zm0 68a92 92 0 1 1 0 184 92 92 0 1 1 0-184Z"/><rect x="200" y="352" width="280" height="64" fill="#d97757"/><circle cx="200" cy="256" r="40" fill="#f5e0c3"/></svg>
+          <span class="wm">spool</span>
+        </div>
+        <p class="tag">Claude / Codex 模型网关</p>
+      </div>
+      <div class="fc">
+        <h3>产品</h3>
+        <ul>
+          <li><a href="/docs.html">教程</a></li>
+          <li><a href="/blog.html">博客</a></li>
+          <li><a href="/dashboard">控制台</a></li>
+          <li><a href="/keys">API Keys</a></li>
+          <li><a href="/key-usage">用量查询</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <p class="cp">© 2026 spool. All rights reserved.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var list = document.getElementById("list");
+  var posts = [].slice.call(document.querySelectorAll(".post"));
+  if (!list || !posts.length) return;
+  var order = posts.map(function(p){ return p.getAttribute("data-slug"); });
+  var bySlug = {};
+  posts.forEach(function(p, i){ bySlug[p.getAttribute("data-slug")] = { el: p, i: i, title: p.getAttribute("data-title") }; });
+  var baseTitle = "博客 · spool";
+
+  /* ---------- enhance prose ---------- */
+  function guessLang(txt){
+    var t = (txt || "").trim();
+    if (/^\{|^\[/.test(t)) return "json";
+    if (/\$env:|setx |choco |winget /.test(t)) return "powershell";
+    if (/^[a-z_]+ *= *"|^\[[a-z_.]+\]/m.test(t)) return "toml";
+    if (/^\s*(curl|npm|brew|export|cd |cat |mkdir|echo|claude|codex|node )/m.test(t)) return "bash";
+    return "text";
+  }
+  document.querySelectorAll(".body pre").forEach(function(pre){
+    if (pre.parentNode && pre.parentNode.classList.contains("code-block")) return;
+    var code = pre.querySelector("code");
+    var lang = "";
+    if (code) {
+      var m = (code.className || "").match(/lang-([\w-]+)/);
+      if (m) lang = m[1];
+    }
+    if (!lang) lang = guessLang(code ? code.textContent : pre.textContent);
+    var wrap = document.createElement("div");
+    wrap.className = "code-block";
+    wrap.innerHTML = '<div class="cb-head"><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>' +
+      '<span class="cb-lang"></span><button class="cb-copy" type="button" aria-label="复制代码">' +
+      '<svg class="ic"><use href="#i-copy"></use></svg><span>复制</span></button></div>';
+    wrap.querySelector(".cb-lang").textContent = lang;
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+  });
+  document.querySelectorAll(".body table").forEach(function(t){
+    if (t.parentNode && t.parentNode.classList.contains("table-wrap")) return;
+    var w = document.createElement("div");
+    w.className = "table-wrap";
+    t.parentNode.insertBefore(w, t);
+    w.appendChild(t);
+  });
+
+  /* ---------- copy ---------- */
+  function feedback(btn){
+    btn.classList.add("done");
+    btn.querySelector("span").textContent = "已复制";
+    btn.querySelector("use").setAttribute("href", "#i-check");
+    setTimeout(function(){
+      btn.classList.remove("done");
+      btn.querySelector("span").textContent = "复制";
+      btn.querySelector("use").setAttribute("href", "#i-copy");
+    }, 1600);
+  }
+  function legacyCopy(text, ok){
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;left:0;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); ok(); } catch (e) { /* 复制失败则静默 */ }
+    document.body.removeChild(ta);
+  }
+  document.addEventListener("click", function(e){
+    var btn = e.target.closest ? e.target.closest(".cb-copy") : null;
+    if (!btn) return;
+    var block = btn.closest(".code-block");
+    var code = block && block.querySelector("code, pre");
+    if (!code) return;
+    var text = code.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function(){ feedback(btn); }, function(){ legacyCopy(text, function(){ feedback(btn); }); });
+    } else {
+      legacyCopy(text, function(){ feedback(btn); });
+    }
+  });
+
+  /* ---------- article nav ---------- */
+  posts.forEach(function(p, i){
+    var prev = order[i - 1], next = order[i + 1];
+    var ap = p.querySelector(".pg.prev"), an = p.querySelector(".pg.next");
+    if (prev) { ap.classList.remove("hide"); ap.href = "#" + prev; ap.querySelector(".tt").textContent = bySlug[prev].title; }
+    if (next) { an.classList.remove("hide"); an.href = "#" + next; an.querySelector(".tt").textContent = bySlug[next].title; }
+  });
+
+  /* ---------- routing ---------- */
+  function route(){
+    var slug = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+    var rec = bySlug[slug];
+    list.classList.toggle("show", !rec);
+    posts.forEach(function(p){ p.classList.toggle("show", !!rec && p === rec.el); });
+    document.title = rec ? (rec.title + " · 博客 · spool") : baseTitle;
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", route);
+  route();
+})();
+</script>
+</body>
+</html>
