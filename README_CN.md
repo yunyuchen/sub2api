@@ -1,3 +1,5 @@
+> 本仓库是 **spool**（团队内部 AI 网关）的部署源码，基于开源项目 [Sub2API](https://github.com/Wei-Shaw/sub2api)（LGPL-3.0）二次开发；下文为上游项目的原始说明。
+
 <div align="center">
 
 <img src="assets/logo.svg" alt="Sub2API Logo" width="128" />

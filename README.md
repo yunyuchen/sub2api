@@ -1,3 +1,5 @@
+> This repository is the deployment source of **spool**, a team-internal AI gateway built on the open-source [Sub2API](https://github.com/Wei-Shaw/sub2api) (LGPL-3.0); the original upstream README follows.
+
 <div align="center">
 
 <img src="assets/logo.svg" alt="Sub2API Logo" width="128" />
