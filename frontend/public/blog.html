@@ -312,18 +312,18 @@ claude --version</code></pre>
 <h2>接入 spool</h2>
 <p>Claude Code 只认两个东西：网关地址和凭证。地址原样填，<strong>不要加 /v1</strong>，带 /v1 是 OpenAI 风格客户端的写法，两边不要抄串。</p>
 <pre><code># ~/.zshrc 或 ~/.bashrc
-export ANTHROPIC_BASE_URL="https://spool.corp.internal"
+export ANTHROPIC_BASE_URL="https://rq.yunyc.work"
 export ANTHROPIC_AUTH_TOKEN="替换成你在 /keys 里创建的 Key"</code></pre>
 <p>写完执行 <code>source ~/.zshrc</code> 让它立刻生效，新开的终端会自动带上。<code>ANTHROPIC_API_KEY</code> 同样被识别，两个变量填一个就行，不用都填，也不要填成两个不一样的值。</p>
 <p>Windows 上写进 PowerShell Profile：先 <code>notepad $PROFILE</code> 打开（文件不存在会自动创建），加两行再重开终端。</p>
-<pre><code>$env:ANTHROPIC_BASE_URL = "https://spool.corp.internal"
+<pre><code>$env:ANTHROPIC_BASE_URL = "https://rq.yunyc.work"
 $env:ANTHROPIC_AUTH_TOKEN = "替换成你的 Key"</code></pre>
 <p>如果不想污染全局环境，也可以把这两项写进 <code>~/.claude/settings.json</code> 的 env 字段，只对 Claude Code 生效。机器上同时有别的工具要连别的地址时，这样更干净。</p>
 <p>配没配对用 <code>claude doctor</code> 看一眼，它会顺带检查安装状态和连通性。检测不到凭证时，直接运行 <code>claude</code> 会进入登录引导，但团队里统一用环境变量更省事，也方便换 Key。</p>
 
 <h2>确认自己能用哪些模型</h2>
 <p>模型清单没有第二份真相，以网关返回的为准：</p>
-<pre><code>curl -s https://spool.corp.internal/v1/models \
+<pre><code>curl -s https://rq.yunyc.work/v1/models \
   -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN"</code></pre>
 <p>返回的是你这把 Key 所属分组的可用模型。模型 id 原样透传给上游，网关不做改名，所以清单里写什么就填什么。填清单以外的名字会收到 404，消息里带 not available for this group，这时候不是名字拼错，是分组没放行。</p>
 
@@ -382,7 +382,7 @@ disable_response_storage = true
 
 [model_providers.spool]
 name = "spool"
-base_url = "https://spool.corp.internal/v1"
+base_url = "https://rq.yunyc.work/v1"
 wire_api = "responses"
 env_key = "OPENAI_API_KEY"</code></pre>
 <p>注意 <code>base_url</code> 末尾的 <code>/v1</code>：Codex 走的是 OpenAI 风格接口，这一段必须带上。Claude Code 那边正好相反，填的是不带 /v1 的裸地址。这是两篇教程之间最容易抄串的一行。</p>
@@ -390,7 +390,7 @@ env_key = "OPENAI_API_KEY"</code></pre>
 
 <h3>凭证放哪</h3>
 <p>两种写法，选一种，不要两种都写。一是环境变量，配合上面的 <code>env_key</code>：</p>
-<pre><code>export OPENAI_BASE_URL="https://spool.corp.internal/v1"
+<pre><code>export OPENAI_BASE_URL="https://rq.yunyc.work/v1"
 export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <p>二是写进 <code>~/.codex/auth.json</code>，适合不想动 shell 配置的机器：</p>
 <pre><code>{
@@ -399,7 +399,7 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 
 <h2>模型 id 怎么定</h2>
 <p>不要凭印象写。网关把模型 id 原样透传给上游，能不能用只取决于你所在分组的白名单：</p>
-<pre><code>curl -s https://spool.corp.internal/v1/models \
+<pre><code>curl -s https://rq.yunyc.work/v1/models \
   -H "Authorization: Bearer $OPENAI_API_KEY"</code></pre>
 <p>返回里有的才能填。填错会拿到 404，消息里带 not available for this group，这说明模型存在但你的分组没放行，改拼写没用，得找管理员调分组。</p>
 
@@ -441,7 +441,7 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <h2>先看两个字段</h2>
 <p>网关的错误都带结构，排查只需要两样东西：HTTP 状态码，和响应体里的 <code>error.code</code> 或 <code>error.type</code>。同一个状态码下语义可能完全不同，尤其是 429，只看状态码会把「该重试」和「重试也没用」混为一谈，这是这套错误码里最贵的一个误判。</p>
 <p>命令行里最快的抓法是加 <code>-i</code> 把响应头一起打出来：</p>
-<pre><code>curl -i https://spool.corp.internal/v1/models \
+<pre><code>curl -i https://rq.yunyc.work/v1/models \
   -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN"</code></pre>
 <p>图形客户端经常只显示一句「请求失败」，把原始响应吞掉。这种时候先用 curl 复现一次，拿到真正的状态码再判断，比在客户端里反复点重试有用得多。</p>
 
@@ -459,7 +459,7 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 
 <h2>404 模型不在分组白名单</h2>
 <p>消息里带 not available for this group，意思是模型名本身没问题，但你这把 Key 所在的分组没放行它。不要改拼写反复试，直接问网关：</p>
-<pre><code>curl -s https://spool.corp.internal/v1/models \
+<pre><code>curl -s https://rq.yunyc.work/v1/models \
   -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN"</code></pre>
 <p>返回的就是你能用的全部模型，id 原样透传，清单里怎么写就怎么填。确实需要清单之外的模型，找管理员调整分组。</p>
 
@@ -504,12 +504,12 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <h2>只需要记住一条规则</h2>
 <p>spool 同时兼容两种协议风格，填地址的时候按客户端类型选：</p>
 <ul>
-<li><strong>Anthropic 风格</strong>（Claude API、Claude Code）：<code>https://spool.corp.internal</code>，原样填，不加后缀。</li>
-<li><strong>OpenAI 风格</strong>（OpenAI API、Codex、绝大多数第三方客户端）：<code>https://spool.corp.internal/v1</code>。</li>
+<li><strong>Anthropic 风格</strong>（Claude API、Claude Code）：<code>https://rq.yunyc.work</code>，原样填，不加后缀。</li>
+<li><strong>OpenAI 风格</strong>（OpenAI API、Codex、绝大多数第三方客户端）：<code>https://rq.yunyc.work/v1</code>。</li>
 </ul>
 <p>Key 在 <a href="/keys">/keys</a> 创建，同一把 Key 两种风格都能用，不需要为不同模型族分别建。列表里随时能再复制一次，不用担心弹窗关掉就没了。</p>
 <p>还有一条同样重要：模型 id 由网关原样透传，能用哪些取决于 Key 所属的分组。填之前先拿清单，省掉一整轮猜名字：</p>
-<pre><code>curl -s https://spool.corp.internal/v1/models \
+<pre><code>curl -s https://rq.yunyc.work/v1/models \
   -H "Authorization: Bearer 你的Key"</code></pre>
 
 <h2>Cherry Studio</h2>
@@ -517,7 +517,7 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <ol>
 <li>点左下角齿轮进设置，左侧选「模型服务」。</li>
 <li>在列表底部点添加，服务商类型选 <strong>OpenAI</strong>，名称随便填一个自己能认出来的，比如 spool。</li>
-<li>API 地址填 <code>https://spool.corp.internal/v1</code>，API Key 填你的 Key。</li>
+<li>API 地址填 <code>https://rq.yunyc.work/v1</code>，API Key 填你的 Key。</li>
 <li>Cherry Studio 不会自动拉取模型列表，需要在服务商详情页手动「添加模型」，把 /v1/models 返回的 id 一条条填进去。填的是 id，不是展示名。</li>
 <li>打开详情面板右上角的启用开关，回到对话界面，从模型下拉里选中刚加的那个。</li>
 </ol>
@@ -526,8 +526,8 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <h2>Chatbox</h2>
 <p>跨平台，桌面端和手机端配置方式一致。进设置里的模型页，按你要用的模型族选提供方：</p>
 <ul>
-<li>Claude 系列：提供方选「Claude API」，API 地址填 <code>https://spool.corp.internal</code>。</li>
-<li>GPT 系列：提供方选「OpenAI API」，API 地址填 <code>https://spool.corp.internal/v1</code>。</li>
+<li>Claude 系列：提供方选「Claude API」，API 地址填 <code>https://rq.yunyc.work</code>。</li>
+<li>GPT 系列：提供方选「OpenAI API」，API 地址填 <code>https://rq.yunyc.work/v1</code>。</li>
 </ul>
 <p>两种都用同一把 Key，模型名从 /v1/models 里抄。保存后新建一个会话发条消息，能回就是通了。手机端如果连的是内网地址，记得先确认设备在公司网络或已经连上内网通道，不然会卡在连接超时，跟配置本身没关系。</p>
 <p>有些客户端会自己在你填的地址后面补路径。如果照上面填完立刻 404，把 /v1 加上或者去掉再试一次，多数情况就是这一段重复或者缺失。判断依据很简单：报 404 而不是 401，说明 Key 是对的，问题在路径。</p>
@@ -538,13 +538,13 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <h3>Claude Code 供应商</h3>
 <ul>
 <li>名称：spool</li>
-<li>ANTHROPIC_BASE_URL：<code>https://spool.corp.internal</code></li>
+<li>ANTHROPIC_BASE_URL：<code>https://rq.yunyc.work</code></li>
 <li>ANTHROPIC_AUTH_TOKEN：你的 Key</li>
 </ul>
 <h3>Codex 供应商</h3>
 <ul>
 <li>名称：spool</li>
-<li>base_url：<code>https://spool.corp.internal/v1</code></li>
+<li>base_url：<code>https://rq.yunyc.work/v1</code></li>
 <li>wire_api：<code>responses</code></li>
 <li>model：/v1/models 里的某个 id</li>
 <li>OPENAI_API_KEY：你的 Key</li>
@@ -552,7 +552,7 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <p>切换只是改文件，已经开着的 CLI 不会感知到。切完记得把终端里的 claude 或 codex 退出重开，否则你会看到「明明切过去了还是走旧配置」。另外它改的是全局配置文件，如果你之前手动在这些文件里写过别的东西，切换前先备份一份。</p>
 
 <h2>其他 OpenAI 兼容的客户端和 SDK</h2>
-<p>规则完全一样：地址 <code>https://spool.corp.internal/v1</code>，凭证放 <code>OPENAI_API_KEY</code>。官方 SDK 里就是 <code>base_url</code> 和 <code>api_key</code> 两个参数，IDE 插件通常叫「自定义 API 地址」或「Custom endpoint」。凡是能填这两项的，都能接。</p>
+<p>规则完全一样：地址 <code>https://rq.yunyc.work/v1</code>，凭证放 <code>OPENAI_API_KEY</code>。官方 SDK 里就是 <code>base_url</code> 和 <code>api_key</code> 两个参数，IDE 插件通常叫「自定义 API 地址」或「Custom endpoint」。凡是能填这两项的，都能接。</p>
 
 <h2>验证和排错</h2>
 <p>任何客户端配完，都用同一个动作验证：新建会话，发一条最短的消息，别一上来就贴长文档试。失败时看状态码，401 是 Key，404 多半是模型名或地址里的 /v1，403 是余额，429 和 503 分别对应额度、限速和上游可用性，逐个的判断方法见《API 报错怎么读》。额度和余额相关的报错在客户端里改不好，找管理员。</p>

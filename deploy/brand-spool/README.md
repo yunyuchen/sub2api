@@ -17,7 +17,7 @@
 
 ## 粘贴前唯一要改的地方
 
-把 `https://spool.corp.internal` 换成你实例的实际地址，共 3 处（首屏 curl、FAQ「Base URL」答案、`ANTHROPIC_BASE_URL`），以控制台 API Keys 页面显示的地址为准。
+地址已固定为本实例的 `https://rq.yunyc.work`（首页 3 处、教程与博客页若干处）；换域名时全局替换即可。
 
 ## 已按源码核实的行为描述（改文案时别写反）
 
