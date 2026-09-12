@@ -159,3 +159,10 @@ output/
 .vite/
 # 本地闭源插件开发目录及构建产物不进入 Sub2API 仓库
 /plugins/
+
+# local tooling / scratch
+.agents/
+skills-lock.json
+/package-lock.json
+frontend/pnpm-workspace.yaml
+frontend/src/views/admin/__prototype__/
