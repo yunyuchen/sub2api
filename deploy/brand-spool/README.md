@@ -14,16 +14,12 @@
 1. 管理后台 → 系统设置 → 站点设置。
 2. 站点名称填 `spool`（全小写）；副标题填 `site-copy.txt` 里那句。
 3. 站点 Logo 上传 `spool.svg`（接受 SVG，≤300KB）。上传后前端把文件转成 data URL 保存，所有位置引用同一份。
-4. 首页内容：先把 `home_content.html` 里的方括号占位符替换完，再整段粘贴。内容不能以 `http://` 或 `https://` 开头（那会切成 iframe 模式）。
+4. 首页内容：把 `home_content.html` 里的地址换成实际地址后整段粘贴。内容不能以 `http://` 或 `https://` 开头（那会切成 iframe 模式）。
 5. 保存后硬刷新（浏览器会缓存旧 favicon）。
 
-## 粘贴前必须替换的占位符
+## 粘贴前唯一要改的地方
 
-- `https://spool.corp.internal`：base URL，可见 3 处（hero 地址块、`ANTHROPIC_BASE_URL`、`OPENAI_BASE_URL`），以控制台 API Keys 页面显示的地址为准；替换完后删掉 hero 下那句 `[base URL：…]` 说明。
-- `[登录方式：…]`：公司 OAuth 还是邮箱账号、首次登录是否自动建号。
-- `[配额策略：…]` 与其中的 `[每月 1 号]`：每人多少额度、由谁批、是否复位。
-- `[平台组 / 填负责人]`：4 处（第四节 404 一句、第五节两处、页脚）。
-- `[值班群：填群名]`：1 处。
+把 `https://spool.corp.internal` 换成你实例的实际地址，共 3 处（hero 地址块、`ANTHROPIC_BASE_URL`、`OPENAI_BASE_URL`），以控制台 API Keys 页面显示的地址为准。其余文案已定稿：额度按人分配、出事找管理员、登录由管理员开通账号。
 
 ## 已按源码核实的行为描述（改文案时别写反）
 

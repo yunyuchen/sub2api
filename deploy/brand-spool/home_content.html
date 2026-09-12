@@ -1,11 +1,4 @@
-<!-- spool home_content · 运维需要替换的占位符（全部写成 [方括号]）：
-     1. https://spool.corp.internal —— base URL，可见 3 处需要替换：hero 的地址块、ANTHROPIC_BASE_URL 行、OPENAI_BASE_URL 行；
-        第 4 处在 hero 下方那句 [base URL：…] 说明里，替换完把整句删掉。
-     2. [登录方式：…] —— 第二节第 1 步，写清是公司 OAuth 还是邮箱账号、首次登录是否自动建号。
-     3. [配额策略：…] —— 第五节，内含 [每月 1 号] 复位日。
-     4. [平台组 / 填负责人] —— 第四节 1 处、第五节 2 处、页脚 1 处，共 4 处。
-     5. [值班群：填群名] —— 第五节 1 处。
-     无 JS、无外部资源；CSS 全部限定在 .spool-home 下。 -->
+<!-- spool home_content · 粘贴前把 https://spool.corp.internal 换成你实例的实际地址（共 3 处：hero 地址块、ANTHROPIC_BASE_URL、OPENAI_BASE_URL），以控制台 API Keys 页面显示的为准。 -->
 <style>
 .spool-home{
   --paper:#F1F3EC; --band:#E7EBE1; --ink:#101A17; --ink-2:#4A554F;
@@ -120,7 +113,7 @@ html.dark .spool-home .cmd{box-shadow:inset 0 0 0 1px var(--rule);}
     <p class="lede">spool 是我们内部的 AI 网关。公司买的上游订阅账号在这边排成一个池，对外只露一个兼容端点。你拿一把自己的 key，改两个环境变量，用量记在你名下。就这些。</p>
     <p class="cap" style="margin-top:26px">base URL</p>
     <div class="cmd"><span class="l url" style="user-select:all;-webkit-user-select:all">https://spool.corp.internal</span></div>
-    <p class="note">这一页不跑 JavaScript，所以没有复制按钮。点一下带琥珀竖条的块里的命令行，那一行整行选中，Cmd-C 拿走；灰色的注释行不选中，本来也不用复制。<br><span class="ph">[base URL：以控制台 API Keys 页面显示的为准；本页可见 3 处 https://spool.corp.internal，换的时候一起换，然后删掉这句]</span></p>
+    <p class="note">这一页不跑 JavaScript，所以没有复制按钮。点一下带琥珀竖条的块里的命令行，那一行整行选中，Cmd-C 拿走；灰色的注释行不选中，本来也不用复制。</p>
   </section>
 
   <section class="sec">
@@ -135,7 +128,7 @@ html.dark .spool-home .cmd{box-shadow:inset 0 0 0 1px var(--rule);}
   <section class="sec">
     <h2>拿一把 key</h2>
     <ol class="steps">
-      <li>登录 <a class="path" href="/login">/login</a>。<span class="ph">[登录方式：公司 OAuth 还是邮箱账号、首次登录是否自动建号——管理员填]</span>。这台机器不开放自助注册，要 key 先登录。</li>
+      <li>登录 <a class="path" href="/login">/login</a>。这台机器不开放自助注册，账号由管理员开通；要 key 先登录。</li>
       <li>进 <a class="path" href="/dashboard">/dashboard</a>，打开 <a class="path" href="/keys">/keys</a>，新建一把 key。</li>
       <li>选分组，这一项必填。一个分组对应一类上游账号（Claude 系、GPT-Codex 系、Gemini 系各归各的），也决定这把 key 打 <code>/v1/models</code> 时看到哪些模型。协议不用管：<code>/v1/messages</code> 和 <code>/v1/responses</code> 网关都收，再按分组翻译给上游。清单以新建表单里的下拉为准；一把 key 只属于一个分组，想用两个池就开两把。</li>
       <li>给它起个认得出用途的名字：<code>claude-code-mac</code>、<code>cursor</code>、<code>ci-eval</code>。以后要停哪一把，你自己就能定位。</li>
@@ -177,7 +170,7 @@ html.dark .spool-home .cmd{box-shadow:inset 0 0 0 1px var(--rule);}
       <li>试验性接入的：Antigravity 等，随时可能下线。</li>
     </ul>
     <p>model id 直接抄 <code>/v1/models</code> 的返回，不要凭记忆手写——上游改名的频率比你想象的高。</p>
-    <p>某个模型突然 <code>404</code>，先看 message：写着 <code>not available for this group</code> 的，是这个模型不在你分组的白名单里，换分组，或找 <span class="ph">[平台组 / 填负责人]</span> 加；其余的 404 通常是上游改了 id，或者这条线暂时被摘掉了，打一次 <code>/v1/models</code> 核对。</p>
+    <p>某个模型突然 <code>404</code>，先看 message：写着 <code>not available for this group</code> 的，是这个模型不在你分组的白名单里，换分组，或找管理员加；其余的 404 通常是上游改了 id，或者这条线暂时被摘掉了，打一次 <code>/v1/models</code> 核对。</p>
   </section>
 
   <section class="sec">
@@ -185,15 +178,15 @@ html.dark .spool-home .cmd{box-shadow:inset 0 0 0 1px var(--rule);}
     <p>池子是共享的，额度是按人的。用量在控制台看得到；不想登录就用 <a href="/key-usage">用量查询</a>，输入 key 查自己那一份。</p>
     <p>额度用完不降级、不静默截断——你会看到报错，不会看到胡话。报错先看 body 里的 code，别只看状态码：</p>
     <ul class="rows">
-      <li><code>429</code> 且 code 带 <code>QUOTA_EXHAUSTED</code> 或 <code>USAGE_LIMIT_EXCEEDED</code>（Codex 那条路上写成 <code>insufficient_quota</code>）：额度用完。退避重试没有用，去找 <span class="ph">[平台组 / 填负责人]</span>。</li>
+      <li><code>429</code> 且 code 带 <code>QUOTA_EXHAUSTED</code> 或 <code>USAGE_LIMIT_EXCEEDED</code>（Codex 那条路上写成 <code>insufficient_quota</code>）：额度用完。退避重试没有用，找管理员加额。</li>
       <li><code>429</code> 且 code 是 <code>USER_RPM_EXCEEDED</code> 或 <code>GROUP_RPM_EXCEEDED</code>：限速打满。退避几秒重试。</li>
       <li><code>403</code> 且 code 是 <code>INSUFFICIENT_BALANCE</code>：账户余额不足。同样去要额度。</li>
       <li><code>503</code>：池里能跑这个模型的账号暂时都不可用。退避重试；一直 503 就去群里说。</li>
     </ul>
-    <p class="note"><span class="ph">[配额策略：每人多少额度、由谁批、是否在 [每月 1 号] 复位——由管理员在这里写明，不要让同事靠猜]</span></p>
+    <p class="note">额度由管理员按人分配。用完了，或者手头的任务明显要超，提前找管理员加，不要换别人的 key 顶。</p>
     <p>跑批量任务或压测前在群里说一声，错开高峰。不要用交互用的 key 跑 CI，单独开一把。一把 key 对应一个用途。</p>
     <p>上游账号偶尔会掉。spool 会把它摘掉，换池里别的账号重试；你可能感觉到一次重试的延迟。全都掉了的时候你拿到的是 503，不是变慢。</p>
-    <p>维护：<span class="ph">[平台组 / 填负责人]</span>，值班群 <span class="ph">[值班群：填群名]</span>。故障、加模型、要额度都去那里。修这台机器的人就在群里，他们不介意被问。</p>
+    <p>维护：管理员。故障、加模型、要额度都找管理员，他们不介意被问。</p>
   </section>
 
   <footer class="ft">
@@ -203,7 +196,7 @@ html.dark .spool-home .cmd{box-shadow:inset 0 0 0 1px var(--rule);}
       <li><a href="/keys">API Keys</a></li>
       <li><a href="/key-usage">用量查询（不登录）</a></li>
     </ul>
-    <p>spool — 内部服务，不对外提供。跑在自建的 Sub2API 上。出事找 <span class="ph">[平台组 / 填负责人]</span>。</p>
+    <p>spool — 内部服务，不对外提供。跑在自建的 Sub2API 上。出事找管理员。</p>
   </footer>
 
 </div>
