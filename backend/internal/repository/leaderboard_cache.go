@@ -610,7 +610,7 @@ func leaderboardViewerModelsCacheTTL(windowEnd, now time.Time) time.Duration {
 }
 
 // leaderboardMetricSegment 取第 index 段并解析；段缺失或解析失败时返回 0, false，
-// 由调用方决定是「按 0 处理」（后两段）还是「整行作废」（前两段）。
+// 由调用方决定是「按 0 处理」（第 3 段起的十段）还是「整行作废」（前两段）。
 func leaderboardMetricSegment(parts []string, index int) (int64, bool) {
 	if index >= len(parts) {
 		return 0, false

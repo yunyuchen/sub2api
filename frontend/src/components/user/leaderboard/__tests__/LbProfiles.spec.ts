@@ -94,7 +94,7 @@ describe('LbProfiles', () => {
     expect(wrapper.find('[data-testid="leaderboard-profiles-more"]').exists()).toBe(false)
   })
 
-  // 后端把占比取整成整数，不足 0.5% 会变成 0：这种模型确实被调过，MUST NOT 显示成 0%。
+  // 后端把占比向下取整成整数，不足 1% 会变成 0：这种模型确实被调过，MUST NOT 显示成 0%。
   it('shows sub-percent shares as <1% instead of 0%', () => {
     const wrapper = mountProfiles([
       {

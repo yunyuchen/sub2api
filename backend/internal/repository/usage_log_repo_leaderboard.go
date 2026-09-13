@@ -11,7 +11,8 @@ import (
 	"github.com/lib/pq"
 )
 
-// leaderboardTopModelsFallbackLimit 是调用方没给条数时的兜底（页面取 Top 8）。
+// leaderboardTopModelsFallbackLimit 是调用方没给条数时的兜底：两处调用（今日模型热度 Top 8、
+// 本人模型偏好 Top 5）都显式传入条数，这里只防 limit <= 0。
 const leaderboardTopModelsFallbackLimit = 8
 
 // leaderboardNightHourEnd 是夜猫子的时段上界（站点时区 0 点起、不含该点）。
@@ -394,7 +395,7 @@ func (r *usageLogRepository) LeaderboardTopStreak(ctx context.Context, fromDate,
 //
 // userIDs 只会是该 Window Total Tokens 的前 50 名（与榜单本体同一个数），因此 = ANY 的集合很小；
 // 为空时直接返回空切片，连库都不查。排序保证同一个人的模型按成功请求数倒序、同数按模型名升序，
-// 上层据此取每人的 Top N 而不必再排一次。
+// 上层据此直接按序列出每人的全部模型，不必再排一次。
 func (r *usageLogRepository) LeaderboardUserModelBreakdown(ctx context.Context, userIDs []int64, start, end time.Time) (results []usagestats.LeaderboardUserModelUsageRow, err error) {
 	if len(userIDs) == 0 {
 		return []usagestats.LeaderboardUserModelUsageRow{}, nil

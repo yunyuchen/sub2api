@@ -160,8 +160,7 @@ const messages: Record<string, string> = {
   'leaderboard.insights.hourly.peakWithRequests': 'Peak at {hour}:00 · {count} requests',
   'leaderboard.insights.hourly.barRequests': '{hour}:00 · {count} requests',
   'leaderboard.insights.hourly.barRelative': '{hour}:00 · {percent}% of the peak',
-  'leaderboard.profiles.more': 'others omitted',
-  'leaderboard.profiles.note': 'Model mix · top 3',
+  'leaderboard.profiles.note': 'Model mix · share of successful requests',
   'leaderboard.platforms.note': 'Today requests by platform',
   'leaderboard.platforms.legendCount': '{count} requests',
   'leaderboard.platforms.other': 'Other',
@@ -1103,7 +1102,6 @@ describe('user LeaderboardView', () => {
     )
   })
 
-  // 已进前 10 时后端不下发 hint，页面按名次自己补这一句。
   // 「已进前 10」那一句已删：名次那个大数字已经说完了，提示行整行不渲染。
   it('renders no hint line when the backend omits the hint for a top-10 viewer', async () => {
     getLeaderboard.mockResolvedValue(

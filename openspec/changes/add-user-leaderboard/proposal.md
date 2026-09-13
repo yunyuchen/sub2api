@@ -17,7 +17,7 @@
 - 榜单数据来自后台每 5 分钟重建的 Snapshot，HTTP 请求路径只读、永不触发聚合。Snapshot 尚未生成时页面显示「正在计算」；超过 15 分钟未更新时显示陈旧警告而不是静默展示旧数据。
 - Leaderboard Mode 为 `off` 时管理员仍可访问，响应带 Preview（预览）标记，页面显示「预览，普通用户不可见」横幅。
 - 接口不下发 `user_id`、邮箱与任何金额字段；身份以结构化形式返回（`kind` 为 `self` / `anonymous` / `named`），文案由前端 i18n 渲染。
-- 本变更不含 **BREAKING** 项：新增的 `users` 布尔列默认 `false`，新增的系统设置默认 `off`，公开设置负载与个人资料响应都只是新增字段，存量请求与存量行为不变。Successful Requests 与管理端 User Breakdown 的裸 `COUNT(*)` 是两个口径，但这是新增视图内部的口径选择，不改动 User Breakdown 现有行为。
+- 本变更不含 **BREAKING** 项：新增的 `users` 布尔列默认 `true` 并由迁移 240 回填既有用户（该列仅在管理员显式切到 `named` 档后才对外可见，见 ADR-0004），新增的系统设置默认 `off`，公开设置负载与个人资料响应都只是新增字段，存量请求与存量行为不变。Successful Requests 与管理端 User Breakdown 的裸 `COUNT(*)` 是两个口径，但这是新增视图内部的口径选择，不改动 User Breakdown 现有行为。
 
 ## Capabilities
 
@@ -33,7 +33,7 @@
 
 ## Impact
 
-- **数据库**：`users` 新增布尔列 `leaderboard_named_participation`（`NOT NULL DEFAULT false`），新增迁移文件 `backend/migrations/238_user_leaderboard_named_participation.sql`（新增）；`backend/ent/schema/user.go` 增加对应 `field.Bool`，重新生成 ent 代码。不新增表，不改动 `usage_logs`。
+- **数据库**：`users` 新增布尔列 `leaderboard_named_participation`；新增三个迁移文件——`backend/migrations/238_user_leaderboard_named_participation.sql`（建列，`NOT NULL DEFAULT false`）、`backend/migrations/239_leaderboard_rank_history.sql`（新建表 `leaderboard_rank_history`：`user_id` / `snapshot_date` / `rank_total_tokens` / `rank_successful_requests`，主键 `(user_id, snapshot_date)`，外加一条按 `snapshot_date` 的索引供 90 天保留期清理）、`backend/migrations/240_leaderboard_named_participation_default_true.sql`（把该列默认值改成 `true` 并把既有行一并回填为 `true`）；`backend/ent/schema/user.go` 增加对应 `field.Bool`，重新生成 ent 代码。不改动 `usage_logs`。
 - **后端**：设置接入按 `channel_monitor_mode` 的实际接入点逐一对齐——`service/domain_constants.go` 新增 `SettingKeyLeaderboardMode`、`service/setting_parse.go` 的默认值表与解析、`service/setting_update.go` 的写入归一化、`service/setting_public.go` 的读取键清单 / `GetPublicSettings` / `GetPublicSettingsForInjection` 与新增的 `normalizeLeaderboardMode`、`service/settings_view.go` 两处视图结构体、`handler/dto/settings.go` 两处、`handler/admin/setting_handler.go` 与 `handler/admin/setting_handler_update.go`，以及 `server/api_contract_test.go` 的 wantJSON 与 `handler/dto/public_settings_injection_schema_test.go`。新增 `service/leaderboard_service.go`（新增，查询与渲染）、`service/leaderboard_snapshot_service.go`（新增，后台作业）、`repository/leaderboard_cache.go`（新增，Redis 派生结构）、`repository/usage_log_repo_leaderboard.go`（新增，三窗口条件聚合，方法挂到 `service/account_usage_service.go` 里的 `UsageLogRepository` 接口）、`handler/leaderboard_handler.go`（新增）。`service/user_service.go` 的 `UpdateProfileRequest` 与 `UserUpdateFields`、`repository/user_repo.go` 的 `Update` 列投影、`handler/user_handler.go` 的 `UpdateProfileRequest` 与 `userProfileResponseFromService` 增加新字段。复用 `pkg/timezone`、`service/leader_lock.go` 的 `tryAcquireSingletonLeaderLock`、`repository/leader_lock_cache.go`、`service/timing_wheel_service.go` 的 `ScheduleRecurring`、`repository/usage_log_repo.go` 的 `usageLogSuccessFilterUL`。`service/wire.go` 新增 Provider 并在其中 `Start()`，`cmd/server/wire.go` 的 `provideCleanup` 新增该服务入参（仓库里只为副作用启动的后台服务被 wire 真正构造出来的唯一 sink），`cmd/server/wire_gen.go` 重新生成。
 - **用户端 API**：新增 `GET /api/v1/leaderboard?window=&metric=`（`server/routes/user.go` 注册，走 `jwtAuth` + `BackendModeUserGuard` + `Global()` 限流 + 审计的标准链，再加 `panelRateLimiter.Heavy()` 与新增的 Leaderboard Mode guard）。`GET /api/v1/user/profile` 与 `PUT /api/v1/user` 的负载新增 `leaderboard_named_participation`。`GET /api/v1/settings/public` 新增 `leaderboard_mode`。
 - **管理端 API**：`GET /admin/settings` 与 `PUT /admin/settings` 的负载新增 `leaderboard_mode`，写入侧白名单校验，非法值 400。不新增管理端路由——`off` 下的 Preview 走同一个用户端接口，由 guard 放行管理员。

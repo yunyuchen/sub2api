@@ -201,7 +201,6 @@
   window.addEventListener("hashchange", function(){ route(); closeDrawer(); });
 
   /* ---------- 5. scroll spy ---------- */
-  var subLinks = null;
   function markActive(id){
     side.querySelectorAll(".sub a").forEach(function(a){
       a.classList.toggle("on", a.getAttribute("data-target") === id);
@@ -214,7 +213,7 @@
     window.requestAnimationFrame(function(){
       ticking = false;
       if (!current) return;
-      subLinks = side.querySelectorAll(".sub a");
+      var subLinks = side.querySelectorAll(".sub a");
       if (!subLinks.length) return;
       var top = 130, best = null;
       for (var i = 0; i < subLinks.length; i++) {

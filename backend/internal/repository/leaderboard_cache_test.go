@@ -389,7 +389,8 @@ func TestLeaderboardCache_TopEntriesRespectsLimit(t *testing.T) {
 	require.Equal(t, int64(60), count, "Participant Count 取 ZCARD，不受榜单长度限制")
 }
 
-// Hash value 是四段：前两段是 Metric，后两段只用来算 Cache Hit Rate（缓存命中率）。
+// Hash value 是十二段：前两段是 Metric，其余十段只喂 Cache Hit Rate（缓存命中率）、Extremes（之最）
+// 与 Token 构成，MUST NOT 参与排名（顺序见 leaderboard_cache.go 的 encodeLeaderboardMetrics）。
 func TestLeaderboardCache_MetricsRoundTripTwelveFields(t *testing.T) {
 	ctx := context.Background()
 	cache, mr := newLeaderboardTestCache(t, "prod")

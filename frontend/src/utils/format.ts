@@ -173,7 +173,7 @@ export function formatDateTimeToMinute(
 /**
  * 站点时区下的「HH:MM」。
  *
- * 排行榜的状态栏、命令行标题与页脚三处时间都紧挨着 `tz=<站点时区>` 这个 chip，
+ * 排行榜的报头快照 chip 与页脚两处时间都按站点时区渲染（页脚同一行就印着时区名），
  * 用浏览器本地时区渲染会与它自相矛盾（design D4：窗口边界与一切时间都按站点时区）。
  * 时区名非法（旧后端、首屏占位符）时退回浏览器本地时区，MUST NOT 抛错让整块时间空掉。
  */
@@ -187,7 +187,7 @@ export function formatTimeToMinuteInTimeZone(
 }
 
 /**
- * 站点时区下的「YYYY-MM-DD」，与 mockup 的命令行标题一致。时区处理同上。
+ * 站点时区下的「YYYY-MM-DD」，用于标题块（LbTitle）的副题日期。时区处理同上。
  */
 export function formatDateOnlyInTimeZone(
   date: string | Date | null | undefined,

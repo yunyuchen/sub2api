@@ -20,8 +20,9 @@
  * 零渐变、零 z-index（除非必须）；圆角只有控件 4–5px、条与热力格 1.5–2px；唯一强调色
  * （亮 #a8412b / 暗 #e08066），中性冷灰，无 #000 与 rgba(0,0,0,…)。
  *
- * 字体自托管：站点 CSP 的 font-src 是 `'self' data:`，woff2 走 vite 资源管线由同源下发，
- * MUST NOT 为此改 CSP 去放行 fonts.googleapis.com / fonts.gstatic.com。
+ * 字体自托管：woff2 走 vite 资源管线由同源下发（CSP 的 font-src 含 'self'）。站点 CSP 其实已经
+ * 放行了 fonts.googleapis.com / fonts.gstatic.com，但 MUST NOT 为这一张页面改用 Google Fonts——
+ * 内网与国内网络下未必可达，自托管才能保证任何部署都拿得到字体。
  */
 
 /* ------------------------------------------------------------------ */
@@ -74,7 +75,6 @@
   --accent-wash: rgba(168, 65, 43, 0.055);
   --accent-edge: rgba(168, 65, 43, 0.28);
   --heat-0: #eaeaec;
-  --band: rgba(168, 65, 43, 0.05);
   /* 强调色底上的前景色：亮色下是纸白，暗色下是页面底色（见下方覆写） */
   --on-accent: #fbfbfc;
 
@@ -111,7 +111,6 @@ html.dark .rp {
   --accent-wash: rgba(224, 128, 102, 0.09);
   --accent-edge: rgba(224, 128, 102, 0.34);
   --heat-0: #1a1a1e;
-  --band: #141417;
   --on-accent: #0b0b0d;
 }
 
@@ -1310,11 +1309,6 @@ html.dark .rp {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.rp-monthbox .rp-up {
-  color: var(--accent-deep);
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
 }
 .rp-comp {
   margin-top: 14px;

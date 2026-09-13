@@ -75,7 +75,7 @@ Leaderboard 顶部的四张卡：该 Window 的 Total Tokens 第一、Cache Hit 
 _Avoid_: 卡片、榜单卡、highlight cards、明星榜
 
 **Insights（洞察）**:
-Leaderboard 页面上榜单以外的站点级统计：今日模型热度、近 30 天活跃度、用量趋势、今日时段分布、今日缓存命中、本月累计。与 Window 无关，永远是站点口径，不是某个人的数据。数据源缺失时整块不展示，不是显示 0。
+Leaderboard 页面上榜单以外的统计：今日模型热度、近 30 天活跃度、用量趋势、今日时段分布、今日缓存命中、本月累计、平台分布、周内节奏、Token 构成、缓存命中率趋势。这些块与 Window 无关，永远是站点口径，不是某个人的数据。模型偏好画像（profiles）是唯一的例外：它按 Window 计算、逐用户给出，只因页面区块归属才挂在 insights 下。数据源缺失时整块不展示，不是显示 0。
 _Avoid_: 图表、统计、分析、dashboard
 
 **Cache Hit Rate（缓存命中率）**:

@@ -341,7 +341,7 @@ $env:ANTHROPIC_AUTH_TOKEN = "替换成你的 Key"</code></pre>
 <ul>
 <li>Key 不要写进代码、不要提交到 git，只放在 shell 配置或已被 .gitignore 忽略的 .env 里。</li>
 <li>本地、CI、服务器各建一把 Key，出问题好定位，需要吊销时也不会互相牵连。</li>
-<li>报错先看 HTTP 状态码再看 error.code，401、403、404、429、503 的处理方式完全不同，别一律当成网络抖动重试，具体见《API 报错怎么读》。</li>
+<li>报错先看 HTTP 状态码再看 error.code，401、403、404、429、503 的处理方式完全不同，别一律当成网络抖动重试，具体见<a href="#api-error-codes">《API 报错怎么读》</a>。</li>
 <li>Key 疑似泄露，或者遇到额度、余额相关的报错，都直接找管理员，这类问题在本地改不好。</li>
 </ul>
       </div>
@@ -420,7 +420,7 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <h2>验证</h2>
 <pre><code>codex exec "用一句话说明你是谁"</code></pre>
 <p>能正常返回就算通了。如果报错，先分清是网关侧还是 Codex 侧：用上面那条 curl 打一次 /v1/models，能返回模型清单就说明 Key 和地址都没问题，剩下的错只可能出在 config.toml。</p>
-<p>再往下就是看状态码：401 是 Key 不对，404 多半是模型名或 base_url，403 是余额，429 和 503 分别对应额度、限速和上游可用性，各自的处理方式见《API 报错怎么读》。</p>
+<p>再往下就是看状态码：401 是 Key 不对，404 多半是模型名或 base_url，403 是余额，429 和 503 分别对应额度、限速和上游可用性，各自的处理方式见<a href="#api-error-codes">《API 报错怎么读》</a>。</p>
       </div>
       <nav class="artnav" aria-label="文章导航">
         <a class="pg prev hide" href="#"><svg class="ic"><use href="#i-left"/></svg><span><span class="lbl">上一篇</span><span class="tt"></span></span></a>
@@ -555,7 +555,7 @@ export OPENAI_API_KEY="替换成你的 Key"</code></pre>
 <p>规则完全一样：地址 <code>https://rq.yunyc.work/v1</code>，凭证放 <code>OPENAI_API_KEY</code>。官方 SDK 里就是 <code>base_url</code> 和 <code>api_key</code> 两个参数，IDE 插件通常叫「自定义 API 地址」或「Custom endpoint」。凡是能填这两项的，都能接。</p>
 
 <h2>验证和排错</h2>
-<p>任何客户端配完，都用同一个动作验证：新建会话，发一条最短的消息，别一上来就贴长文档试。失败时看状态码，401 是 Key，404 多半是模型名或地址里的 /v1，403 是余额，429 和 503 分别对应额度、限速和上游可用性，逐个的判断方法见《API 报错怎么读》。额度和余额相关的报错在客户端里改不好，找管理员。</p>
+<p>任何客户端配完，都用同一个动作验证：新建会话，发一条最短的消息，别一上来就贴长文档试。失败时看状态码，401 是 Key，404 多半是模型名或地址里的 /v1，403 是余额，429 和 503 分别对应额度、限速和上游可用性，逐个的判断方法见<a href="#api-error-codes">《API 报错怎么读》</a>。额度和余额相关的报错在客户端里改不好，找管理员。</p>
 <p>最后一条：手机上的客户端和共用的机器同样在存你的 Key。这类设备单独建一把，不要和本地开发共用，丢了也只需要吊销一把。</p>
       </div>
       <nav class="artnav" aria-label="文章导航">

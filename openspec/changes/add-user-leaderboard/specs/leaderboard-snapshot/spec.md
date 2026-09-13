@@ -300,7 +300,7 @@ Highlights（趣味卡）与 Insights（洞察）MUST 与 Snapshot（榜单快�
 - **THEN** 该数值 MUST 仍然按位写进 Hash，以便后续增量直接可用
 
 ### Requirement: Extremes 与新增 Insights 在同一轮作业里算好
-Extremes（之最）与新增的五块 Insights（洞察）MUST 与 Snapshot（榜单快照）在同一轮 5 分钟作业里算好并写入 Redis，请求路径 MUST NOT 为它们触发任何聚合或回源查询。按 Window（榜单窗口）计算的两块——`extremes` 与 `profiles`——MUST 写进该 Window 的 Highlights（趣味卡）JSON，与该 Window 的 ZSET、Hash 同一轮写入、同样先写临时 key 再 `RENAME`、同一个 TTL，因此一次请求读到的榜单、Highlights、Extremes 与 `profiles` MUST 必然同源。与 Window 无关的三块——`platforms_today`、`weekly_rhythm`、`cache_trend_14`——MUST 写进站点级 Insights 的 JSON；`composition_today` MUST 由今日窗口聚合的站点合计导出，MUST NOT 另查一次。`streak` MUST 读 `usage_dashboard_daily_users` 并回溯 90 天，MUST NOT 回去扫 `usage_logs`；它与 Window 无关，三个窗口的结果 MUST 相同。`profiles` 的按用户与模型聚合 MUST 只对该 Window 的前 8 名一次查出，MUST NOT 逐人各查一次。这两块 JSON MUST 只记录 `user_id` 与数值，MUST NOT 记录身份或任何金额——身份仍在响应时按 `users` 表当前状态渲染。
+Extremes（之最）与新增的五块 Insights（洞察）MUST 与 Snapshot（榜单快照）在同一轮 5 分钟作业里算好并写入 Redis，请求路径 MUST NOT 为它们触发任何聚合或回源查询。按 Window（榜单窗口）计算的两块——`extremes` 与 `profiles`——MUST 写进该 Window 的 Highlights（趣味卡）JSON，与该 Window 的 ZSET、Hash 同一轮写入、同样先写临时 key 再 `RENAME`、同一个 TTL，因此一次请求读到的榜单、Highlights、Extremes 与 `profiles` MUST 必然同源。与 Window 无关的三块——`platforms_today`、`weekly_rhythm`、`cache_trend_14`——MUST 写进站点级 Insights 的 JSON；`composition_today` MUST 由今日窗口聚合的站点合计导出，MUST NOT 另查一次。`streak` MUST 读 `usage_dashboard_daily_users` 并回溯 90 天，MUST NOT 回去扫 `usage_logs`；它与 Window 无关，三个窗口的结果 MUST 相同。`profiles` 的按用户与模型聚合 MUST 只对该 Window 的前 50 名（与榜单本体的 Top 50 同一个数）一次查出，MUST NOT 逐人各查一次。这两块 JSON MUST 只记录 `user_id` 与数值，MUST NOT 记录身份或任何金额——身份仍在响应时按 `users` 表当前状态渲染。
 
 #### Scenario: 请求不触发之最的计算
 - **WHEN** 大量用户在两轮作业之间访问 Leaderboard（排行榜）
@@ -318,9 +318,9 @@ Extremes（之最）与新增的五块 Insights（洞察）MUST 与 Snapshot（�
 - **THEN** 三个 Window 的这一项 MUST 得到相同的结果
 
 #### Scenario: 模型偏好画像只查一次
-- **WHEN** 作业为某个 Window 计算前 8 名各自的 Top 3 模型
-- **THEN** 系统 MUST 用一条限定这 8 个 `user_id` 的聚合查出全部结果
-- **THEN** 系统 MUST NOT 为这 8 个用户各发一条查询
+- **WHEN** 作业为某个 Window 计算前 50 名各自在该窗口用过的全部模型
+- **THEN** 系统 MUST 用一条限定这 50 个 `user_id` 的聚合查出全部结果
+- **THEN** 系统 MUST NOT 为这 50 个用户各发一条查询
 
 #### Scenario: 新增区块失败只降级本块
 - **WHEN** 某一轮里周内节奏或缓存命中率趋势的来源读取失败

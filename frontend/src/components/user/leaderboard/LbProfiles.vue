@@ -54,7 +54,7 @@ const CASCADE_ROWS_PER_STEP = 4
 const { displayName } = useLeaderboardDisplayName()
 
 /**
- * 后端把占比取整成整数，不足 0.5% 会变成 0：这种模型确实被调过，
+ * 后端把占比向下取整成整数，不足 1% 会变成 0：这种模型确实被调过，
  * 显示成 0% 会读成「没用过」，所以写成 <1%。
  */
 function shareLabel(model: LeaderboardProfileModel): string {

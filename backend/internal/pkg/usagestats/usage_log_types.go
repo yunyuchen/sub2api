@@ -295,7 +295,7 @@ type LeaderboardPlatformUsageRow struct {
 }
 
 // LeaderboardUserModelUsageRow 是「指定 user_id 集合在窗口内按 (user_id, model) 聚合」的一行，
-// 供模型偏好画像使用：一条 SQL 出前 8 名各自的全部模型，MUST NOT 逐人各查一次。
+// 供模型偏好画像使用：一条 SQL 出前 50 名（与榜单本体的 Top 50 同一个数）各自的全部模型，MUST NOT 逐人各查一次。
 type LeaderboardUserModelUsageRow struct {
 	UserID             int64  `json:"user_id"`
 	Model              string `json:"model"`

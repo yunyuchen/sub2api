@@ -1074,7 +1074,7 @@ export default {
       siteLabel: 'Site',
     },
     profiles: {
-      // Every model the user called in the window; shares under 0.5% render as <1%
+      // Every model the user called in the window; shares under 1% floor to 0 and render as <1%
       note: 'Model mix · share of successful requests',
     },
     platforms: {
@@ -1128,7 +1128,7 @@ export default {
         month: 'Site this month',
       },
       leadPercent: '{percent}% ahead',
-      dominantModel: 'Best: {model}',
+      dominantModel: 'Most used: {model}',
       // v3 report skin: big number and unit are separate, and the sentences are computed in
       // the frontend from the response (a clause is dropped whenever its data is missing).
       topTokensEyebrow: '{label} · most tokens',

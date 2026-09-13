@@ -8,7 +8,7 @@
     :class="rankPoints.length > 0 ? '' : 'is-single'"
     data-testid="leaderboard-whoami"
   >
-    <div class="rp-rankbox rp-r">
+    <div class="rp-r">
       <span class="rp-eyebrow">{{ t('leaderboard.whoami.rankEyebrow') }}</span>
 
       <template v-if="myRank">

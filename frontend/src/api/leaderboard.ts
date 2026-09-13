@@ -65,7 +65,7 @@ export interface LeaderboardEntry {
  *   - `relative_percent`（`anonymous` 档）：`self` 与 `tenth` 分别是本人与第 10 名相对第一名的
  *     整数百分比。他人的绝对量连差额形式都不出现。
  * 目标名次固定是前 10（写在 kind 名字里），后端不单独下发。本人已经在前 10 之内、或参与人数
- * 不足 10 人时整个 `hint` 缺席——那不是「没话说」，页面按 `rank` 自己补一句「已进前 10」。
+ * 不足 10 人时整个 `hint` 缺席，提示行整行不渲染（名次那个大数字已经说完了）。
  * 所需数值缺席时隐藏这一行，MUST NOT 拼一句半截话。
  */
 export type LeaderboardMyRankHintKind =
@@ -249,7 +249,7 @@ export interface LeaderboardMonth {
 
 /**
  * 模型偏好画像：当前 Window 前 50 名（与榜单本体同一个数）各自用过的全部模型及占比，
- * 按成功请求降序，后端不截断。占比两档都下发；取整后为 0 表示不足 0.5%（前端显示 <1%）。
+ * 按成功请求降序，后端不截断。占比两档都下发；向下取整，为 0 表示不足 1%（前端显示 <1%）。
  */
 export interface LeaderboardProfileModel {
   model: string

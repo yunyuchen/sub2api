@@ -250,7 +250,7 @@ const isDark = ref(
 let controller: AbortController | null = null
 let sequence = 0
 
-const siteName = computed(() => appStore.siteName || 'Sub2API')
+const siteName = computed(() => appStore.siteName || 'spool')
 
 /**
  * 04 章工具条上的两个分段。取值与短标签跟报头完全一致（那边也是同一组 i18n 键），
@@ -357,11 +357,12 @@ const trendRowSingle = computed(() => hasComposition.value !== hasCacheTrend.val
 const showModelsRow = computed(
   () => hasModelsToday.value || hasProfiles.value || Boolean(platformsToday.value?.length),
 )
-const showActivityRow = computed(() => Boolean(daily30.value?.length) || hasRhythm.value)
+const showActivityRow = computed(
+  () => Boolean(daily30.value?.length) || hasRhythm.value || hasHourly.value,
+)
 const showTrendRow = computed(() =>
   Boolean(
     daily30.value?.length ||
-      hourlyToday.value?.length ||
       cacheToday.value ||
       compositionToday.value ||
       cacheTrend14.value?.length,

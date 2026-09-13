@@ -95,7 +95,7 @@
 ## 8. 性能实测
 
 - [ ] 8.1 上线前用生产量级数据对 4.2 的月窗口聚合 SQL 跑 `EXPLAIN (ANALYZE, BUFFERS)`，把执行计划与 p99 记录进本 change 的验证材料
-- [ ] 8.2 条件任务：若 8.1 的 p99 达到秒级，新增覆盖索引迁移 `backend/migrations/240_usage_logs_leaderboard_covering_index_notx.sql`（新增；编号让开 v2 已占用的 `239_leaderboard_rank_history.sql`，见 11.1；`CREATE INDEX CONCURRENTLY` 配 `created_at INCLUDE (...)`，`_notx.sql` 后缀照同目录 `062_add_scheduler_and_usage_composite_indexes_notx.sql`），并重跑 8.1
+- [ ] 8.2 条件任务：若 8.1 的 p99 达到秒级，新增覆盖索引迁移 `backend/migrations/241_usage_logs_leaderboard_covering_index_notx.sql`（新增；编号让开本 change 已占用的 `239_leaderboard_rank_history.sql`（见 11.1）与 `240_leaderboard_named_participation_default_true.sql`（见 13.2）；`CREATE INDEX CONCURRENTLY` 配 `created_at INCLUDE (...)`，`_notx.sql` 后缀照同目录 `062_add_scheduler_and_usage_composite_indexes_notx.sql`），并重跑 8.1
 - [ ] 8.3 条件任务：若 8.2 后仍达到秒级，改建按用户 × 天的预聚合表，在本 change 内补齐迁移与 4.2、4.6 的改造，不留给 v2
 
 ## 9. 验证
@@ -283,7 +283,7 @@
 - [x] 13.10 新增 `docs/adr/0004-leaderboard-nickname-display-is-opt-out.md` 记录 opt-in → opt-out 的反转，并在 ADR-0002 顶部标注「部分被 0004 取代」——ADR-0002 的核心论证之一正是「实名必须自选」，不标注会与 0004 直接冲突
 - [x] 13.11 门禁重跑：`cd backend && go build ./... && go vet ./... && gofmt -l`、`go test -tags=unit -count=1 ./...`、`golangci-lint run ./... --timeout=30m`、`go test -tags=integration -count=1 ./internal/server/routes/...` 与 `./internal/repository/ -run Leaderboard`（colima 需要 `DOCKER_HOST` / `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`）、`go generate ./ent && go generate ./cmd/server` 无漂移；`cd frontend && ./node_modules/.bin/vue-tsc --noEmit`、`./node_modules/.bin/vitest run`（含 i18n 三个守门测试与新增的 `leaderboardIdentityLocales.spec.ts`）、`./node_modules/.bin/eslint --max-warnings=0 <改动文件>`、`pnpm build`（走 package.json 脚本）；`openspec validate add-user-leaderboard --strict`、`git diff --check`
 
-### 13.12–13.13 未做
+### 13.12 未做；13.13 已验收
 
 - [ ] 13.12 `displayName.ts` 的独立单测（四条分支各一例，含 username 为全空白时回退「当前用户」、`named` 但 `username` 缺席时落到匿名分支）：目前只被 `LbRankList` / `LbHighlights` / `LbExtremes` / `LbProfiles` 四个 spec 间接覆盖，`self` 分支的「有 username 用 username」没有直接断言
-- [x] 13.13 浏览器目视验收：本人行显示自己的昵称、他人显示「第 N 位」、个人资料开关默认呈「开」、`named` 档下新注册用户直接实名——需要重启本地后端让迁移 240 生效，本轮未做（本地 Vite 3101 与后端 8090 按约束未重启）
+- [x] 13.13 浏览器目视验收：本人行显示自己的昵称、他人显示「第 N 位」、个人资料开关默认呈「开」、`named` 档下新注册用户直接实名——本地后端换上含迁移 240 的二进制重启后于 2026-09-12 22:40 完成，记录见 `verification.md` 的「主控目视验收（13.13，2026-09-12 22:40）」
