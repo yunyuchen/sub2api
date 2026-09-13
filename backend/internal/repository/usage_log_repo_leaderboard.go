@@ -38,7 +38,13 @@ const leaderboardNightHourEnd = 6
 //
 // v2 在同一条 SQL 上扩容（design D20）：每个窗口再加六个数喂 Extremes（之最）与 Token 构成，
 // 另加两个与窗口无关的「昨日」数当进步之星的基线，扫描下界相应放宽到
-// min(月初, 周一, 昨日起点)。新增的十四个数一律不参与排名，ZSET 仍然只有两个 Metric。
+// min(月初, 周一, 昨日起点)。新增的十四个数一律不参与排名。
+//
+// 每个窗口另出一个 actual_cost 求和（today_cost / week_cost / month_cost，USD），
+// 它是第三个 Metric（Cost）的来源，与 Total Tokens、Successful Requests 一样进 ZSET。
+// 取 actual_cost 而不是 total_cost：用户自己的用量页「花费」用的就是它，成功落账口径
+// （usageLogSuccessFilterUL）本来也是按 actual_cost > 0 判的。求和口径与 token 列一致，
+// 即窗口内所有行求和——失败占位行的 actual_cost 本来就是 0，不必再加过滤。
 //
 // 新增列的口径分两类，刻意不统一（见 usagestats.LeaderboardAggregateRow 的注释）：
 //   - output / cache_creation / night / yesterday_tokens 是 token 求和，沿用既有 token 列
@@ -47,7 +53,7 @@ const leaderboardNightHourEnd = 6
 //   - distinct_models / max_single / media_requests / yesterday_requests 是按请求取值，
 //     带 usageLogSuccessFilterUL，否则「刷失败请求」就能改写杂食者与单次最大。
 //
-// 返回行只含 user_id 与数值，不含身份与任何金额。
+// 返回行只含 user_id 与数值（含三个窗口的消费金额），不含身份。
 func (r *usageLogRepository) AggregateLeaderboardWindows(ctx context.Context, todayStart, weekStart, monthStart time.Time) (results []usagestats.LeaderboardAggregateRow, err error) {
 	yesterdayStart := todayStart.AddDate(0, 0, -1)
 	scanStart := monthStart
@@ -78,6 +84,10 @@ func (r *usageLogRepository) AggregateLeaderboardWindows(ctx context.Context, to
 			COUNT(*) FILTER (WHERE ul.created_at >= $3 AND ` + usageLogSuccessFilterUL + `) AS month_requests,
 			COALESCE(SUM(ul.input_tokens) FILTER (WHERE ul.created_at >= $3), 0) AS month_input_tokens,
 			COALESCE(SUM(ul.cache_read_tokens) FILTER (WHERE ul.created_at >= $3), 0) AS month_cache_read_tokens,
+
+			COALESCE(SUM(ul.actual_cost) FILTER (WHERE ul.created_at >= $1), 0) AS today_cost,
+			COALESCE(SUM(ul.actual_cost) FILTER (WHERE ul.created_at >= $2), 0) AS week_cost,
+			COALESCE(SUM(ul.actual_cost) FILTER (WHERE ul.created_at >= $3), 0) AS month_cost,
 
 			COALESCE(SUM(ul.output_tokens) FILTER (WHERE ul.created_at >= $1), 0) AS today_output_tokens,
 			COALESCE(SUM(ul.cache_creation_tokens) FILTER (WHERE ul.created_at >= $1), 0) AS today_cache_creation_tokens,
@@ -138,6 +148,9 @@ func (r *usageLogRepository) AggregateLeaderboardWindows(ctx context.Context, to
 			&row.MonthRequests,
 			&row.MonthInputTokens,
 			&row.MonthCacheReadTokens,
+			&row.TodayCost,
+			&row.WeekCost,
+			&row.MonthCost,
 			&row.TodayOutputTokens,
 			&row.TodayCacheCreationTokens,
 			&row.TodayNightTokens,

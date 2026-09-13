@@ -9,15 +9,16 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 )
 
-// leaderboard_rank_history（名次历史，migrations/239）的读写。方法挂在既有的 usageLogRepository 上，
-// 与 usage_log_repo_leaderboard.go 同一个接收者：它们同属 Leaderboard（排行榜）这一条链，
-// 由同一轮快照作业写、由同一个响应组装读。
+// leaderboard_rank_history（名次历史，migrations/239，rank_cost 列见 migrations/241）的读写。
+// 方法挂在既有的 usageLogRepository 上，与 usage_log_repo_leaderboard.go 同一个接收者：
+// 它们同属 Leaderboard（排行榜）这一条链，由同一轮快照作业写、由同一个响应组装读。
 //
-// 表里只有 user_id、日期与两个名次：没有身份、没有数值、没有任何金额（design D21）。
+// 表里只有 user_id、日期与三个 Metric 各自的名次：没有身份、没有数值，
+// 金额本身也不落这张表——Cost 那一列存的是名次，不是钱（design D21）。
 
 const (
 	// leaderboardRankHistoryBatchSize 是一次 INSERT 的行数上限。
-	// 每行四个占位符，1000 行即 4000 个参数，远低于 PostgreSQL 的 65535 上限，
+	// 每行五个占位符，1000 行即 5000 个参数，远低于 PostgreSQL 的 65535 上限，
 	// 同时避免十万人站点把一整轮参与者塞进单条语句。
 	leaderboardRankHistoryBatchSize = 1000
 
@@ -50,23 +51,25 @@ func (r *usageLogRepository) UpsertLeaderboardRankHistory(ctx context.Context, r
 
 func (r *usageLogRepository) upsertLeaderboardRankHistoryBatch(ctx context.Context, rows []usagestats.LeaderboardRankHistoryRow) error {
 	values := make([]string, 0, len(rows))
-	args := make([]any, 0, len(rows)*4)
+	args := make([]any, 0, len(rows)*5)
 	for _, row := range rows {
 		base := len(args)
-		values = append(values, "($"+strconv.Itoa(base+1)+", $"+strconv.Itoa(base+2)+"::date, $"+strconv.Itoa(base+3)+", $"+strconv.Itoa(base+4)+")")
+		values = append(values, "($"+strconv.Itoa(base+1)+", $"+strconv.Itoa(base+2)+"::date, $"+strconv.Itoa(base+3)+", $"+strconv.Itoa(base+4)+", $"+strconv.Itoa(base+5)+")")
 		args = append(args,
 			row.UserID,
 			row.SnapshotDate.Format(leaderboardRankHistoryDateLayout),
 			row.RankTotalTokens,
 			row.RankSuccessfulRequests,
+			row.RankCost,
 		)
 	}
 	query := `
-		INSERT INTO leaderboard_rank_history (user_id, snapshot_date, rank_total_tokens, rank_successful_requests)
+		INSERT INTO leaderboard_rank_history (user_id, snapshot_date, rank_total_tokens, rank_successful_requests, rank_cost)
 		VALUES ` + strings.Join(values, ", ") + `
 		ON CONFLICT (user_id, snapshot_date) DO UPDATE SET
 			rank_total_tokens = EXCLUDED.rank_total_tokens,
-			rank_successful_requests = EXCLUDED.rank_successful_requests
+			rank_successful_requests = EXCLUDED.rank_successful_requests,
+			rank_cost = EXCLUDED.rank_cost
 	`
 	_, err := r.sql.ExecContext(ctx, query, args...)
 	return err
@@ -78,7 +81,7 @@ func (r *usageLogRepository) upsertLeaderboardRankHistoryBatch(ctx context.Conte
 // （design D21）。查看者还没有历史时返回空切片，由上层渲染成「隐藏这一格」而不是一条空折线。
 func (r *usageLogRepository) LeaderboardRankHistory(ctx context.Context, userID int64, fromDate, toDate time.Time) (results []usagestats.LeaderboardRankHistoryRow, err error) {
 	query := `
-		SELECT user_id, snapshot_date, rank_total_tokens, rank_successful_requests
+		SELECT user_id, snapshot_date, rank_total_tokens, rank_successful_requests, rank_cost
 		FROM leaderboard_rank_history
 		WHERE user_id = $1
 		  AND snapshot_date >= $2::date
@@ -102,7 +105,7 @@ func (r *usageLogRepository) LeaderboardRankHistory(ctx context.Context, userID 
 	results = make([]usagestats.LeaderboardRankHistoryRow, 0)
 	for rows.Next() {
 		var row usagestats.LeaderboardRankHistoryRow
-		if err := rows.Scan(&row.UserID, &row.SnapshotDate, &row.RankTotalTokens, &row.RankSuccessfulRequests); err != nil {
+		if err := rows.Scan(&row.UserID, &row.SnapshotDate, &row.RankTotalTokens, &row.RankSuccessfulRequests, &row.RankCost); err != nil {
 			return nil, err
 		}
 		results = append(results, row)

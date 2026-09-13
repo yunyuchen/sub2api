@@ -69,11 +69,13 @@ const messages: Record<string, string> = {
   'leaderboard.metrics.label': 'Metric',
   'leaderboard.metrics.totalTokens': 'Total tokens',
   'leaderboard.metrics.successfulRequests': 'Successful requests',
+  'leaderboard.metrics.cost': 'Spend',
   'leaderboard.masthead.brand': 'Leaderboard',
   'leaderboard.masthead.modeAnonymous': 'Anonymous',
   'leaderboard.masthead.rebuildIn': '(rebuilds in {minutes}m)',
   'leaderboard.masthead.metricTokens': 'tokens',
   'leaderboard.masthead.metricRequests': 'requests',
+  'leaderboard.masthead.metricCost': 'spend',
   'leaderboard.masthead.theme': 'Theme',
   'leaderboard.masthead.themeLight': 'Light',
   'leaderboard.masthead.themeDark': 'Dark',
@@ -131,6 +133,7 @@ const messages: Record<string, string> = {
   'leaderboard.table.relativeToTop': 'Relative to #1',
   'leaderboard.table.totalTokens': 'Total tokens',
   'leaderboard.table.successfulRequestsShort': 'Successful',
+  'leaderboard.table.cost': 'Spend',
   'leaderboard.table.relativeUnknown': 'Top entry usage is not public in anonymous mode',
   'leaderboard.table.relativePercent': '{percent}% of the top entry',
   'leaderboard.table.selfBadge': 'You',
@@ -142,6 +145,7 @@ const messages: Record<string, string> = {
   'leaderboard.myRank.suppressedHint':
     'Too few participants to list board rows; anonymity would be meaningless',
   'leaderboard.myRank.hint.gapTokens': '{gap} more tokens to reach the top {rank}',
+  'leaderboard.myRank.hint.gapCost': '{gap} more spend to reach the top {rank}',
   'leaderboard.myRank.hint.relative':
     'You are at {percent}% of the top entry; rank {rank} sits at {target}%',
   'leaderboard.insights.modelHeat.title': 'Models today',
@@ -244,6 +248,7 @@ function namedEntry(overrides: Partial<LeaderboardEntry> = {}): LeaderboardEntry
     is_self: false,
     total_tokens: 1234,
     successful_requests: 42,
+    cost: 12.34,
     ...overrides,
   }
 }
@@ -294,6 +299,7 @@ function namedHighlights(): LeaderboardHighlights {
     site: {
       total_tokens: 21_400_000,
       successful_requests: 6412,
+      cost: 428.5,
       participant_count: 137,
       cache_hit_rate: 0.712,
       peak_hour: 14,
@@ -517,7 +523,7 @@ describe('user LeaderboardView', () => {
         entries: [namedEntry()],
         highlights: namedHighlights(),
         viewer: namedViewer(),
-        my_rank: { rank: 12, total_tokens: 900, successful_requests: 7 },
+        my_rank: { rank: 12, total_tokens: 900, successful_requests: 7, cost: 0.42 },
       }),
     )
 
@@ -546,7 +552,7 @@ describe('user LeaderboardView', () => {
         entries: [namedEntry()],
         highlights: namedHighlights(),
         viewer: namedViewer(),
-        my_rank: { rank: 12, total_tokens: 900, successful_requests: 7 },
+        my_rank: { rank: 12, total_tokens: 900, successful_requests: 7, cost: 0.42 },
         insights: namedInsights(),
       }),
     )
@@ -573,7 +579,7 @@ describe('user LeaderboardView', () => {
         // 快照已就绪却没有 highlights：01 与 02 整章消失（之最与 highlights 同住一批快照）
         highlights: null,
         viewer: namedViewer(),
-        my_rank: { rank: 12, total_tokens: 900, successful_requests: 7 },
+        my_rank: { rank: 12, total_tokens: 900, successful_requests: 7, cost: 0.42 },
         insights: namedInsights(),
       }),
     )
@@ -629,6 +635,82 @@ describe('user LeaderboardView', () => {
         'aria-pressed',
       ),
     ).toBe('true')
+  })
+
+  // Metric 是三项：cost 与另两项走同一份状态、同一组请求参数，列高亮也随之切换。
+  it('switches to the spend metric from either segment and asks the backend for it', async () => {
+    getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()], highlights: namedHighlights() }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="leaderboard-col-cost"]').attributes('aria-sort')).toBe(
+      'none',
+    )
+
+    getLeaderboard.mockClear()
+    getLeaderboard.mockResolvedValue(
+      makeResponse({ metric: 'cost', entries: [namedEntry()], highlights: namedHighlights() }),
+    )
+    await wrapper.find('[data-testid="leaderboard-rank-metric-cost"]').trigger('click')
+    await flushPromises()
+
+    expect(getLeaderboard).toHaveBeenCalledTimes(1)
+    expect(getLeaderboard).toHaveBeenLastCalledWith(
+      expect.objectContaining({ window: 'today', metric: 'cost' }),
+      expect.anything(),
+    )
+    // 报头与工具条是同一份状态
+    expect(wrapper.find('[data-testid="leaderboard-metric-cost"]').attributes('aria-pressed')).toBe(
+      'true',
+    )
+    expect(wrapper.find('[data-testid="leaderboard-col-cost"]').attributes('aria-sort')).toBe(
+      'descending',
+    )
+    // 金额列在实名档是绝对金额
+    expect(wrapper.find('[data-testid="leaderboard-row"]').find('.rp-lb-cost').text()).toBe(
+      '$12.34',
+    )
+  })
+
+  // 匿名档：他人行的金额也只剩相对第一名的百分比，本人行仍是真实金额。
+  it('shows a relative spend percent for anonymous peers and the real amount for the viewer', async () => {
+    getLeaderboard.mockResolvedValue(
+      makeResponse({
+        mode: 'anonymous',
+        metric: 'cost',
+        participant_count: '100+',
+        entries: [
+          namedEntry({
+            rank: 1,
+            ordinal: 1,
+            identity: { kind: 'anonymous' },
+            total_tokens: undefined,
+            successful_requests: undefined,
+            cost: undefined,
+            total_tokens_relative_percent: 100,
+            successful_requests_relative_percent: 100,
+            cost_relative_percent: 100,
+          }),
+          namedEntry({
+            rank: 2,
+            ordinal: 2,
+            identity: { kind: 'self' },
+            is_self: true,
+            cost: 6.5,
+          }),
+        ],
+        my_rank: { rank: 2, total_tokens: 900, successful_requests: 7, cost: 6.5 },
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="leaderboard-row"]').find('.rp-lb-cost').text()).toBe('100%')
+    expect(wrapper.find('[data-testid="leaderboard-row-self"]').find('.rp-lb-cost').text()).toBe(
+      '$6.50',
+    )
   })
 
   // v3 的入场是纯 CSS 级联：首帧即可读，MUST NOT 依赖可见性。
@@ -847,7 +929,7 @@ describe('user LeaderboardView', () => {
         entries: [],
         entries_suppressed: true,
         participant_count: '<5',
-        my_rank: { rank: 2, total_tokens: 900, successful_requests: 7 },
+        my_rank: { rank: 2, total_tokens: 900, successful_requests: 7, cost: 0.42 },
       }),
     )
 
@@ -879,7 +961,7 @@ describe('user LeaderboardView', () => {
         entries_suppressed: true,
         participant_count: '<5',
         highlights: null,
-        my_rank: { rank: 2, total_tokens: 900, successful_requests: 7 },
+        my_rank: { rank: 2, total_tokens: 900, successful_requests: 7, cost: 0.42 },
       }),
     )
 
@@ -947,8 +1029,10 @@ describe('user LeaderboardView', () => {
             is_self: false,
             total_tokens: undefined,
             successful_requests: undefined,
+            cost: undefined,
             total_tokens_relative_percent: 100,
             successful_requests_relative_percent: 100,
+            cost_relative_percent: 100,
           }),
           namedEntry({
             rank: 2,
@@ -959,7 +1043,7 @@ describe('user LeaderboardView', () => {
             successful_requests: 7,
           }),
         ],
-        my_rank: { rank: 2, total_tokens: 900, successful_requests: 7 },
+        my_rank: { rank: 2, total_tokens: 900, successful_requests: 7, cost: 0.42 },
       }),
     )
 
@@ -983,7 +1067,7 @@ describe('user LeaderboardView', () => {
         entries: [
           namedEntry({ rank: 1, ordinal: 1, identity: { kind: 'self' }, is_self: true }),
         ],
-        my_rank: { rank: 1, total_tokens: 900, successful_requests: 7 },
+        my_rank: { rank: 1, total_tokens: 900, successful_requests: 7, cost: 0.42 },
       }),
     )
 
@@ -1009,8 +1093,10 @@ describe('user LeaderboardView', () => {
             identity: { kind: 'anonymous' },
             total_tokens: undefined,
             successful_requests: undefined,
+            cost: undefined,
             total_tokens_relative_percent: 42,
             successful_requests_relative_percent: 17,
+            cost_relative_percent: 42,
           }),
         ],
       }),
@@ -1068,6 +1154,7 @@ describe('user LeaderboardView', () => {
           rank: 17,
           total_tokens: 640_000,
           successful_requests: 233,
+          cost: 8.75,
           hint: { kind: 'tokens_to_top10', value: 24_000 },
         },
       }),
@@ -1084,12 +1171,13 @@ describe('user LeaderboardView', () => {
         mode: 'anonymous',
         participant_count: '100+',
         entries: [namedEntry({ identity: { kind: 'anonymous' }, total_tokens: undefined,
-          successful_requests: undefined, total_tokens_relative_percent: 100,
-          successful_requests_relative_percent: 100 })],
+          successful_requests: undefined, cost: undefined, total_tokens_relative_percent: 100,
+          successful_requests_relative_percent: 100, cost_relative_percent: 100 })],
         my_rank: {
           rank: 12,
           total_tokens: 900,
           successful_requests: 7,
+          cost: 0.42,
           hint: { kind: 'relative_percent', self: 2, tenth: 3 },
         },
       }),
@@ -1107,7 +1195,7 @@ describe('user LeaderboardView', () => {
     getLeaderboard.mockResolvedValue(
       makeResponse({
         entries: [namedEntry()],
-        my_rank: { rank: 3, total_tokens: 900, successful_requests: 7 },
+        my_rank: { rank: 3, total_tokens: 900, successful_requests: 7, cost: 0.42 },
       }),
     )
 
@@ -1137,9 +1225,9 @@ describe('user LeaderboardView', () => {
         mode: 'anonymous',
         participant_count: '100+',
         entries: [namedEntry({ identity: { kind: 'anonymous' }, total_tokens: undefined,
-          successful_requests: undefined, total_tokens_relative_percent: 100,
-          successful_requests_relative_percent: 100 })],
-        my_rank: { rank: 12, total_tokens: 900, successful_requests: 7 },
+          successful_requests: undefined, cost: undefined, total_tokens_relative_percent: 100,
+          successful_requests_relative_percent: 100, cost_relative_percent: 100 })],
+        my_rank: { rank: 12, total_tokens: 900, successful_requests: 7, cost: 0.42 },
         highlights: { ...namedHighlights(), site: { participant_count: '100+', cache_hit_rate: 0.52, avg_tokens_per_request: 2100 } },
         viewer: namedViewer(),
       }),
@@ -1308,8 +1396,8 @@ describe('user LeaderboardView', () => {
         mode: 'anonymous',
         participant_count: '100+',
         entries: [namedEntry({ identity: { kind: 'anonymous' }, total_tokens: undefined,
-          successful_requests: undefined, total_tokens_relative_percent: 100,
-          successful_requests_relative_percent: 100 })],
+          successful_requests: undefined, cost: undefined, total_tokens_relative_percent: 100,
+          successful_requests_relative_percent: 100, cost_relative_percent: 100 })],
         insights: anonymousInsights(),
       }),
     )

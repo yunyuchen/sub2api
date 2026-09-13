@@ -40,7 +40,7 @@ export default {
         },
         leaderboard: {
           title: 'Usage Leaderboard',
-          description: 'A usage ranking for logged-in users, with three increasing exposure levels. Off by default. The board never shows costs or email addresses.',
+          description: 'A usage ranking for logged-in users, with three increasing exposure levels. Off by default. The board never shows email addresses; spend follows the same tier rule as tokens (anonymous mode only shows relative percentages).',
           mode: 'Leaderboard mode',
           modeHint: 'A failed read or an invalid value always falls back to "Off" (fail-closed). A change takes effect within seconds; after first enabling it, allow one 5-minute snapshot cycle.',
           modeOff: 'Off',

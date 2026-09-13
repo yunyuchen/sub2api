@@ -5,7 +5,7 @@
 ## ADDED Requirements
 
 ### Requirement: Leaderboard Mode 是三档递增的系统设置，默认 off
-系统 SHALL 新增系统设置 `leaderboard_mode`，取值 MUST 只有 `off`、`anonymous`、`named` 三档，默认值 MUST 是 `off`。`off`：Leaderboard 对普通用户既不可见也不可访问，管理员可 Preview（预览）。`anonymous`：所有人以匿名形态出现，他人的数值只给相对第一名的整数百分比，Participant Count（参与人数）只给分档。`named`：开启了 Named Participation 且 `username` 合格的用户以实名形态出现，其余仍是匿名形态，所有数值与 Participant Count 精确。模式开启后管理员与普通用户 MUST 看到完全相同的数据，Leaderboard MUST NOT 做角色分支；需要邮箱、金额与任意起止日期的管理员 MUST 走 User Breakdown（用户用量明细）。
+系统 SHALL 新增系统设置 `leaderboard_mode`，取值 MUST 只有 `off`、`anonymous`、`named` 三档，默认值 MUST 是 `off`。`off`：Leaderboard 对普通用户既不可见也不可访问，管理员可 Preview（预览）。`anonymous`：所有人以匿名形态出现，他人的数值只给相对第一名的整数百分比，Participant Count（参与人数）只给分档。`named`：开启了 Named Participation 且 `username` 合格的用户以实名形态出现，其余仍是匿名形态，所有数值与 Participant Count 精确。模式开启后管理员与普通用户 MUST 看到完全相同的数据，Leaderboard MUST NOT 做角色分支；需要邮箱、三种金额口径与任意起止日期的管理员 MUST 走 User Breakdown（用户用量明细）。
 
 #### Scenario: 存量站点升级后行为不变
 - **WHEN** 站点升级到包含本变更的版本，且从未写入过 `leaderboard_mode`
@@ -15,7 +15,7 @@
 #### Scenario: 开启后管理员与普通用户同视图
 - **WHEN** Leaderboard Mode 为 `named`，一名管理员与一名普通用户请求同一个 Window（榜单窗口）与 Metric（排名指标）
 - **THEN** 两人收到的 `entries` 内容 MUST 完全相同
-- **THEN** 管理员的响应 MUST NOT 包含邮箱、金额或 `user_id`
+- **THEN** 管理员的响应 MUST NOT 包含邮箱或 `user_id`，其金额字段 MUST 与普通用户完全一致
 
 #### Scenario: 档位递增
 - **WHEN** 管理员把模式从 `anonymous` 调整到 `named`
@@ -77,16 +77,16 @@ Leaderboard Mode 为 `off` 时，普通用户请求 `GET /api/v1/leaderboard` MU
 - **THEN** 页面 MUST NOT 显示预览横幅
 
 ### Requirement: anonymous 档所有人匿名，他人只给相对百分比
-Leaderboard Mode 为 `anonymous` 时，所有 Leaderboard Entry（榜单条目）MUST 是匿名形态：查看者本人的 `identity.kind` 为 `self`，其余为 `anonymous`，MUST NOT 下发任何 `username`。他人条目的两个绝对数值字段 MUST 缺席，各自由 `total_tokens_relative_percent` 与 `successful_requests_relative_percent` 代替：两者 MUST 是 0 到 100 的整数，表示相对该 Metric 第一名的百分比，该 Metric 第一名的值 MUST 是 `100`——档位决定字段是否存在，而不是把字段清零，客户端 MUST NOT 有机会把缺席误读成 0。查看者本人的条目与 `my_rank` MUST 始终是真实的绝对数值。`participant_count` MUST 只给分档字符串，MUST NOT 给精确值；分档规则 MUST 是：取下界序列 5、10、20、50、100、200、500、1000、2000、5000、10000 中不超过实际人数的最大值，表达为「N+」（如 137 → 「100+」），少于 5 时为「<5」。
+Leaderboard Mode 为 `anonymous` 时，所有 Leaderboard Entry（榜单条目）MUST 是匿名形态：查看者本人的 `identity.kind` 为 `self`，其余为 `anonymous`，MUST NOT 下发任何 `username`。他人条目的三个绝对数值字段 MUST 缺席，各自由 `total_tokens_relative_percent`、`successful_requests_relative_percent` 与 `cost_relative_percent` 代替：三者 MUST 是 0 到 100 的整数，表示相对该 Metric 第一名的百分比，该 Metric 第一名的值 MUST 是 `100`——档位决定字段是否存在，而不是把字段清零，客户端 MUST NOT 有机会把缺席误读成 0。查看者本人的条目与 `my_rank` MUST 始终是真实的绝对数值。`participant_count` MUST 只给分档字符串，MUST NOT 给精确值；分档规则 MUST 是：取下界序列 5、10、20、50、100、200、500、1000、2000、5000、10000 中不超过实际人数的最大值，表达为「N+」（如 137 → 「100+」），少于 5 时为「<5」。
 
 #### Scenario: 他人条目没有绝对数值
 - **WHEN** 查看者在 `anonymous` 档下查看榜单
-- **THEN** 他人条目 MUST NOT 包含 `total_tokens` 与 `successful_requests` 字段
-- **THEN** 该条目 MUST 分别给出 `total_tokens_relative_percent` 与 `successful_requests_relative_percent`，两者 MUST 是 0 到 100 的整数，该 Metric 第一名的值 MUST 是 `100`
+- **THEN** 他人条目 MUST NOT 包含 `total_tokens`、`successful_requests` 与 `cost` 字段
+- **THEN** 该条目 MUST 分别给出 `total_tokens_relative_percent`、`successful_requests_relative_percent` 与 `cost_relative_percent`，三者 MUST 是 0 到 100 的整数，该 Metric 第一名的值 MUST 是 `100`
 
 #### Scenario: 本人行仍是真实数值
 - **WHEN** 查看者本人进入前 50
-- **THEN** 其条目 MUST 给出真实的 Total Tokens（总 tokens）与 Successful Requests（成功请求数）
+- **THEN** 其条目 MUST 给出真实的 Total Tokens（总 tokens）、Successful Requests（成功请求数）与 Cost（消费金额）
 - **THEN** `my_rank` MUST 同样是真实数值
 
 #### Scenario: 参与人数只给分档
@@ -182,12 +182,12 @@ Leaderboard Mode 为 `named` 时，某个条目以实名形态展示的充分必
 - **WHEN** 某已开启实名的用户的 `username` 通过二次校验
 - **THEN** 其条目 MUST 以实名形态展示
 
-### Requirement: 响应永不下发 user_id、邮箱与金额
-Leaderboard 的任何响应，在任何档位、对任何角色，MUST NOT 包含 `user_id`、邮箱或任何金额字段。身份 MUST 只以结构化的 `identity{kind, username?}` 表达。
+### Requirement: 响应永不下发 user_id 与邮箱，金额只有 Cost 一个口径
+Leaderboard 的任何响应，在任何档位、对任何角色，MUST NOT 包含 `user_id` 或邮箱。金额 MUST 只有 Cost（消费金额，该 Window（榜单窗口）的 `actual_cost` 之和）这一个口径，且 MUST 只出现在 Leaderboard Entry（榜单条目）、`my_rank` 与 `highlights.site` 三处、按与 Total Tokens（总 tokens）相同的档位规则裁剪；`total_cost` 之类的其它金额口径 MUST NOT 出现。身份 MUST 只以结构化的 `identity{kind, username?}` 表达。
 
 #### Scenario: named 档下的响应体
 - **WHEN** `named` 档下管理员请求 Leaderboard
-- **THEN** 响应体 MUST NOT 出现 `user_id`、`email` 或任何金额字段
+- **THEN** 响应体 MUST NOT 出现 `user_id`、`email` 或 Cost 之外的任何金额字段
 - **THEN** 条目里唯一可能出现的身份信息 MUST 只有 `username`
 
 #### Scenario: 匿名形态的条目
@@ -211,7 +211,7 @@ Leaderboard 的任何响应，在任何档位、对任何角色，MUST NOT 包�
 - **THEN** 前端 MUST 按 `off` 处理并隐藏入口
 
 ### Requirement: anonymous 档下 Highlights 与 Insights 的数值裁剪
-Leaderboard Mode（排行榜模式）为 `anonymous` 时，`highlights` 与 `insights` 里任何**他人的**或**站点级的**绝对量字段 MUST 缺席，MUST NOT 被清零后下发。可以下发的只有相对量与比率：`share_percent`（占全站该 Metric（排名指标）的百分比，0 到 100 的整数）、`lead_percent`（比第 2 名多出的整数百分比）、`relative_percent`（相对最高一天或峰值小时的 0 到 100 整数百分比）、`cache_hit_rate`（0 到 1 的比率）、`change_percent`（较上月的整数百分比，可为负）与 `peak_hour`——这些字段在 `named` 档下 MUST 同样下发，页面的条宽与色阶都靠它们。Highlights（趣味卡）领先者的身份 MUST 用榜单 Ordinal（行序号）假名表达，MUST NOT 用 Rank（名次）代替 Ordinal，MUST NOT 出现用户 id。查看者本人恰好是某张 Highlights 卡的领先者时，该卡的 `identity.kind` MUST 是 `self`，但其数值 MUST 仍按当前档位裁剪——该卡是给所有人看的同一份数据，不是「我的数据」。本人条目、`my_rank` 与「你的位置」的数值 MUST 不受本条影响，始终是真实值。
+Leaderboard Mode（排行榜模式）为 `anonymous` 时，`highlights` 与 `insights` 里任何**他人的**或**站点级的**绝对量字段 MUST 缺席，MUST NOT 被清零后下发。可以下发的只有相对量与比率：`share_percent`（占全站该 Metric（排名指标）的百分比，0 到 100 的整数）、`lead_percent`（比第 2 名多出的整数百分比）、`relative_percent`（相对最高一天或峰值小时的 0 到 100 整数百分比）、`cache_hit_rate`（0 到 1 的比率）、`change_percent`（较上月的整数百分比，可为负）与 `peak_hour`。站点合计的 Cost（消费金额）`highlights.site.cost` 与 tokens 同办：`anonymous` 档 MUST 缺席，`named` 档与 Preview MUST 下发——这些字段在 `named` 档下 MUST 同样下发，页面的条宽与色阶都靠它们。Highlights（趣味卡）领先者的身份 MUST 用榜单 Ordinal（行序号）假名表达，MUST NOT 用 Rank（名次）代替 Ordinal，MUST NOT 出现用户 id。查看者本人恰好是某张 Highlights 卡的领先者时，该卡的 `identity.kind` MUST 是 `self`，但其数值 MUST 仍按当前档位裁剪——该卡是给所有人看的同一份数据，不是「我的数据」。本人条目、`my_rank` 与「你的位置」的数值 MUST 不受本条影响，始终是真实值。
 
 #### Scenario: 领先者用 Ordinal 假名
 - **WHEN** `anonymous` 档下今日卷王在当前 Window（榜单窗口）+ Metric 榜单上的 Ordinal 是 3
@@ -230,7 +230,7 @@ Leaderboard Mode（排行榜模式）为 `anonymous` 时，`highlights` 与 `ins
 
 #### Scenario: 全站概况只给分档人数、命中率与峰值时段
 - **WHEN** `anonymous` 档下该 Window 的全站 Total Tokens（总 tokens）为 21.4M、Participant Count（参与人数）为 137
-- **THEN** `highlights.site` MUST NOT 包含 `total_tokens` 与 `successful_requests`
+- **THEN** `highlights.site` MUST NOT 包含 `total_tokens`、`successful_requests` 与 `cost`
 - **THEN** `highlights.site.participant_count` MUST 是分档字符串（如「100+」），并 MUST 给出 `cache_hit_rate` 与 `peak_hour`
 
 #### Scenario: 模型热度只给占比
@@ -261,7 +261,7 @@ Leaderboard Mode（排行榜模式）为 `anonymous` 时，`highlights` 与 `ins
 #### Scenario: 你的位置的提示语不含他人绝对量
 - **WHEN** `anonymous` 档下查看者排在第 12 名
 - **THEN** 「你的位置」的提示语 MUST 只用相对第一名的百分比表达（如「相对第一名 2%，第 10 名是 3%」）
-- **THEN** 提示语 MUST NOT 出现任何他人的 tokens 或请求数绝对值
+- **THEN** 提示语 MUST NOT 出现任何他人的 tokens、请求数或金额绝对值
 
 #### Scenario: 查看者本人就是领先者
 - **WHEN** `anonymous` 档下查看者本人是今日卷王
@@ -270,7 +270,7 @@ Leaderboard Mode（排行榜模式）为 `anonymous` 时，`highlights` 与 `ins
 
 #### Scenario: named 档下同一份数据给绝对值
 - **WHEN** 同一个 Window 在 `named` 档下被请求
-- **THEN** Highlights、`models_today`、`daily_30`、`hourly_today`、`cache_today` 与 `month` MUST 给出对应的绝对量字段
+- **THEN** Highlights（含 `site.cost`）、`models_today`、`daily_30`、`hourly_today`、`cache_today` 与 `month` MUST 给出对应的绝对量字段
 - **THEN** `share_percent`、`lead_percent`、`relative_percent`、`cache_hit_rate` 与 `change_percent` MUST 仍然一并下发
 
 ### Requirement: anonymous 档下 Extremes 与新增 Insights 的数值裁剪

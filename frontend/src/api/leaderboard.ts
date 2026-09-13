@@ -6,9 +6,9 @@
  * 响应类型就地定义在本文件并 export（同 `channelMonitorV2.ts` 的做法）。
  *
  * 档位对字段的影响 —— 「档位决定字段是否存在」，而不是把字段清零：
- *   - `anonymous` 档下他人条目 **没有** `total_tokens` / `successful_requests`，
- *     只有 `total_tokens_relative_percent` / `successful_requests_relative_percent`；
- *     本人条目（`is_self`）与 `my_rank` 始终是真实绝对值。
+ *   - `anonymous` 档下他人条目 **没有** `total_tokens` / `successful_requests` / `cost`，
+ *     只有 `total_tokens_relative_percent` / `successful_requests_relative_percent` /
+ *     `cost_relative_percent`；本人条目（`is_self`）与 `my_rank` 始终是真实绝对值。
  *   - `named` 档与 `off` 档 Preview（预览）下所有数值精确。
  * 因此绝对值字段与相对百分比字段都是可选的，读取时 MUST NOT 把缺席当成 0。
  */
@@ -20,8 +20,11 @@ import type { LeaderboardMode } from '@/utils/featureFlags'
 /** 榜单窗口：今日 / 本周 / 本月，边界按站点时区计算，周一起算。 */
 export type LeaderboardWindow = 'today' | 'week' | 'month'
 
-/** 排名指标：只有这两项，金额既不展示也不作为排序项。 */
-export type LeaderboardMetric = 'total_tokens' | 'successful_requests'
+/**
+ * 排名指标。`cost` 是该窗口内实际计费金额（USD，浮点），与 tokens 同一套档位规则：
+ * named 档与 Preview 下发绝对金额，anonymous 档他人只给相对第一名的整数百分比。
+ */
+export type LeaderboardMetric = 'total_tokens' | 'successful_requests' | 'cost'
 
 /** `computing` 表示 Snapshot（榜单快照）尚未生成，不是空榜也不是错误。 */
 export type LeaderboardStatus = 'ready' | 'computing'
@@ -52,16 +55,21 @@ export interface LeaderboardEntry {
   total_tokens?: number
   /** `anonymous` 档的他人条目缺席该字段。 */
   successful_requests?: number
+  /** 该窗口实际计费金额（USD）；`anonymous` 档的他人条目缺席该字段。 */
+  cost?: number
   /** 仅 `anonymous` 档的他人条目出现：相对该 Metric 第一名的 0–100 整数百分比。 */
   total_tokens_relative_percent?: number
   /** 仅 `anonymous` 档的他人条目出现：相对该 Metric 第一名的 0–100 整数百分比。 */
   successful_requests_relative_percent?: number
+  /** 仅 `anonymous` 档的他人条目出现：相对该 Metric 第一名的 0–100 整数百分比。 */
+  cost_relative_percent?: number
 }
 
 /**
  * 「你的位置」那一句提示所需的数值。文案由前端按 `kind` 选，后端只下发数值（design D18）：
- *   - `tokens_to_top10` / `requests_to_top10`（`named` 档与 Preview）：`value` 是按当前 Metric
- *     还差多少才够得着第 10 名。量词由 kind 自己带，读取时 MUST NOT 再去看顶层的 `metric`；
+ *   - `tokens_to_top10` / `requests_to_top10` / `cost_to_top10`（`named` 档与 Preview）：
+ *     `value` 是按当前 Metric 还差多少才够得着第 10 名（`cost_to_top10` 的单位是 USD）。
+ *     量词由 kind 自己带，读取时 MUST NOT 再去看顶层的 `metric`；
  *   - `relative_percent`（`anonymous` 档）：`self` 与 `tenth` 分别是本人与第 10 名相对第一名的
  *     整数百分比。他人的绝对量连差额形式都不出现。
  * 目标名次固定是前 10（写在 kind 名字里），后端不单独下发。本人已经在前 10 之内、或参与人数
@@ -71,11 +79,12 @@ export interface LeaderboardEntry {
 export type LeaderboardMyRankHintKind =
   | 'tokens_to_top10'
   | 'requests_to_top10'
+  | 'cost_to_top10'
   | 'relative_percent'
 
 export interface LeaderboardMyRankHint {
   kind: LeaderboardMyRankHintKind
-  /** 仅两个 `*_to_top10` 形态：还差多少个该 Metric 的绝对量。 */
+  /** 仅三个 `*_to_top10` 形态：还差多少个该 Metric 的绝对量（`cost_to_top10` 是 USD）。 */
   value?: number
   /** 仅 `relative_percent` 形态：本人相对第一名的 0–100 整数百分比。 */
   self?: number
@@ -88,6 +97,8 @@ export interface LeaderboardMyRank {
   rank: number
   total_tokens: number
   successful_requests: number
+  /** 本人该窗口的实际计费金额（USD）：任何档位下都是真实值，始终下发。 */
+  cost: number
   hint?: LeaderboardMyRankHint | null
 }
 
@@ -125,6 +136,8 @@ export interface LeaderboardSiteSummary {
   total_tokens?: number
   /** `anonymous` 档缺席。 */
   successful_requests?: number
+  /** 全站该窗口的实际计费金额（USD）；`anonymous` 档缺席。 */
+  cost?: number
   /** 与顶层 `participant_count` 同一套规则：`named` 精确整数，`anonymous` 分档字符串。 */
   participant_count: number | string
   cache_hit_rate?: number

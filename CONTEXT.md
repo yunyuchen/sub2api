@@ -7,11 +7,11 @@ sub2api 的领域词汇表。目前只覆盖「用量排行」相关概念，随
 ### 用量排行
 
 **Leaderboard（排行榜）**:
-面向登录用户的、按固定窗口聚合的用户用量名次表，只暴露受限字段（展示名、tokens、请求数），不暴露金额和邮箱。模式开启后，管理员与普通用户看到相同数据。与渠道监控里的用户排行是两个不同的功能：监控是诊断视图，Leaderboard 是社交视图。
+面向登录用户的、按固定窗口聚合的用户用量名次表，只暴露受限字段（展示名、tokens、请求数、消费金额），不暴露邮箱和用户 id。模式开启后，管理员与普通用户看到相同数据。与渠道监控里的用户排行是两个不同的功能：监控是诊断视图，Leaderboard 是社交视图。
 _Avoid_: 用户排行、token ranking、top users
 
 **User Breakdown（用户用量明细）**:
-面向管理员的按用户聚合的用量分析视图，支持任意起止日期，包含全部字段（含邮箱与金额）。与 Leaderboard 是两个不同的概念，不共用名字。
+面向管理员的按用户聚合的用量分析视图，支持任意起止日期，包含全部字段（含邮箱与三种金额口径）。与 Leaderboard 是两个不同的概念，不共用名字。
 _Avoid_: 用户排行、tokenRanking
 
 **Window（榜单窗口）**:
@@ -19,7 +19,7 @@ Leaderboard 聚合所依据的固定时间段之一：今日、本周、本月�
 _Avoid_: 日期范围、date range、period、全部
 
 **Metric（排名指标）**:
-Leaderboard 排序所依据的量：Total Tokens 或 Successful Requests。金额不是 Leaderboard 的 Metric，连排序选项也不提供。
+Leaderboard 排序所依据的量：Total Tokens、Successful Requests 或 Cost。只有这三项，默认 Total Tokens；每一行同时给出三个值，按选中的那个排序。
 _Avoid_: sort key、sort_by
 
 **Total Tokens（总 tokens）**:
@@ -29,6 +29,10 @@ _Avoid_: tokens、token 总数（不写明是否含 cache）
 **Successful Requests（成功请求数）**:
 成功落账（actual_cost 大于 0）的请求数。失败请求的占位记录不计入。与管理端用户用量明细的「请求数」（不做过滤的计数）是两个口径。
 _Avoid_: 请求数、requests、调用次数
+
+**Cost（消费金额）**:
+一个 Window 内实际计费金额（`actual_cost`）之和，单位 USD。与用户自己的用量页「花费」同一个口径，与成功落账（`actual_cost > 0`）同源；不是账面成本 `total_cost`，也不是缓存省下的钱。隐私档位与 tokens 完全一致：实名模式给绝对金额，匿名模式下他人只给相对第一名的百分比，本人始终是真实值。
+_Avoid_: 费用、成本、total_cost、消费额
 
 **Leaderboard Entry（榜单条目）**:
 Leaderboard 中的一行：名次、展示名、各 Metric 的值。至多 50 条。
@@ -67,7 +71,7 @@ Leaderboard Mode 为 off 时管理员看到的 Leaderboard 视图，带明确的
 _Avoid_: 管理员视图、admin view
 
 **Snapshot（榜单快照）**:
-一个 Window 内所有有用量的合格用户的 Total Tokens 与 Successful Requests 集合，由后台周期性重建。榜单条目、Participant Count、My Rank 都从同一份 Snapshot 导出，因此彼此一致；Snapshot 只记录用户与数值，不记录身份，身份与参与资格以展示时的当前状态为准。页面展示 Snapshot 的更新时间。
+一个 Window 内所有有用量的合格用户的 Total Tokens、Successful Requests 与 Cost 集合，由后台周期性重建。榜单条目、Participant Count、My Rank 都从同一份 Snapshot 导出，因此彼此一致；Snapshot 只记录用户与数值，不记录身份，身份与参与资格以展示时的当前状态为准。页面展示 Snapshot 的更新时间。
 _Avoid_: 缓存、cache、聚合结果
 
 **Highlights（趣味卡）**:
@@ -79,7 +83,7 @@ Leaderboard 页面上榜单以外的统计：今日模型热度、近 30 天活�
 _Avoid_: 图表、统计、分析、dashboard
 
 **Cache Hit Rate（缓存命中率）**:
-缓存读取 tokens 占「输入 tokens 加缓存读取 tokens」的比例，按 Window 聚合，可以是某个用户的，也可以是全站的。缓存的收益一律用它和命中 tokens 表达，不折算成金额。输入与缓存读取都为 0 时没有命中率，不是 0%。
+缓存读取 tokens 占「输入 tokens 加缓存读取 tokens」的比例，按 Window 聚合，可以是某个用户的，也可以是全站的。缓存的收益一律用它和命中 tokens 表达，不折算成金额——页面上的金额只有 Cost 这一个口径，「省下多少钱」是另一回事。输入与缓存读取都为 0 时没有命中率，不是 0%。
 _Avoid_: 命中率、缓存率、cache rate、省下的钱
 
 **Share Percent（占比）**:
@@ -95,7 +99,7 @@ Leaderboard 上只给查看者本人看的一块：名次走势、本人模型�
 _Avoid_: 个人中心、我的数据、personal dashboard、用户详情
 
 **Rank History（名次走势）**:
-某个用户逐日的名次记录，按今日窗口的 Total Tokens 计，每天一个点。当天之内随快照反复覆盖，日终那次即该日的最终名次；只保留近期，过期自动清理。页面只画查看者本人近两周的走势，永远不展示他人的名次历史。
+某个用户逐日的名次记录，每天一个点。逐日留痕时三个 Metric 的名次都记，页面只画按今日窗口 Total Tokens 的那一条。当天之内随快照反复覆盖，日终那次即该日的最终名次；只保留近期，过期自动清理。页面只画查看者本人近两周的走势，永远不展示他人的名次历史。
 _Avoid_: 排名历史、历史排行、rank trend、历史榜单
 
 **Weekly Rhythm（周内节奏）**:

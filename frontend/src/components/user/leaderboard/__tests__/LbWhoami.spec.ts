@@ -27,6 +27,7 @@ const messages: Record<string, string> = {
     'Too few participants to list board rows; anonymity would be meaningless',
   'leaderboard.myRank.hint.gapTokens': '{gap} more tokens to reach the top {rank}',
   'leaderboard.myRank.hint.gapRequests': '{gap} more successful requests to reach the top {rank}',
+  'leaderboard.myRank.hint.gapCost': '{gap} more spend to reach the top {rank}',
   'leaderboard.myRank.hint.relative':
     'You are at {percent}% of the top entry; rank {rank} sits at {target}%',
   'leaderboard.states.computing': 'The leaderboard is being computed',
@@ -83,7 +84,7 @@ function mountWhoami(
 ) {
   return mount(LbWhoami, {
     props: {
-      myRank: { rank: 12, total_tokens: 900, successful_requests: 7 },
+      myRank: { rank: 12, total_tokens: 900, successful_requests: 7, cost: 0.42 },
       participantCount: 137,
       viewer: viewer(),
       site: site(),
@@ -180,6 +181,7 @@ describe('LbWhoami', () => {
         rank: 17,
         total_tokens: 640_000,
         successful_requests: 233,
+        cost: 8.75,
         hint: { kind: 'tokens_to_top10', value: 24_000 },
       },
     })
@@ -192,6 +194,7 @@ describe('LbWhoami', () => {
         rank: 12,
         total_tokens: 900,
         successful_requests: 7,
+        cost: 0.42,
         hint: { kind: 'relative_percent', self: 2, tenth: 3 },
       },
     })
@@ -200,10 +203,42 @@ describe('LbWhoami', () => {
     )
   })
 
+  // cost 的 hint 量词也由 kind 自带，金额用 formatCurrency 渲染（value 的单位是 USD）。
+  it('renders the spend hint as a currency amount', () => {
+    const wrapper = mountWhoami({
+      myRank: {
+        rank: 17,
+        total_tokens: 640_000,
+        successful_requests: 233,
+        cost: 8.75,
+        hint: { kind: 'cost_to_top10', value: 3.5 },
+      },
+    })
+
+    expect(wrapper.find('[data-testid="leaderboard-whoami-hint"]').text()).toBe(
+      '$3.50 more spend to reach the top 10',
+    )
+  })
+
+  // 数值缺席时整行隐藏，MUST NOT 拼一句半截话。
+  it('hides the spend hint when the backend omits its value', () => {
+    const wrapper = mountWhoami({
+      myRank: {
+        rank: 17,
+        total_tokens: 640_000,
+        successful_requests: 233,
+        cost: 8.75,
+        hint: { kind: 'cost_to_top10' },
+      },
+    })
+
+    expect(wrapper.find('[data-testid="leaderboard-whoami-hint"]').exists()).toBe(false)
+  })
+
   // 「已进前 10，你在榜单里高亮显示」那一句已删：名次那个大数字已经说完了。
   it('renders no hint line at all when the backend omits the hint', () => {
     const wrapper = mountWhoami({
-      myRank: { rank: 3, total_tokens: 900, successful_requests: 7 },
+      myRank: { rank: 3, total_tokens: 900, successful_requests: 7, cost: 0.42 },
     })
 
     expect(wrapper.find('[data-testid="leaderboard-whoami-hint"]').exists()).toBe(false)
@@ -214,7 +249,7 @@ describe('LbWhoami', () => {
     const wrapper = mountWhoami({
       suppressed: true,
       participantCount: '<5',
-      myRank: { rank: 2, total_tokens: 900, successful_requests: 7 },
+      myRank: { rank: 2, total_tokens: 900, successful_requests: 7, cost: 0.42 },
     })
 
     expect(wrapper.find('[data-testid="leaderboard-whoami-hint"]').text()).toBe(

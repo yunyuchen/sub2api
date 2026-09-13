@@ -22,6 +22,14 @@
       >
         {{ t('leaderboard.table.successfulRequestsShort') }}
       </span>
+      <span
+        class="rp-right"
+        role="columnheader"
+        data-testid="leaderboard-col-cost"
+        :aria-sort="metric === 'cost' ? 'descending' : 'none'"
+      >
+        {{ t('leaderboard.table.cost') }}
+      </span>
     </div>
 
     <!-- 前三名的强调形态按 Rank 值判定，与皮肤无关：并列第 1 时两行都是首行的待遇，
@@ -82,6 +90,14 @@
       >
         {{ metricText(row.entry, 'successful_requests') }}
       </span>
+      <span
+        class="rp-lb-num rp-lb-cost"
+        :class="metric === 'cost' ? '' : 'is-dim'"
+        role="cell"
+        :title="relativeTitle(row.entry, 'cost')"
+      >
+        {{ metricText(row.entry, 'cost') }}
+      </span>
     </div>
   </div>
 
@@ -97,7 +113,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { formatCompactNumberTrimmed, formatNumberLocaleString } from '@/utils/format'
+import {
+  formatCompactNumberTrimmed,
+  formatCurrency,
+  formatNumberLocaleString,
+} from '@/utils/format'
 import { useLeaderboardDisplayName } from './displayName'
 import type {
   LeaderboardEntry,
@@ -110,7 +130,7 @@ const { t } = useI18n()
 const props = withDefaults(
   defineProps<{
     entries: LeaderboardEntry[]
-    /** 选中的排名指标：两列都渲染，只有这一列被高亮，相对条也按它算。 */
+    /** 选中的排名指标：三列都渲染，只有这一列被高亮，相对条也按它算。 */
     metric: LeaderboardMetric
     /**
      * `highlights.site`：解读句里「前三名占全站 N%」的分母。
@@ -126,14 +146,17 @@ function paddedRank(rank: number): string {
   return `${rank}`.padStart(2, '0')
 }
 
+/** 金额那一列的绝对量是 USD 浮点，与另两列的整数走同一套「缺席 / 相对百分比」规则。 */
 function absolute(entry: LeaderboardEntry, column: LeaderboardMetric): number | undefined {
-  return column === 'total_tokens' ? entry.total_tokens : entry.successful_requests
+  if (column === 'total_tokens') return entry.total_tokens
+  if (column === 'successful_requests') return entry.successful_requests
+  return entry.cost
 }
 
 function relative(entry: LeaderboardEntry, column: LeaderboardMetric): number | undefined {
-  return column === 'total_tokens'
-    ? entry.total_tokens_relative_percent
-    : entry.successful_requests_relative_percent
+  if (column === 'total_tokens') return entry.total_tokens_relative_percent
+  if (column === 'successful_requests') return entry.successful_requests_relative_percent
+  return entry.cost_relative_percent
 }
 
 /**
@@ -155,6 +178,7 @@ function detectMixedScale(column: LeaderboardMetric): boolean {
 const mixedScale = computed<Record<LeaderboardMetric, boolean>>(() => ({
   total_tokens: detectMixedScale('total_tokens'),
   successful_requests: detectMixedScale('successful_requests'),
+  cost: detectMixedScale('cost'),
 }))
 
 /**
@@ -187,9 +211,10 @@ const { displayName } = useLeaderboardDisplayName()
 function metricText(entry: LeaderboardEntry, column: LeaderboardMetric): string {
   const value = absolute(entry, column)
   if (typeof value === 'number') {
-    return column === 'total_tokens'
-      ? formatCompactNumberTrimmed(value)
-      : formatNumberLocaleString(value)
+    if (column === 'total_tokens') return formatCompactNumberTrimmed(value)
+    if (column === 'successful_requests') return formatNumberLocaleString(value)
+    // 金额是 USD，带货币符号与语言环境（`formatCurrency` 对不足 0.01 的金额自动加小数位）。
+    return formatCurrency(value)
   }
 
   const percent = relative(entry, column)
@@ -260,13 +285,17 @@ const leadClause = computed(() => {
 })
 
 /**
- * 前三名占全站多少。分母是站点级绝对量（`highlights.site`），
+ * 前三名占全站多少。分母是站点级绝对量（`highlights.site`，cost 用 `site.cost`），
  * 匿名档缺席该字段——榜内合计只能算出「占前 50 名」，那是另一个口径，MUST NOT 顶替。
  */
 const shareClause = computed(() => {
   const site = props.site
   const total =
-    props.metric === 'total_tokens' ? site?.total_tokens : site?.successful_requests
+    props.metric === 'total_tokens'
+      ? site?.total_tokens
+      : props.metric === 'successful_requests'
+        ? site?.successful_requests
+        : site?.cost
   if (typeof total !== 'number' || total <= 0) return ''
 
   // 不足三行时这句话的主语不成立（「前三名」得真有三名），整句省略。

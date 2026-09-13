@@ -12,9 +12,10 @@ import (
 // 本文件是 Highlights（趣味卡）与 Insights（洞察）的**存储层**形状：它们和 Snapshot
 // （榜单快照）一样在后台作业里算好、以 JSON 串写进 Redis，请求路径只读（design D17）。
 //
-// 与响应视图刻意分成两套类型：这里只有 user_id 与数值，MUST NOT 出现 username、邮箱与
-// 任何金额——身份仍在响应组装时按 users 当前状态渲染（design D8），档位裁剪也只发生在
-// 响应组装那一处（design D18）。
+// 与响应视图刻意分成两套类型：这里只有 user_id 与数值，MUST NOT 出现 username 与邮箱——
+// 身份仍在响应组装时按 users 当前状态渲染（design D8），档位裁剪也只发生在
+// 响应组装那一处（design D18）。金额同样只以定点 micros 存在（1 USD = 1e6），
+// 换回 USD 也发生在响应组装那一处。
 
 const (
 	// leaderboardCacheKingMinRequests 是效率之星的参评门槛：该 Window 的 Successful Requests
@@ -183,9 +184,12 @@ type LeaderboardCacheKing struct {
 // 预聚合缺行时缺席。
 // AvgTokensPerRequest 是全站该窗口 tokens / 成功请求数，供「你 vs 全站」并排对比；
 // 它是比率，按 D18 两档都下发，全站成功请求数为 0 时字段缺席（同 CacheHitRate 的写法）。
+// CostMicros 是全站该窗口消费金额的定点值（1 USD = 1e6），与 TotalTokens 同属站点级绝对量，
+// anonymous 档被响应层裁掉；解读句「前三名占全站 N%」拿它当分母。
 type LeaderboardSiteSummary struct {
 	TotalTokens         int64    `json:"total_tokens"`
 	SuccessfulRequests  int64    `json:"successful_requests"`
+	CostMicros          int64    `json:"cost_micros"`
 	ParticipantCount    int64    `json:"participant_count"`
 	CacheHitRate        *float64 `json:"cache_hit_rate,omitempty"`
 	PeakHour            *int     `json:"peak_hour,omitempty"`
@@ -293,10 +297,11 @@ func computeLeaderboardHighlights(entries []LeaderboardUserMetrics, peakHour *in
 	}
 
 	var (
-		siteTokens    int64
-		siteRequests  int64
-		siteInput     int64
-		siteCacheRead int64
+		siteTokens     int64
+		siteRequests   int64
+		siteCostMicros int64
+		siteInput      int64
+		siteCacheRead  int64
 
 		topTokens, secondTokens     int64
 		topRequests, secondRequests int64
@@ -311,6 +316,8 @@ func computeLeaderboardHighlights(entries []LeaderboardUserMetrics, peakHour *in
 		entry := entries[i]
 		siteTokens += entry.TotalTokens
 		siteRequests += entry.SuccessfulRequests
+		// 金额按 micros 累加：定点整数求和不会像 float64 那样逐条攒出舍入误差。
+		siteCostMicros += entry.CostMicros
 		siteInput += entry.InputTokens
 		siteCacheRead += entry.CacheReadTokens
 
@@ -359,6 +366,7 @@ func computeLeaderboardHighlights(entries []LeaderboardUserMetrics, peakHour *in
 		Site: LeaderboardSiteSummary{
 			TotalTokens:        siteTokens,
 			SuccessfulRequests: siteRequests,
+			CostMicros:         siteCostMicros,
 			ParticipantCount:   int64(len(entries)),
 			PeakHour:           peakHour,
 		},

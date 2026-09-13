@@ -100,7 +100,11 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LbIcon from './LbIcon.vue'
 import LbSparkline from './LbSparkline.vue'
-import { formatCompactNumberTrimmed, formatNumberLocaleString } from '@/utils/format'
+import {
+  formatCompactNumberTrimmed,
+  formatCurrency,
+  formatNumberLocaleString,
+} from '@/utils/format'
 import type {
   LeaderboardMyRank,
   LeaderboardSiteSummary,
@@ -150,18 +154,31 @@ const hintText = computed(() => {
   const hint = props.myRank?.hint
   if (!hint) return ''
 
-  if (hint.kind === 'tokens_to_top10' || hint.kind === 'requests_to_top10') {
-    if (typeof hint.value !== 'number') return ''
-    const isTokens = hint.kind === 'tokens_to_top10'
-    return t(
-      isTokens ? 'leaderboard.myRank.hint.gapTokens' : 'leaderboard.myRank.hint.gapRequests',
-      {
-        gap: isTokens
-          ? formatCompactNumberTrimmed(hint.value)
-          : formatNumberLocaleString(hint.value),
+  // 三个 `*_to_top10` 形态共用一句「再 X 即可进入前 N」，量词与格式都由 kind 决定：
+  // tokens 用紧凑数字、成功请求用千分位、金额用 `formatCurrency`（`value` 的单位是 USD）。
+  if (
+    hint.kind === 'tokens_to_top10' ||
+    hint.kind === 'requests_to_top10' ||
+    hint.kind === 'cost_to_top10'
+  ) {
+    const value = hint.value
+    if (typeof value !== 'number') return ''
+    if (hint.kind === 'tokens_to_top10') {
+      return t('leaderboard.myRank.hint.gapTokens', {
+        gap: formatCompactNumberTrimmed(value),
         rank: HINT_TOP_N,
-      },
-    )
+      })
+    }
+    if (hint.kind === 'requests_to_top10') {
+      return t('leaderboard.myRank.hint.gapRequests', {
+        gap: formatNumberLocaleString(value),
+        rank: HINT_TOP_N,
+      })
+    }
+    return t('leaderboard.myRank.hint.gapCost', {
+      gap: formatCurrency(value),
+      rank: HINT_TOP_N,
+    })
   }
 
   if (typeof hint.self !== 'number' || typeof hint.tenth !== 'number') return ''

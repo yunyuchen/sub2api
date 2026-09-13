@@ -14,6 +14,7 @@ const messages: Record<string, string> = {
   'leaderboard.table.relativeToTop': 'Relative to #1',
   'leaderboard.table.totalTokens': 'Total tokens',
   'leaderboard.table.successfulRequestsShort': 'Successful',
+  'leaderboard.table.cost': 'Spend',
   'leaderboard.table.relativePercent': '{percent}% of the top entry',
   'leaderboard.table.relativeUnknown': 'The top entry usage is not public in anonymous mode',
   'leaderboard.table.selfBadge': 'You',
@@ -21,6 +22,7 @@ const messages: Record<string, string> = {
   'channelMonitorV2.currentUser': 'Current user',
   'leaderboard.metrics.totalTokens': 'Total tokens',
   'leaderboard.metrics.successfulRequests': 'Successful requests',
+  'leaderboard.metrics.cost': 'Spend',
   'leaderboard.rank.readout.lead': 'LEAD {ratio}x',
   'leaderboard.rank.readout.topThreeShare': 'SHARE {percent}%',
 }
@@ -56,6 +58,7 @@ function entry(overrides: Partial<LeaderboardEntry> = {}): LeaderboardEntry {
     is_self: false,
     total_tokens: 4_200_000,
     successful_requests: 1203,
+    cost: 12.34,
     ...overrides,
   }
 }
@@ -78,13 +81,14 @@ function mountList(entries: LeaderboardEntry[], options: MountOptions = {}) {
 /** 五行的实名档榜：#4 与 #5 在 tokens 上相邻，但请求数是反过来的（用来验互换分句）。 */
 function namedBoard(): LeaderboardEntry[] {
   return [
-    entry({ rank: 1, ordinal: 1, total_tokens: 4_000_000, successful_requests: 100 }),
+    entry({ rank: 1, ordinal: 1, total_tokens: 4_000_000, successful_requests: 100, cost: 40 }),
     entry({
       rank: 2,
       ordinal: 2,
       identity: { kind: 'named', username: 'bob' },
       total_tokens: 2_000_000,
       successful_requests: 50,
+      cost: 20,
     }),
     entry({
       rank: 3,
@@ -92,6 +96,7 @@ function namedBoard(): LeaderboardEntry[] {
       identity: { kind: 'named', username: 'carol' },
       total_tokens: 1_000_000,
       successful_requests: 40,
+      cost: 10,
     }),
     entry({
       rank: 4,
@@ -99,6 +104,7 @@ function namedBoard(): LeaderboardEntry[] {
       identity: { kind: 'named', username: 'dave' },
       total_tokens: 100_000,
       successful_requests: 10,
+      cost: 1,
     }),
     entry({
       rank: 5,
@@ -106,12 +112,19 @@ function namedBoard(): LeaderboardEntry[] {
       identity: { kind: 'named', username: 'erin' },
       total_tokens: 90_000,
       successful_requests: 12,
+      cost: 0.9,
     }),
   ]
 }
 
 function site(overrides: Partial<LeaderboardSiteSummary> = {}): LeaderboardSiteSummary {
-  return { total_tokens: 10_000_000, successful_requests: 400, participant_count: 5, ...overrides }
+  return {
+    total_tokens: 10_000_000,
+    successful_requests: 400,
+    cost: 100,
+    participant_count: 5,
+    ...overrides,
+  }
 }
 
 describe('LbRankList', () => {
@@ -158,8 +171,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 100,
         successful_requests_relative_percent: 100,
+        cost_relative_percent: 100,
       }),
       entry({
         rank: 2,
@@ -212,8 +227,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 42,
         successful_requests_relative_percent: 17,
+        cost_relative_percent: 42,
       }),
     ])
 
@@ -226,11 +243,14 @@ describe('LbRankList', () => {
   })
 
   it('renders a placeholder instead of zero when both value shapes are absent', () => {
-    const wrapper = mountList([entry({ total_tokens: undefined, successful_requests: undefined })])
+    const wrapper = mountList([
+      entry({ total_tokens: undefined, successful_requests: undefined, cost: undefined }),
+    ])
 
     const row = wrapper.find('[data-testid="leaderboard-row"]')
     expect(row.find('.rp-lb-tok').text()).toBe('—')
     expect(row.find('.rp-lb-req').text()).toBe('—')
+    expect(row.find('.rp-lb-cost').text()).toBe('—')
   })
 
   it('sizes the relative bar from the selected metric and keeps it in every row', () => {
@@ -256,8 +276,10 @@ describe('LbRankList', () => {
           identity: { kind: 'anonymous' },
           total_tokens: undefined,
           successful_requests: undefined,
+          cost: undefined,
           total_tokens_relative_percent: 100,
           successful_requests_relative_percent: 60,
+          cost_relative_percent: 100,
         }),
         entry({
           rank: 2,
@@ -265,8 +287,10 @@ describe('LbRankList', () => {
           identity: { kind: 'anonymous' },
           total_tokens: undefined,
           successful_requests: undefined,
+          cost: undefined,
           total_tokens_relative_percent: 40,
           successful_requests_relative_percent: 100,
+          cost_relative_percent: 40,
         }),
       ],
       { metric: 'successful_requests' },
@@ -289,6 +313,93 @@ describe('LbRankList', () => {
     expect(wrapper.find('[data-testid="leaderboard-col-successful-requests"]').text()).toBe(
       'Successful',
     )
+  })
+
+  // 第 6 列「金额」：表头随 Metric 标 aria-sort，与另两列同一套形态。
+  it('marks the spend column as the sorted one', () => {
+    const wrapper = mountList([entry()], { metric: 'cost' })
+
+    expect(wrapper.find('[data-testid="leaderboard-col-cost"]').attributes('aria-sort')).toBe(
+      'descending',
+    )
+    expect(
+      wrapper.find('[data-testid="leaderboard-col-total-tokens"]').attributes('aria-sort'),
+    ).toBe('none')
+    expect(wrapper.find('[data-testid="leaderboard-col-cost"]').text()).toBe('Spend')
+  })
+
+  // 金额用 formatCurrency 渲染（locale 感知、带货币符号），不是裸数字。
+  it('renders the spend column as a currency amount in named mode', () => {
+    const wrapper = mountList([entry({ cost: 12.34 })], { metric: 'cost' })
+
+    const row = wrapper.find('[data-testid="leaderboard-row"]')
+    expect(row.find('.rp-lb-cost').text()).toBe('$12.34')
+    expect(row.find('.rp-lb-cost').classes()).not.toContain('is-dim')
+    // 没选中的那两列只是变淡，仍然渲染
+    expect(row.find('.rp-lb-tok').classes()).toContain('is-dim')
+  })
+
+  // 匿名档：他人行只有相对第一名的百分比，本人行仍是真实金额。
+  it('renders a relative percent for anonymous peers and the real amount for the viewer', () => {
+    const wrapper = mountList(
+      [
+        entry({
+          rank: 1,
+          ordinal: 1,
+          identity: { kind: 'anonymous' },
+          total_tokens: undefined,
+          successful_requests: undefined,
+          cost: undefined,
+          total_tokens_relative_percent: 100,
+          successful_requests_relative_percent: 100,
+          cost_relative_percent: 100,
+        }),
+        entry({
+          rank: 2,
+          ordinal: 2,
+          identity: { kind: 'anonymous' },
+          total_tokens: undefined,
+          successful_requests: undefined,
+          cost: undefined,
+          total_tokens_relative_percent: 40,
+          successful_requests_relative_percent: 40,
+          cost_relative_percent: 31,
+        }),
+        entry({ rank: 3, ordinal: 3, identity: { kind: 'self' }, is_self: true, cost: 6.5 }),
+      ],
+      { metric: 'cost' },
+    )
+
+    const peers = wrapper.findAll('[data-testid="leaderboard-row"]')
+    expect(peers[1].find('.rp-lb-cost').text()).toBe('31%')
+    expect(peers[1].find('.rp-lb-cost').attributes('title')).toBe('31% of the top entry')
+    expect(wrapper.find('[data-testid="leaderboard-row-self"]').find('.rp-lb-cost').text()).toBe(
+      '$6.50',
+    )
+    // 相对条也按金额那一列算
+    expect(wrapper.findAll('.rp-bar-fill')[1].attributes('style')).toContain('width: 31%')
+  })
+
+  // 解读句在 cost 下的分母是 site.cost，MUST NOT 回落到 tokens 那一格。
+  it('computes the readout from the site spend total when the metric is cost', () => {
+    const readout = mountList(namedBoard(), { site: site() })
+      .find('[data-testid="leaderboard-rank-readout"]')
+      .text()
+    expect(readout).toBe('LEAD 2x · SHARE 70%')
+
+    const costReadout = mountList(namedBoard(), { metric: 'cost', site: site() })
+      .find('[data-testid="leaderboard-rank-readout"]')
+      .text()
+    // 第 1 名 $40 是第 2 名（$20）的 2 倍；前三名 $70 / 全站 $100
+    expect(costReadout).toBe('LEAD 2x · SHARE 70%')
+
+    const noSiteCost = mountList(namedBoard(), {
+      metric: 'cost',
+      site: site({ cost: undefined }),
+    })
+      .find('[data-testid="leaderboard-rank-readout"]')
+      .text()
+    expect(noSiteCost).toBe('LEAD 2x')
   })
 
   // 解读句压成一行两句，两档同形：第 1 名的绝对量、末名倍数与互换那句都已删。
@@ -322,8 +433,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 100,
         successful_requests_relative_percent: 100,
+        cost_relative_percent: 100,
       }),
       entry({
         rank: 2,
@@ -331,8 +444,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 50,
         successful_requests_relative_percent: 20,
+        cost_relative_percent: 50,
       }),
       entry({
         rank: 3,
@@ -340,8 +455,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 25,
         successful_requests_relative_percent: 40,
+        cost_relative_percent: 25,
       }),
     ]
 
@@ -384,8 +501,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 100,
         successful_requests_relative_percent: 100,
+        cost_relative_percent: 100,
       }),
       entry({
         rank: 2,
@@ -393,8 +512,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 50,
         successful_requests_relative_percent: 50,
+        cost_relative_percent: 50,
       }),
       // 本人行：绝对量，没有相对百分比
       entry({
@@ -411,8 +532,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 10,
         successful_requests_relative_percent: 25,
+        cost_relative_percent: 10,
       }),
     ]
 
@@ -433,8 +556,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 100,
         successful_requests_relative_percent: 100,
+        cost_relative_percent: 100,
       }),
       entry({
         rank: 2,
@@ -470,8 +595,10 @@ describe('LbRankList', () => {
         identity: { kind: 'anonymous' },
         total_tokens: undefined,
         successful_requests: undefined,
+        cost: undefined,
         total_tokens_relative_percent: 40,
         successful_requests_relative_percent: 40,
+        cost_relative_percent: 40,
       }),
     ])
     expect(leading.find('[data-testid="leaderboard-row-self"]').find('.rp-pc').text()).toBe('100%')

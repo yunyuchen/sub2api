@@ -19,11 +19,13 @@ const messages: Record<string, string> = {
   'leaderboard.metrics.label': 'Metric',
   'leaderboard.metrics.totalTokens': 'Total tokens',
   'leaderboard.metrics.successfulRequests': 'Successful requests',
+  'leaderboard.metrics.cost': 'Spend',
   'leaderboard.masthead.brand': 'Leaderboard',
   'leaderboard.masthead.modeAnonymous': 'Anonymous',
   'leaderboard.masthead.rebuildIn': '(rebuilds in {minutes}m)',
   'leaderboard.masthead.metricTokens': 'tokens',
   'leaderboard.masthead.metricRequests': 'requests',
+  'leaderboard.masthead.metricCost': 'spend',
   'leaderboard.masthead.theme': 'Theme',
   'leaderboard.masthead.themeLight': 'Light',
   'leaderboard.masthead.themeDark': 'Dark',
@@ -139,6 +141,22 @@ describe('LbMasthead', () => {
 
     expect(wrapper.emitted('select-window')?.[0]).toEqual(['month'])
     expect(wrapper.emitted('select-metric')?.[0]).toEqual(['successful_requests'])
+  })
+
+  // Metric 是三项：tokens / 成功请求 / 金额，短标签进分段、完整名字进 title。
+  it('offers the spend metric alongside the other two', async () => {
+    const wrapper = mountMasthead({ activeMetric: 'cost' })
+
+    const cost = wrapper.find('[data-testid="leaderboard-metric-cost"]')
+    expect(cost.text()).toBe('spend')
+    expect(cost.attributes('title')).toBe('Spend')
+    expect(cost.attributes('aria-pressed')).toBe('true')
+    expect(
+      wrapper.find('[data-testid="leaderboard-metric-total-tokens"]').attributes('aria-pressed'),
+    ).toBe('false')
+
+    await wrapper.find('[data-testid="leaderboard-metric-total-tokens"]').trigger('click')
+    expect(wrapper.emitted('select-metric')?.[0]).toEqual(['total_tokens'])
   })
 
   // 快照 chip 只剩呼吸点 + 时分 + `(+Nm)`；`(+Nm)` 按重建周期现算，MUST NOT 写死示例值。

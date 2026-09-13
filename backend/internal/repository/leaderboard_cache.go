@@ -20,11 +20,16 @@ import (
 //
 //	<cfg.Dashboard.KeyPrefix>leaderboard:v1:<window>:<窗口起点>:z:total_tokens         ZSET  member=user_id score=Total Tokens
 //	<cfg.Dashboard.KeyPrefix>leaderboard:v1:<window>:<窗口起点>:z:successful_requests  ZSET  member=user_id score=Successful Requests
-//	<cfg.Dashboard.KeyPrefix>leaderboard:v1:<window>:<窗口起点>:h                      HASH  user_id -> "tokens,requests,input,cache_read,output,cache_creation,night_tokens,distinct_models,max_single,media_requests,yesterday_tokens,yesterday_requests"
+//	<cfg.Dashboard.KeyPrefix>leaderboard:v1:<window>:<窗口起点>:z:cost                 ZSET  member=user_id score=Cost（micros，1 USD = 1e6）
+//	<cfg.Dashboard.KeyPrefix>leaderboard:v1:<window>:<窗口起点>:h                      HASH  user_id -> "tokens,requests,input,cache_read,output,cache_creation,night_tokens,distinct_models,max_single,media_requests,yesterday_tokens,yesterday_requests,cost_micros"
 //	<cfg.Dashboard.KeyPrefix>leaderboard:v1:<window>:<窗口起点>:updated_at             STR   快照更新时间（毫秒时间戳）
 //	<cfg.Dashboard.KeyPrefix>leaderboard:v1:<window>:<窗口起点>:highlights             STR   该窗口的 Highlights（趣味卡）JSON
 //	<cfg.Dashboard.KeyPrefix>leaderboard:v1:insights:<今日窗口起点>                     STR   站点级 Insights（洞察）JSON
 //	<cfg.Dashboard.KeyPrefix>leaderboard:v1:viewer:models:<window>:<窗口起点>:<user_id> STR   本人模型偏好 JSON（60 秒）
+//
+// 三个 Metric（排名指标）各一个 ZSET，key 后缀就是 Metric 字符串本身（见 metricKey）。
+// Cost 的分数与 Hash 第 13 段一律是 micros（1 USD = 1e6 的定点整数），只在响应组装时
+// 换回 USD：ZSET 分数是 float64，直接放美元小数会让并列判定与「还差多少」出现尾差。
 //
 // key 必须带窗口起点：只按窗口名命名会在跨零点 / 周一 / 月初时读到上一窗口的残留。
 // Insights 与 Window 无关，只存一份，key 带今日起点同样是为了跨零点自然作废。
@@ -98,6 +103,7 @@ func (c *leaderboardCache) ReplaceSnapshot(ctx context.Context, snapshot service
 
 	tokensKey := base + leaderboardZSetKeySuffix + string(service.LeaderboardMetricTotalTokens)
 	requestsKey := base + leaderboardZSetKeySuffix + string(service.LeaderboardMetricSuccessfulRequests)
+	costKey := base + leaderboardZSetKeySuffix + string(service.LeaderboardMetricCost)
 	hashKey := base + leaderboardHashKeySuffix
 	updatedAtKey := base + leaderboardUpdatedAtKeySuffix
 	highlightsKey := base + leaderboardHighlightsKeySuffix
@@ -123,7 +129,7 @@ func (c *leaderboardCache) ReplaceSnapshot(ctx context.Context, snapshot service
 	// 空榜是一份就绪的快照，与「正在计算」是两回事。
 	if len(snapshot.Entries) == 0 {
 		tx := c.rdb.TxPipeline()
-		tx.Del(ctx, tokensKey, requestsKey, hashKey, highlightsKey)
+		tx.Del(ctx, tokensKey, requestsKey, costKey, hashKey, highlightsKey)
 		if highlightsPayload != nil {
 			tx.Set(ctx, highlightsKey, highlightsPayload, ttl)
 		}
@@ -135,12 +141,13 @@ func (c *leaderboardCache) ReplaceSnapshot(ctx context.Context, snapshot service
 	nonce := uuid.NewString()
 	tmpTokensKey := tokensKey + leaderboardTempKeyInfix + nonce
 	tmpRequestsKey := requestsKey + leaderboardTempKeyInfix + nonce
+	tmpCostKey := costKey + leaderboardTempKeyInfix + nonce
 	tmpHashKey := hashKey + leaderboardTempKeyInfix + nonce
 	tmpHighlightsKey := highlightsKey + leaderboardTempKeyInfix + nonce
 	discard := func() {
 		ctx2, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_ = c.rdb.Del(ctx2, tmpTokensKey, tmpRequestsKey, tmpHashKey, tmpHighlightsKey).Err()
+		_ = c.rdb.Del(ctx2, tmpTokensKey, tmpRequestsKey, tmpCostKey, tmpHashKey, tmpHighlightsKey).Err()
 	}
 
 	pipe := c.rdb.Pipeline()
@@ -153,20 +160,25 @@ func (c *leaderboardCache) ReplaceSnapshot(ctx context.Context, snapshot service
 
 		tokenMembers := make([]redis.Z, 0, len(chunk))
 		requestMembers := make([]redis.Z, 0, len(chunk))
+		costMembers := make([]redis.Z, 0, len(chunk))
 		hashFields := make([]any, 0, len(chunk)*2)
 		for _, entry := range chunk {
 			member := strconv.FormatInt(entry.UserID, 10)
 			tokenMembers = append(tokenMembers, redis.Z{Score: float64(entry.TotalTokens), Member: member})
 			requestMembers = append(requestMembers, redis.Z{Score: float64(entry.SuccessfulRequests), Member: member})
+			// 分数是 micros 而不是 USD：整数分数下并列判定与 ZCOUNT 的边界才是精确的。
+			costMembers = append(costMembers, redis.Z{Score: float64(entry.CostMicros), Member: member})
 			hashFields = append(hashFields, member, encodeLeaderboardMetrics(entry))
 		}
 		pipe.ZAdd(ctx, tmpTokensKey, tokenMembers...)
 		pipe.ZAdd(ctx, tmpRequestsKey, requestMembers...)
+		pipe.ZAdd(ctx, tmpCostKey, costMembers...)
 		pipe.HSet(ctx, tmpHashKey, hashFields...)
 	}
 	// RENAME 会把源 key 的 TTL 一并带过去，所以在切换前就把 TTL 设好。
 	pipe.Expire(ctx, tmpTokensKey, ttl)
 	pipe.Expire(ctx, tmpRequestsKey, ttl)
+	pipe.Expire(ctx, tmpCostKey, ttl)
 	pipe.Expire(ctx, tmpHashKey, ttl)
 	if highlightsPayload != nil {
 		pipe.Set(ctx, tmpHighlightsKey, highlightsPayload, ttl)
@@ -179,6 +191,7 @@ func (c *leaderboardCache) ReplaceSnapshot(ctx context.Context, snapshot service
 	tx := c.rdb.TxPipeline()
 	tx.Rename(ctx, tmpTokensKey, tokensKey)
 	tx.Rename(ctx, tmpRequestsKey, requestsKey)
+	tx.Rename(ctx, tmpCostKey, costKey)
 	tx.Rename(ctx, tmpHashKey, hashKey)
 	if highlightsPayload != nil {
 		tx.Rename(ctx, tmpHighlightsKey, highlightsKey)
@@ -340,8 +353,8 @@ func (c *leaderboardCache) RankOf(ctx context.Context, window service.Leaderboar
 	return higher + 1, true, nil
 }
 
-// MetricsOf 从该 Window 的 Hash 批量读取这些 user_id 的两个数值，
-// 供「榜单按一个 Metric 排序、每行仍同时显示两个 Metric」使用。
+// MetricsOf 从该 Window 的 Hash 批量读取这些 user_id 的数值，
+// 供「榜单按一个 Metric 排序、每行仍同时显示三个 Metric」使用（Cost 读出来是 micros）。
 func (c *leaderboardCache) MetricsOf(ctx context.Context, window service.LeaderboardWindow, windowStart time.Time, userIDs []int64) (map[int64]service.LeaderboardUserMetrics, error) {
 	if c == nil || c.rdb == nil {
 		return nil, errLeaderboardCacheUnavailable
@@ -409,7 +422,7 @@ func (c *leaderboardCache) UpdatedAt(ctx context.Context, window service.Leaderb
 
 func (c *leaderboardCache) metricKey(window service.LeaderboardWindow, windowStart time.Time, metric service.LeaderboardMetric) (string, error) {
 	switch metric {
-	case service.LeaderboardMetricTotalTokens, service.LeaderboardMetricSuccessfulRequests:
+	case service.LeaderboardMetricTotalTokens, service.LeaderboardMetricSuccessfulRequests, service.LeaderboardMetricCost:
 	default:
 		return "", fmt.Errorf("未知的排行榜指标: %s", metric)
 	}
@@ -469,14 +482,16 @@ func leaderboardSnapshotTTL(windowEnd, now time.Time) time.Duration {
 	return ttl
 }
 
-// Hash value 是十二段逗号分隔的整数，顺序固定（design D20）：
+// Hash value 是十三段逗号分隔的整数，顺序固定（design D20）：
 //
 //	tokens, requests, input, cache_read, output, cache_creation,
 //	night_tokens, distinct_models, max_single, media_requests,
-//	yesterday_tokens, yesterday_requests
+//	yesterday_tokens, yesterday_requests, cost_micros
 //
-// 前两段是 Metric，其余十段只喂 Cache Hit Rate（缓存命中率）、Extremes（之最）与 Token 构成，
-// MUST NOT 参与排名。media_requests 占住第 10 段但没有任何响应字段读它——本轮只存不展示。
+// 第 1、2、13 段是三个 Metric，其余十段只喂 Cache Hit Rate（缓存命中率）、Extremes（之最）
+// 与 Token 构成，MUST NOT 参与排名。media_requests 占住第 10 段但没有任何响应字段读它——
+// 本轮只存不展示。cost_micros 追加在末尾而不是插在 Metric 旁边：段序是契约，
+// 在中间插一段会让旧 value 整体错位，追加则让旧的十二段式自然解出 CostMicros = 0。
 func encodeLeaderboardMetrics(entry service.LeaderboardUserMetrics) string {
 	segments := []int64{
 		entry.TotalTokens,
@@ -491,6 +506,7 @@ func encodeLeaderboardMetrics(entry service.LeaderboardUserMetrics) string {
 		entry.MediaRequests,
 		entry.YesterdayTokens,
 		entry.YesterdayRequests,
+		entry.CostMicros,
 	}
 	var sb strings.Builder
 	for i, value := range segments {
@@ -503,8 +519,8 @@ func encodeLeaderboardMetrics(entry service.LeaderboardUserMetrics) string {
 }
 
 // decodeLeaderboardMetrics 容忍段数不足的历史 value：缺的段一律按 0 处理，
-// 因此上一版写入的两段式与四段式 value 都仍能读出榜单本体，升级后无需清 Redis——
-// 该窗口只是暂时「没有命中率 / 没有之最卡」，下一轮重建（最长 5 分钟）即补齐。
+// 因此上一版写入的两段式、四段式与十二段式 value 都仍能读出榜单本体，升级后无需清 Redis——
+// 该窗口只是暂时「没有命中率 / 没有之最卡 / 金额为 0」，下一轮重建（最长 5 分钟）即补齐。
 // 前两段解析不出来才算无效行（那不是旧值，是坏值）。
 func decodeLeaderboardMetrics(userID int64, raw string) (service.LeaderboardUserMetrics, bool) {
 	parts := strings.Split(raw, ",")
@@ -526,6 +542,7 @@ func decodeLeaderboardMetrics(userID int64, raw string) (service.LeaderboardUser
 	mediaRequests, _ := leaderboardMetricSegment(parts, 9)
 	yesterdayTokens, _ := leaderboardMetricSegment(parts, 10)
 	yesterdayRequests, _ := leaderboardMetricSegment(parts, 11)
+	costMicros, _ := leaderboardMetricSegment(parts, 12)
 	return service.LeaderboardUserMetrics{
 		UserID:              userID,
 		TotalTokens:         tokens,
@@ -540,6 +557,7 @@ func decodeLeaderboardMetrics(userID int64, raw string) (service.LeaderboardUser
 		MediaRequests:       mediaRequests,
 		YesterdayTokens:     yesterdayTokens,
 		YesterdayRequests:   yesterdayRequests,
+		CostMicros:          costMicros,
 	}, true
 }
 
@@ -610,7 +628,7 @@ func leaderboardViewerModelsCacheTTL(windowEnd, now time.Time) time.Duration {
 }
 
 // leaderboardMetricSegment 取第 index 段并解析；段缺失或解析失败时返回 0, false，
-// 由调用方决定是「按 0 处理」（第 3 段起的十段）还是「整行作废」（前两段）。
+// 由调用方决定是「按 0 处理」（第 3 段起的十一段）还是「整行作废」（前两段）。
 func leaderboardMetricSegment(parts []string, index int) (int64, bool) {
 	if index >= len(parts) {
 		return 0, false

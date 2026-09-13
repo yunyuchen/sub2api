@@ -264,10 +264,11 @@ func TestParseLeaderboardWindowAndMetric(t *testing.T) {
 	}{
 		{"total_tokens", LeaderboardMetricTotalTokens, true},
 		{" Successful_Requests ", LeaderboardMetricSuccessfulRequests, true},
+		{" COST ", LeaderboardMetricCost, true},
 		{"", "", false},
-		// 金额连排序选项都不提供。
+		// 金额的 Metric 名字只有 cost 一个：换个写法一律 400，MUST NOT 回落到默认值。
 		{"actual_cost", "", false},
-		{"cost", "", false},
+		{"money", "", false},
 	} {
 		got, ok := ParseLeaderboardMetric(tc.raw)
 		require.Equal(t, tc.ok, ok, "raw=%q", tc.raw)
@@ -1152,9 +1153,9 @@ func TestLeaderboardSnapshotService_RankHistoryUpsertsTodayParticipants(t *testi
 	todayStart, _, _ := LeaderboardWindowBounds(LeaderboardWindowToday, now)
 
 	repo := leaderboardV2StubRepo([]usagestats.LeaderboardAggregateRow{
-		{UserID: 1, TodayTokens: 300, TodayRequests: 1, WeekTokens: 300, WeekRequests: 1},
-		{UserID: 2, TodayTokens: 300, TodayRequests: 9, WeekTokens: 300, WeekRequests: 9},
-		{UserID: 3, TodayTokens: 100, TodayRequests: 5, WeekTokens: 100, WeekRequests: 5},
+		{UserID: 1, TodayTokens: 300, TodayRequests: 1, TodayCost: 0.5, WeekTokens: 300, WeekRequests: 1},
+		{UserID: 2, TodayTokens: 300, TodayRequests: 9, TodayCost: 2.25, WeekTokens: 300, WeekRequests: 9},
+		{UserID: 3, TodayTokens: 100, TodayRequests: 5, TodayCost: 2.25, WeekTokens: 100, WeekRequests: 5},
 		// 今日零用量：只进本周窗口，MUST NOT 出现在今日的名次历史里。
 		{UserID: 4, WeekTokens: 900, WeekRequests: 30},
 	})
@@ -1174,10 +1175,14 @@ func TestLeaderboardSnapshotService_RankHistoryUpsertsTodayParticipants(t *testi
 	require.Equal(t, 1, byUser[1].RankTotalTokens)
 	require.Equal(t, 1, byUser[2].RankTotalTokens)
 	require.Equal(t, 3, byUser[3].RankTotalTokens)
-	// 成功请求数是另一套名次，两列都写。
+	// 成功请求数是另一套名次，三列都写。
 	require.Equal(t, 1, byUser[2].RankSuccessfulRequests)
 	require.Equal(t, 2, byUser[3].RankSuccessfulRequests)
 	require.Equal(t, 3, byUser[1].RankSuccessfulRequests)
+	// 金额又是一套名次：2.25 并列第 1，0.5 跳到第 3，与另两列互不相干。
+	require.Equal(t, 1, byUser[2].RankCost)
+	require.Equal(t, 1, byUser[3].RankCost)
+	require.Equal(t, 3, byUser[1].RankCost)
 
 	for _, row := range rows {
 		require.NotEqual(t, int64(4), row.UserID)
@@ -1264,4 +1269,42 @@ func TestLeaderboardSnapshotService_RebuildCarriesExtremeMetrics(t *testing.T) {
 		OutputTokens: 24, CacheCreationTokens: 25, NightTokens: 26, DistinctModels: 27,
 		MaxSingleTokens: 28, MediaRequests: 29, YesterdayTokens: 12, YesterdayRequests: 2,
 	}}, cache.byWindow(t, LeaderboardWindowMonth).Entries)
+}
+
+// 金额一路带进三个窗口的快照：第三个 ZSET 的分数与 Hash 第 13 段都取自这个 CostMicros，
+// 因此这里钉住「USD → micros 只在作业里换算一次」。
+func TestLeaderboardSnapshotService_RebuildCarriesCostMicros(t *testing.T) {
+	require.NoError(t, timezone.Init("UTC"))
+	now := time.Date(2026, 3, 18, 15, 30, 0, 0, time.UTC)
+
+	repo := leaderboardV2StubRepo([]usagestats.LeaderboardAggregateRow{
+		{
+			UserID:      1,
+			TodayTokens: 30, TodayRequests: 3, TodayCost: 1.234567,
+			WeekTokens: 70, WeekRequests: 7, WeekCost: 12.5,
+			MonthTokens: 100, MonthRequests: 10, MonthCost: 100,
+		},
+		// 只有 token、没有金额（按 token 计费但单价为 0）：CostMicros 是真实的 0，照常进榜。
+		{UserID: 2, TodayTokens: 10, TodayRequests: 1},
+	})
+	cache := &stubLeaderboardCache{}
+	require.NoError(t, NewLeaderboardSnapshotService(repo, cache, nil).Rebuild(context.Background(), now))
+
+	for _, tc := range []struct {
+		window LeaderboardWindow
+		want   int64
+	}{
+		{LeaderboardWindowToday, 1_234_567}, // 四舍五入到 micros
+		{LeaderboardWindowWeek, 12_500_000},
+		{LeaderboardWindowMonth, 100_000_000},
+	} {
+		entries := cache.byWindow(t, tc.window).Entries
+		require.Equal(t, tc.want, entries[0].CostMicros, "窗口 %s", tc.window)
+		require.Equal(t, tc.want, entries[0].Metric(LeaderboardMetricCost), "窗口 %s 的 ZSET 分数即 CostMicros", tc.window)
+	}
+	require.Equal(t, int64(0), cache.byWindow(t, LeaderboardWindowToday).Entries[1].CostMicros,
+		"没有金额的参与者是真实的 0，不是缺席")
+
+	// 全站合计同样按 micros 累加，供 04 章「前三名占全站 N%」当分母。
+	require.Equal(t, int64(1_234_567), cache.byWindow(t, LeaderboardWindowToday).Highlights.Site.CostMicros)
 }

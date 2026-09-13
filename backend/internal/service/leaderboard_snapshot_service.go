@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -25,13 +26,30 @@ const (
 	LeaderboardWindowMonth LeaderboardWindow = "month"
 )
 
-// LeaderboardMetric 是 Metric（排名指标）：只有两项，金额连排序选项都不提供。
+// LeaderboardMetric 是 Metric（排名指标）：三项——Total Tokens、Successful Requests 与 Cost（消费金额）。
+// Cost 是该窗口 actual_cost（实际计费金额，USD）之和；绝对金额与 tokens 同一套档位规则：
+// named 档与 Preview 下下发，anonymous 档下只给相对第一名的百分比。
 type LeaderboardMetric string
 
 const (
 	LeaderboardMetricTotalTokens        LeaderboardMetric = "total_tokens"
 	LeaderboardMetricSuccessfulRequests LeaderboardMetric = "successful_requests"
+	LeaderboardMetricCost               LeaderboardMetric = "cost"
 )
+
+// leaderboardCostMicrosPerUSD 是金额在 Snapshot 里的定点单位：1 USD = 1e6 micros。
+// ZSET 分数与 Hash 段都是整数，金额用 micros 存，读出时再换回 USD。
+const leaderboardCostMicrosPerUSD = 1_000_000
+
+// LeaderboardCostMicros 把 USD 金额换成 micros（四舍五入）。
+func LeaderboardCostMicros(usd float64) int64 {
+	return int64(math.Round(usd * leaderboardCostMicrosPerUSD))
+}
+
+// LeaderboardCostUSD 把 micros 换回 USD。
+func LeaderboardCostUSD(micros int64) float64 {
+	return float64(micros) / leaderboardCostMicrosPerUSD
+}
 
 const (
 	// LeaderboardTopEntryLimit 是 Leaderboard Entry（榜单条目）的固定上限，不提供长度选择器。
@@ -73,6 +91,8 @@ func ParseLeaderboardMetric(raw string) (LeaderboardMetric, bool) {
 		return LeaderboardMetricTotalTokens, true
 	case LeaderboardMetricSuccessfulRequests:
 		return LeaderboardMetricSuccessfulRequests, true
+	case LeaderboardMetricCost:
+		return LeaderboardMetricCost, true
 	default:
 		return "", false
 	}
@@ -97,10 +117,12 @@ func LeaderboardWindowBounds(window LeaderboardWindow, now time.Time) (start, en
 }
 
 // LeaderboardUserMetrics 是 Snapshot 里一个用户在某个 Window 下的数值。
-// Snapshot 只记录 user_id 与数值，不记录身份，也不记录任何金额。
+// Snapshot 只记录 user_id 与数值，不记录身份。
 //
-// 前两个是 Metric（排名指标），进 ZSET；其余只用来算 Cache Hit Rate（缓存命中率）、
-// Extremes（之最）与 Token 构成，只进 Hash，MUST NOT 参与排名（design D17 / D20）。
+// TotalTokens、SuccessfulRequests 与 CostMicros 是三个 Metric（排名指标），各进一个 ZSET；
+// 其余只用来算 Cache Hit Rate（缓存命中率）、Extremes（之最）与 Token 构成，只进 Hash，
+// MUST NOT 参与排名（design D17 / D20）。CostMicros 是该窗口 actual_cost 之和的定点值
+// （1 USD = 1e6），占 Hash 的第 13 段。
 //
 // MediaRequests 本轮只存不展示：它占住 Hash 的第 10 段，但没有任何响应字段读它。
 // YesterdayTokens / YesterdayRequests 与 Window 无关（三个窗口里都是同一个「昨日」），
@@ -119,14 +141,19 @@ type LeaderboardUserMetrics struct {
 	MediaRequests       int64
 	YesterdayTokens     int64
 	YesterdayRequests   int64
+	CostMicros          int64
 }
 
-// Metric 返回该用户在指定 Metric 下的值。
+// Metric 返回该用户在指定 Metric 下的值（Cost 返回 micros）。
 func (m LeaderboardUserMetrics) Metric(metric LeaderboardMetric) int64 {
-	if metric == LeaderboardMetricSuccessfulRequests {
+	switch metric {
+	case LeaderboardMetricSuccessfulRequests:
 		return m.SuccessfulRequests
+	case LeaderboardMetricCost:
+		return m.CostMicros
+	default:
+		return m.TotalTokens
 	}
-	return m.TotalTokens
 }
 
 // LeaderboardScoreEntry 是从某个 Window × Metric 的 ZSET 上倒序取到的一行。
@@ -163,7 +190,7 @@ type LeaderboardCache interface {
 	// RankOf 用 ZCOUNT 统计分数严格高于该用户的成员数再加一（并列同名次，其后跳号）。
 	// 该用户不在快照里（窗口内零用量）时返回 found=false。
 	RankOf(ctx context.Context, window LeaderboardWindow, windowStart time.Time, metric LeaderboardMetric, userID int64) (rank int64, found bool, err error)
-	// MetricsOf 从该 Window 的 Hash 批量读取这些 user_id 的两个数值。
+	// MetricsOf 从该 Window 的 Hash 批量读取这些 user_id 的全部数值（三个 Metric 与派生指标的分量）。
 	MetricsOf(ctx context.Context, window LeaderboardWindow, windowStart time.Time, userIDs []int64) (map[int64]LeaderboardUserMetrics, error)
 	// UpdatedAt 返回该 Window 的 Snapshot 更新时间；key 不存在时 exists=false（即「正在计算」）。
 	UpdatedAt(ctx context.Context, window LeaderboardWindow, windowStart time.Time) (updatedAt time.Time, exists bool, err error)
@@ -338,6 +365,9 @@ func (s *LeaderboardSnapshotService) Rebuild(ctx context.Context, now time.Time)
 				NightTokens: r.TodayNightTokens, DistinctModels: r.TodayDistinctModels,
 				MaxSingleTokens: r.TodayMaxSingleTokens, MediaRequests: r.TodayMediaRequests,
 				YesterdayTokens: r.YesterdayTokens, YesterdayRequests: r.YesterdayRequests,
+				// 金额在 Snapshot 内部一律是定点 micros：ZSET 分数、Hash 段与名次都用它算，
+				// 只在响应组装时才换回 USD。
+				CostMicros: LeaderboardCostMicros(r.TodayCost),
 			}
 		}},
 		{LeaderboardWindowWeek, weekStart, weekEnd, func(r usagestats.LeaderboardAggregateRow) LeaderboardUserMetrics {
@@ -348,6 +378,7 @@ func (s *LeaderboardSnapshotService) Rebuild(ctx context.Context, now time.Time)
 				NightTokens: r.WeekNightTokens, DistinctModels: r.WeekDistinctModels,
 				MaxSingleTokens: r.WeekMaxSingleTokens, MediaRequests: r.WeekMediaRequests,
 				YesterdayTokens: r.YesterdayTokens, YesterdayRequests: r.YesterdayRequests,
+				CostMicros: LeaderboardCostMicros(r.WeekCost),
 			}
 		}},
 		{LeaderboardWindowMonth, monthStart, monthEnd, func(r usagestats.LeaderboardAggregateRow) LeaderboardUserMetrics {
@@ -358,16 +389,19 @@ func (s *LeaderboardSnapshotService) Rebuild(ctx context.Context, now time.Time)
 				NightTokens: r.MonthNightTokens, DistinctModels: r.MonthDistinctModels,
 				MaxSingleTokens: r.MonthMaxSingleTokens, MediaRequests: r.MonthMediaRequests,
 				YesterdayTokens: r.YesterdayTokens, YesterdayRequests: r.YesterdayRequests,
+				CostMicros: LeaderboardCostMicros(r.MonthCost),
 			}
 		}},
 	} {
 		entries := make([]LeaderboardUserMetrics, 0, len(rows))
 		for _, row := range rows {
 			m := spec.pick(row)
-			// 窗口内两个 Metric 都是 0 的用户不进该窗口的 Snapshot，
+			// 窗口内没有任何用量的用户不进该窗口的 Snapshot，
 			// 因此 ZCARD 与 Participant Count 的口径一致（spec: 今日窗口的条件聚合）。
-			// 判定只看两个 Metric：input / cache_read 已经含在 Total Tokens 里，
-			// 不会出现「Total Tokens 为 0 却有缓存读取」的行。
+			// 判定只看 Total Tokens 与 Successful Requests 两项：input / cache_read 已经含在
+			// Total Tokens 里，不会出现「Total Tokens 为 0 却有缓存读取」的行；
+			// Cost 同理——成功落账口径本身就是 actual_cost > 0，因此 CostMicros 为正的行
+			// MUST 伴随至少一次成功请求，不必单独判一次。
 			// 新增的十段同理：它们要么含在 Total Tokens 里，要么是「昨日」的基线，
 			// 都不该让一个本窗口零用量的人进榜。
 			if m.TotalTokens <= 0 && m.SuccessfulRequests <= 0 {
@@ -488,11 +522,13 @@ func (s *LeaderboardSnapshotService) maintainLeaderboardRankHistory(ctx context.
 	}
 }
 
-// buildLeaderboardRankHistoryRows 把今日窗口的参与者按两个 Metric 各排一次，
+// buildLeaderboardRankHistoryRows 把今日窗口的参与者按三个 Metric 各排一次，
 // 组装成当天的名次历史行。名次是竞争排名：分数严格高于自己的人数加一。
+// Cost 的名次按 micros 算——与 ZSET 分数同一个定点单位，两处因此永不互相矛盾。
 func buildLeaderboardRankHistoryRows(todayStart time.Time, entries []LeaderboardUserMetrics) []usagestats.LeaderboardRankHistoryRow {
 	tokenRanks := leaderboardCompetitiveRanks(entries, LeaderboardMetricTotalTokens)
 	requestRanks := leaderboardCompetitiveRanks(entries, LeaderboardMetricSuccessfulRequests)
+	costRanks := leaderboardCompetitiveRanks(entries, LeaderboardMetricCost)
 	rows := make([]usagestats.LeaderboardRankHistoryRow, 0, len(entries))
 	for _, entry := range entries {
 		rows = append(rows, usagestats.LeaderboardRankHistoryRow{
@@ -500,6 +536,7 @@ func buildLeaderboardRankHistoryRows(todayStart time.Time, entries []Leaderboard
 			SnapshotDate:           todayStart,
 			RankTotalTokens:        tokenRanks[entry.UserID],
 			RankSuccessfulRequests: requestRanks[entry.UserID],
+			RankCost:               costRanks[entry.UserID],
 		})
 	}
 	return rows

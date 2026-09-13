@@ -33,7 +33,7 @@ var (
 	)
 	ErrLeaderboardInvalidMetric = infraerrors.BadRequest(
 		"LEADERBOARD_INVALID_METRIC",
-		"metric must be one of total_tokens, successful_requests",
+		"metric must be one of total_tokens, successful_requests, cost",
 	)
 )
 
@@ -54,10 +54,11 @@ const (
 	LeaderboardStatusComputing = "computing"
 )
 
-// 「你的位置」提示的三种形态（见 LeaderboardMyRankHint）。
+// 「你的位置」提示的四种形态（见 LeaderboardMyRankHint）。
 const (
 	LeaderboardHintTokensToTop10   = "tokens_to_top10"
 	LeaderboardHintRequestsToTop10 = "requests_to_top10"
+	LeaderboardHintCostToTop10     = "cost_to_top10"
 	LeaderboardHintRelativePercent = "relative_percent"
 )
 
@@ -101,18 +102,21 @@ type LeaderboardIdentity struct {
 // LeaderboardEntry 是榜单的一行。
 //
 // 绝对数值与相对百分比用指针 + omitempty 表达「字段是否存在」：anonymous 档下他人条目的
-// total_tokens / successful_requests MUST 缺席而不是清零，客户端因此没有机会把缺席误读成 0。
+// total_tokens / successful_requests / cost MUST 缺席而不是清零，客户端因此没有机会把缺席
+// 误读成 0。金额与 tokens 同一套档位规则，Cost 下发的是 USD（micros 只活在 Snapshot 内部）。
 type LeaderboardEntry struct {
 	Rank     int64               `json:"rank"`
 	Ordinal  int                 `json:"ordinal"`
 	Identity LeaderboardIdentity `json:"identity"`
 	IsSelf   bool                `json:"is_self"`
 
-	TotalTokens        *int64 `json:"total_tokens,omitempty"`
-	SuccessfulRequests *int64 `json:"successful_requests,omitempty"`
+	TotalTokens        *int64   `json:"total_tokens,omitempty"`
+	SuccessfulRequests *int64   `json:"successful_requests,omitempty"`
+	Cost               *float64 `json:"cost,omitempty"`
 
 	TotalTokensRelativePercent        *int `json:"total_tokens_relative_percent,omitempty"`
 	SuccessfulRequestsRelativePercent *int `json:"successful_requests_relative_percent,omitempty"`
+	CostRelativePercent               *int `json:"cost_relative_percent,omitempty"`
 }
 
 // LeaderboardMyRank 是查看者自己的名次与真实数值：即使不进前 50 也返回；
@@ -120,9 +124,10 @@ type LeaderboardEntry struct {
 //
 // Hint（提示）是「你的位置」那一句话的数值来源，已经在前 10 名之内时缺席。
 type LeaderboardMyRank struct {
-	Rank               int64 `json:"rank"`
-	TotalTokens        int64 `json:"total_tokens"`
-	SuccessfulRequests int64 `json:"successful_requests"`
+	Rank               int64   `json:"rank"`
+	TotalTokens        int64   `json:"total_tokens"`
+	SuccessfulRequests int64   `json:"successful_requests"`
+	Cost               float64 `json:"cost"`
 
 	Hint *LeaderboardMyRankHint `json:"hint,omitempty"`
 }
@@ -131,16 +136,19 @@ type LeaderboardMyRank struct {
 // i18n 渲染——与 identity 同一套思路，后端 MUST NOT 拼接句子（design D18）。
 //
 // Kind 决定哪几个数有值：
-//   - tokens_to_top10 / requests_to_top10（named 档与 Preview）：Value 是按当前 Metric
-//     还差多少才够得着第 10 名。单位随 Metric 变，因此分成两个 kind，前端不必再去
-//     读顶层的 metric 才能决定量词。
+//   - tokens_to_top10 / requests_to_top10 / cost_to_top10（named 档与 Preview）：Value 是按
+//     当前 Metric 还差多少才够得着第 10 名。单位随 Metric 变，因此分成三个 kind，前端不必
+//     再去读顶层的 metric 才能决定量词——tokens / requests 是整数，cost 是 USD 金额。
 //   - relative_percent（anonymous 档）：Self 与 Tenth 分别是本人与第 10 名相对第一名的
 //     整数百分比。他人的绝对量 MUST NOT 出现在提示里，哪怕是差额形式。
+//
+// Value 是 float64 只为容纳 cost：tokens / requests 的差额本来就是整数，序列化后的 JSON
+// 形态因此不变。
 type LeaderboardMyRankHint struct {
-	Kind  string `json:"kind"`
-	Value *int64 `json:"value,omitempty"`
-	Self  *int   `json:"self,omitempty"`
-	Tenth *int   `json:"tenth,omitempty"`
+	Kind  string   `json:"kind"`
+	Value *float64 `json:"value,omitempty"`
+	Self  *int     `json:"self,omitempty"`
+	Tenth *int     `json:"tenth,omitempty"`
 }
 
 // LeaderboardView 是 GET /api/v1/leaderboard 的响应体（design D14）。
@@ -292,9 +300,13 @@ type LeaderboardCacheKingView struct {
 // AvgTokensPerRequest 是比率（全站该窗口 tokens / 成功请求数），与 CacheHitRate 一样两档都给：
 // 页面把它与 viewer.avg_tokens_per_request 并排对比。全站成功请求数为 0 时它在存储层就缺席，
 // 这里也就无从下发——MUST NOT 记成 0。
+//
+// Cost 是全站该窗口的消费金额（USD），与 TotalTokens 同属站点级绝对量，anonymous 档缺席；
+// 页面的解读句「前三名占全站 N%」在 cost 下拿它当分母。
 type LeaderboardSiteView struct {
-	TotalTokens        *int64 `json:"total_tokens,omitempty"`
-	SuccessfulRequests *int64 `json:"successful_requests,omitempty"`
+	TotalTokens        *int64   `json:"total_tokens,omitempty"`
+	SuccessfulRequests *int64   `json:"successful_requests,omitempty"`
+	Cost               *float64 `json:"cost,omitempty"`
 
 	ParticipantCount    any      `json:"participant_count"`
 	CacheHitRate        *float64 `json:"cache_hit_rate,omitempty"`
@@ -494,7 +506,9 @@ func (s *LeaderboardService) Query(
 	// 否则他仍要靠「先开后关」才能看到效果（design D9）。
 	renderNamed := mode == LeaderboardModeNamed || preview
 
-	if metric != LeaderboardMetricTotalTokens && metric != LeaderboardMetricSuccessfulRequests {
+	switch metric {
+	case LeaderboardMetricTotalTokens, LeaderboardMetricSuccessfulRequests, LeaderboardMetricCost:
+	default:
 		return nil, ErrLeaderboardInvalidMetric
 	}
 	now := timezone.Now()
@@ -605,6 +619,8 @@ func (s *LeaderboardService) Query(
 				Rank:               viewerRank,
 				TotalTokens:        viewerMetrics.TotalTokens,
 				SuccessfulRequests: viewerMetrics.SuccessfulRequests,
+				// 本人的真实金额在任何档位都下发，micros 在这里换回 USD。
+				Cost: LeaderboardCostUSD(viewerMetrics.CostMicros),
 			}
 			view.MyRank.Hint = leaderboardMyRankHint(top, viewerMetrics.Metric(metric), viewerRank, metric, renderNamed)
 		}
@@ -795,11 +811,18 @@ func leaderboardMyRankHint(
 		// 也不给一句「再多 0 个就能进前 10」。
 		return nil
 	}
+	// 差额一律在 Metric 自己的单位里算完再换算：cost 的分数是 micros，
+	// 先减后换成 USD，MUST NOT 先各自换成 USD 再相减。
 	kind := LeaderboardHintTokensToTop10
-	if metric == LeaderboardMetricSuccessfulRequests {
+	value := float64(gap)
+	switch metric {
+	case LeaderboardMetricSuccessfulRequests:
 		kind = LeaderboardHintRequestsToTop10
+	case LeaderboardMetricCost:
+		kind = LeaderboardHintCostToTop10
+		value = LeaderboardCostUSD(gap)
 	}
-	return &LeaderboardMyRankHint{Kind: kind, Value: &gap}
+	return &LeaderboardMyRankHint{Kind: kind, Value: &value}
 }
 
 // renderEntries 按响应时刻的 users 当前状态剔除不合格用户、判定身份形态并填数值。
@@ -825,7 +848,7 @@ func (s *LeaderboardService) renderEntries(
 	}
 
 	kept := make([]leaderboardKeptEntry, 0, len(top))
-	var maxTokens, maxRequests int64
+	var maxTokens, maxRequests, maxCostMicros int64
 	for i := range top {
 		userID := top[i].UserID
 		user, ok := users[userID]
@@ -852,6 +875,10 @@ func (s *LeaderboardService) renderEntries(
 		if metrics.SuccessfulRequests > maxRequests {
 			maxRequests = metrics.SuccessfulRequests
 		}
+		// 金额的相对百分比按 micros 比，分母是本次下发的这批人里的最大值。
+		if metrics.CostMicros > maxCostMicros {
+			maxCostMicros = metrics.CostMicros
+		}
 		kept = append(kept, leaderboardKeptEntry{
 			userID:   userID,
 			rank:     ranks[i],
@@ -874,13 +901,17 @@ func (s *LeaderboardService) renderEntries(
 		if renderNamed || item.isSelf {
 			// named 档与 Preview 下全部精确；anonymous 档下本人行也始终是真实数值。
 			tokens, requests := item.metrics.TotalTokens, item.metrics.SuccessfulRequests
+			cost := LeaderboardCostUSD(item.metrics.CostMicros)
 			entry.TotalTokens = &tokens
 			entry.SuccessfulRequests = &requests
+			entry.Cost = &cost
 		} else {
 			tokensPercent := leaderboardRelativePercent(item.metrics.TotalTokens, maxTokens)
 			requestsPercent := leaderboardRelativePercent(item.metrics.SuccessfulRequests, maxRequests)
+			costPercent := leaderboardRelativePercent(item.metrics.CostMicros, maxCostMicros)
 			entry.TotalTokensRelativePercent = &tokensPercent
 			entry.SuccessfulRequestsRelativePercent = &requestsPercent
+			entry.CostRelativePercent = &costPercent
 		}
 		entries = append(entries, entry)
 	}
@@ -1023,7 +1054,9 @@ func leaderboardHighlightsView(
 	view.Extremes = leaderboardExtremesView(highlights.Extremes, slots, viewerID, renderNamed)
 	if renderNamed {
 		tokens, requests := highlights.Site.TotalTokens, highlights.Site.SuccessfulRequests
+		cost := LeaderboardCostUSD(highlights.Site.CostMicros)
 		view.Site.TotalTokens, view.Site.SuccessfulRequests = &tokens, &requests
+		view.Site.Cost = &cost
 	}
 
 	if king := highlights.CacheKing; king != nil {

@@ -5,17 +5,17 @@
 ## ADDED Requirements
 
 ### Requirement: Snapshot 是榜单三处数字的唯一来源
-Snapshot MUST 是一个 Window 内所有有用量的合格用户的 Total Tokens（总 tokens）与 Successful Requests（成功请求数）集合，由后台周期性重建。Leaderboard Entry（榜单条目）、Participant Count（参与人数）与 My Rank（我的名次）MUST 全部从同一份 Snapshot 导出，任何时刻 MUST 互相自洽。Snapshot MUST 只记录 `user_id` 与数值（数值集合见「每用户 Hash 存四个数值」），MUST NOT 记录身份（`username`、邮箱、Display Name（展示名））或任何金额。
+Snapshot MUST 是一个 Window 内所有有用量的合格用户的 Total Tokens（总 tokens）、Successful Requests（成功请求数）与 Cost（消费金额）集合，由后台周期性重建。Leaderboard Entry（榜单条目）、Participant Count（参与人数）与 My Rank（我的名次）MUST 全部从同一份 Snapshot 导出，任何时刻 MUST 互相自洽。Snapshot MUST 只记录 `user_id` 与数值（数值集合见「每用户 Hash 存十三段数值」），MUST NOT 记录身份（`username`、邮箱、Display Name（展示名））。金额只有 Cost 这一个口径，以定点 micros 存放，MUST NOT 出现 `total_cost` 之类的其它金额。
 
 #### Scenario: 三处数字同源
 - **WHEN** 查看者在同一次请求里拿到 `entries`、`participant_count` 与 `my_rank`
 - **THEN** 三者 MUST 出自同一份 Snapshot
 - **THEN** `my_rank.rank` MUST NOT 与 `entries` 中同一用户的 `rank` 冲突
 
-#### Scenario: Snapshot 不含身份与金额
+#### Scenario: Snapshot 不含身份
 - **WHEN** 检查某个 Window 的 Snapshot 内容
 - **THEN** 其中 MUST 只有 `user_id` 与数值字段
-- **THEN** 其中 MUST NOT 出现 `username`、邮箱或任何金额
+- **THEN** 其中 MUST NOT 出现 `username` 或邮箱，金额 MUST 只有 Cost 的定点 micros 这一段
 
 ### Requirement: 后台周期作业每 5 分钟重建，leader lock 保证只跑一份
 Snapshot 的重建 MUST 由一个经 `TimingWheelService.ScheduleRecurring` 注册的后台作业承担，周期为 5 分钟。每一轮 MUST 先通过 `tryAcquireSingletonLeaderLock` 取锁，保证多实例部署下同一轮只有一个实例真正执行聚合；Redis 不可用时 MUST 回落到 Postgres advisory lock。未取到锁的实例 MUST 跳过本轮，MUST NOT 自行聚合。
@@ -36,12 +36,12 @@ Snapshot 的重建 MUST 由一个经 `TimingWheelService.ScheduleRecurring` 注�
 - **THEN** 请求 MUST NOT 触发任何一次聚合
 
 ### Requirement: 一条 SQL 同时产出三个窗口
-每一轮重建 MUST 用一条 SQL、一次扫描 `usage_logs` 同时产出今日 / 本周 / 本月三个 Window 的按用户聚合：扫描下界 MUST 取 `min(月初, 周一)`，三个窗口各自用条件聚合（`FILTER (WHERE ul.created_at >= 该窗口起点)`）算出 Total Tokens 与 Successful Requests 两个数，`GROUP BY user_id`。窗口起点 MUST 用站点时区的 `StartOfDay` / `StartOfWeek`（周一起算）/ `StartOfMonth` 计算。Successful Requests MUST 沿用 `usageLogSuccessFilterUL`（`ul.actual_cost > 0`）的过滤约定。系统 MUST NOT 为每个窗口各跑一次聚合。
+每一轮重建 MUST 用一条 SQL、一次扫描 `usage_logs` 同时产出今日 / 本周 / 本月三个 Window 的按用户聚合：扫描下界 MUST 取 `min(月初, 周一)`，三个窗口各自用条件聚合（`FILTER (WHERE ul.created_at >= 该窗口起点)`）算出 Total Tokens、Successful Requests 与 Cost（`SUM(ul.actual_cost)`）三个数，`GROUP BY user_id`。窗口起点 MUST 用站点时区的 `StartOfDay` / `StartOfWeek`（周一起算）/ `StartOfMonth` 计算。Successful Requests MUST 沿用 `usageLogSuccessFilterUL`（`ul.actual_cost > 0`）的过滤约定。系统 MUST NOT 为每个窗口各跑一次聚合。
 
 #### Scenario: 一轮只扫一次
 - **WHEN** 后台作业执行一轮重建
 - **THEN** MUST 只对 `usage_logs` 做一次扫描
-- **THEN** 三个 Window 的六组数值 MUST 全部来自这一次扫描
+- **THEN** 三个 Window 的各组数值 MUST 全部来自这一次扫描
 
 #### Scenario: 扫描下界
 - **WHEN** 站点时区当天是某月 3 日周三，本月起点早于本周周一
@@ -50,7 +50,7 @@ Snapshot 的重建 MUST 由一个经 `TimingWheelService.ScheduleRecurring` 注�
 
 #### Scenario: 今日窗口的条件聚合
 - **WHEN** 某用户在本月有大量用量，但今日没有任何请求
-- **THEN** 其今日窗口的两个数值 MUST 都是 0（即不进入今日 Snapshot）
+- **THEN** 其今日窗口的各个数值 MUST 都是 0（即不进入今日 Snapshot）
 - **THEN** 其本月窗口的数值 MUST 正常反映本月用量
 
 ### Requirement: 聚合排除禁用与软删除的用户
@@ -70,7 +70,7 @@ Snapshot 的重建 MUST 由一个经 `TimingWheelService.ScheduleRecurring` 注�
 - **THEN** 它们 MUST NOT 产生任何榜单条目
 
 ### Requirement: Redis 存派生结构而不是整块 JSON
-Snapshot MUST 以派生结构写入 Redis：每个 Window × Metric 一个 ZSET（member = `user_id`，score = 该 Metric 的值），用于 Top 50（`ZREVRANGE`）、Participant Count（`ZCARD`）与 Rank（名次）（`ZCOUNT` 取严格高于自己的人数后加一）；每个 Window 另有一个 Hash 存 `user_id` → 该窗口的数值（字段集见「每用户 Hash 存四个数值」），供「每行同时显示两个 Metric」与 Cache Hit Rate（缓存命中率）使用；再存一个该 Window 的 Snapshot 更新时间；另有该 Window 的 Highlights（趣味卡）与站点级 Insights（洞察）两个 JSON 串（见「Highlights 与 Insights 在同一轮作业里算好」）。系统 MUST NOT 把整份榜单序列化成单个 JSON key。
+Snapshot MUST 以派生结构写入 Redis：每个 Window × Metric 一个 ZSET（member = `user_id`，score = 该 Metric 的值；Cost（消费金额）的 score MUST 是定点 micros 而不是浮点 USD），因此每个 Window MUST 有三个 ZSET，用于 Top 50（`ZREVRANGE`）、Participant Count（`ZCARD`）与 Rank（名次）（`ZCOUNT` 取严格高于自己的人数后加一）；每个 Window 另有一个 Hash 存 `user_id` → 该窗口的数值（字段集见「每用户 Hash 存十三段数值」），供「每行同时显示三个 Metric」与 Cache Hit Rate（缓存命中率）使用；再存一个该 Window 的 Snapshot 更新时间；另有该 Window 的 Highlights（趣味卡）与站点级 Insights（洞察）两个 JSON 串（见「Highlights 与 Insights 在同一轮作业里算好」）。系统 MUST NOT 把整份榜单序列化成单个 JSON key。
 
 #### Scenario: 取前 50 名
 - **WHEN** 请求需要某 Window + Metric 的榜单条目
@@ -82,8 +82,8 @@ Snapshot MUST 以派生结构写入 Redis：每个 Window × Metric 一个 ZSET�
 - **THEN** 系统 MUST 用 `ZCOUNT` 统计分数严格高于查看者的成员数再加一
 - **THEN** 与查看者同分的用户 MUST NOT 计入该统计
 
-#### Scenario: 取另一个 Metric 的值
-- **WHEN** 榜单按 `total_tokens` 排序但每行还要显示 Successful Requests
+#### Scenario: 取另外两个 Metric 的值
+- **WHEN** 榜单按 `total_tokens` 排序但每行还要显示 Successful Requests 与 Cost
 - **THEN** 系统 MUST 从该 Window 的 Hash 中批量读取这些 `user_id` 的数值
 
 #### Scenario: 统计参与人数
@@ -203,7 +203,7 @@ Snapshot MUST NOT 因用户被禁用、被删除或 Leaderboard Mode 被切换�
 - **THEN** 这些用户 MUST 从后续响应的 `entries` 中消失，`participant_count` 在下一轮重建后修正
 
 ### Requirement: 每用户 Hash 存四个数值
-本条已被「每用户 Hash 存十二段数值并向后兼容旧段数」取代：四段是 v1 的形态，v2 把 value 扩到十二段，前四段的顺序、口径与「缺段按 0」的兼容规则原样保留，因此下面的约束仍然逐条成立。每个 Window（榜单窗口）的 Hash MUST 至少存四个数值：`total_tokens`、`successful_requests`、`input_tokens`、`cache_read_tokens`。新增的两个数 MUST 由同一条聚合 SQL 在同一次扫描里按窗口条件聚合产出，MUST NOT 另起一次扫描。ZSET MUST 仍然只有两个 Metric（排名指标）——新增的两个数只用于计算 Cache Hit Rate（缓存命中率），MUST NOT 参与排名。Hash value 的解码 MUST 能容忍段数不足的旧值：缺失的段 MUST 按 0 处理，MUST NOT 报错、MUST NOT 使整个窗口的快照被判为无效。Hash 里 MUST 仍然只有 `user_id` 与数值，MUST NOT 出现身份或任何金额。
+本条已被「每用户 Hash 存十二段数值并向后兼容旧段数」与「每用户 Hash 第十三段是 Cost micros」两条取代：四段是 v1 的形态，v2 把 value 扩到十二段、Cost（消费金额）这一轮再扩到十三段，前四段的顺序、口径与「缺段按 0」的兼容规则原样保留，因此下面的约束除「ZSET 只有两个」与「MUST NOT 出现任何金额」两处外仍然逐条成立。每个 Window（榜单窗口）的 Hash MUST 至少存四个数值：`total_tokens`、`successful_requests`、`input_tokens`、`cache_read_tokens`。新增的两个数 MUST 由同一条聚合 SQL 在同一次扫描里按窗口条件聚合产出，MUST NOT 另起一次扫描。ZSET MUST 只对应 Metric（排名指标）本身——新增的两个数只用于计算 Cache Hit Rate（缓存命中率），MUST NOT 参与排名。Hash value 的解码 MUST 能容忍段数不足的旧值：缺失的段 MUST 按 0 处理，MUST NOT 报错、MUST NOT 使整个窗口的快照被判为无效。Hash 里 MUST 仍然只有 `user_id` 与数值，MUST NOT 出现身份。
 
 #### Scenario: 一次扫描出四个数
 - **WHEN** 后台作业执行一轮重建
@@ -217,7 +217,7 @@ Snapshot MUST NOT 因用户被禁用、被删除或 Leaderboard Mode 被切换�
 
 #### Scenario: 新增的数不进 ZSET
 - **WHEN** 检查某个 Window 的 Redis 结构
-- **THEN** ZSET MUST 仍然只有 `total_tokens` 与 `successful_requests` 两个
+- **THEN** ZSET MUST 只有 Metric 对应的那几个（`total_tokens`、`successful_requests` 与 `cost`）
 - **THEN** 系统 MUST NOT 为 `input_tokens` 或 `cache_read_tokens` 建立排序结构
 
 #### Scenario: 命中率无法计算
@@ -226,7 +226,7 @@ Snapshot MUST NOT 因用户被禁用、被删除或 Leaderboard Mode 被切换�
 - **THEN** 系统 MUST NOT 把它记成 0
 
 ### Requirement: Highlights 与 Insights 在同一轮作业里算好
-Highlights（趣味卡）与 Insights（洞察）MUST 与 Snapshot（榜单快照）在同一轮 5 分钟作业里算好并写入 Redis，请求路径 MUST NOT 为它们触发任何聚合或回源查询。每个 Window 的 Highlights MUST 存成一个 JSON 串，key MUST 带该 Window 的窗口起点，MUST 与该 Window 的 ZSET、Hash 同一轮写入、同样先写临时 key 再 `RENAME`、同一个 TTL。站点级 Insights MUST 存成一个与 Window 无关的 JSON 串，key MUST 带今日窗口起点以便跨零点自然作废，TTL MUST 与其它 key 同一条规则。效率之星要遍历该窗口全部用户，MUST 只在重建时做一次；其 dominant model 需要一条按用户与模型的聚合，MUST 只对选中的那一个用户查一次。Highlights MUST 只记录 `user_id` 与数值，MUST NOT 记录身份或任何金额——身份仍在响应时按 `users` 表当前状态渲染。
+Highlights（趣味卡）与 Insights（洞察）MUST 与 Snapshot（榜单快照）在同一轮 5 分钟作业里算好并写入 Redis，请求路径 MUST NOT 为它们触发任何聚合或回源查询。每个 Window 的 Highlights MUST 存成一个 JSON 串，key MUST 带该 Window 的窗口起点，MUST 与该 Window 的 ZSET、Hash 同一轮写入、同样先写临时 key 再 `RENAME`、同一个 TTL。站点级 Insights MUST 存成一个与 Window 无关的 JSON 串，key MUST 带今日窗口起点以便跨零点自然作废，TTL MUST 与其它 key 同一条规则。效率之星要遍历该窗口全部用户，MUST 只在重建时做一次；其 dominant model 需要一条按用户与模型的聚合，MUST 只对选中的那一个用户查一次。Highlights MUST 只记录 `user_id` 与数值，MUST NOT 记录身份——身份仍在响应时按 `users` 表当前状态渲染；其中的站点合计 MUST 以定点 micros 记录该 Window 的 Cost（消费金额），MUST NOT 记录其它金额口径。
 
 #### Scenario: 请求不触发 Highlights 计算
 - **WHEN** 大量用户在两轮作业之间访问 Leaderboard（排行榜）
@@ -246,7 +246,7 @@ Highlights（趣味卡）与 Insights（洞察）MUST 与 Snapshot（榜单快�
 #### Scenario: Highlights 不含身份
 - **WHEN** 检查 Redis 上存着的 Highlights 内容
 - **THEN** 其中 MUST 只有 `user_id` 与数值
-- **THEN** 其中 MUST NOT 出现 `username`、邮箱或任何金额
+- **THEN** 其中 MUST NOT 出现 `username` 或邮箱，金额 MUST 只有站点合计的 Cost micros
 
 #### Scenario: 本轮失败不推进
 - **WHEN** 某一轮的 Highlights 或 Insights 计算中途失败
@@ -277,7 +277,7 @@ Highlights（趣味卡）与 Insights（洞察）MUST 与 Snapshot（榜单快�
 - **THEN** 页面 MUST 注明预聚合口径包含失败请求的占位记录
 
 ### Requirement: 每用户 Hash 存十二段数值并向后兼容旧段数
-每个 Window（榜单窗口）的 Hash value MUST 是十二段逗号分隔的数值，顺序固定为 `total_tokens`、`successful_requests`、`input_tokens`、`cache_read_tokens`、`output_tokens`、`cache_creation_tokens`、`night_tokens`、`distinct_models`、`max_single_tokens`、`media_requests`、`yesterday_tokens`、`yesterday_requests`。新增的八个数 MUST 由同一条聚合 SQL 在同一次扫描里产出，MUST NOT 另起扫描；扫描下界 MUST 相应从 `min(月初, 周一)` 放宽到 `min(月初, 周一, 昨日起点)`。解码 MUST 容忍段数不足的旧值：缺失的段 MUST 按 0 处理，MUST NOT 报错、MUST NOT 使整个窗口的快照被判为无效，两段式与四段式的历史 value MUST 都仍能读出榜单本体。ZSET MUST 仍然只有两个 Metric（排名指标），新增的八个数 MUST NOT 参与排名。`media_requests`（有图片或视频计数的成功请求数）MUST 只写入 Hash，MUST NOT 出现在任何响应字段里。Hash 里 MUST 仍然只有 `user_id` 与数值，MUST NOT 出现身份或任何金额。
+每个 Window（榜单窗口）的 Hash value MUST 是十二段逗号分隔的数值，顺序固定为 `total_tokens`、`successful_requests`、`input_tokens`、`cache_read_tokens`、`output_tokens`、`cache_creation_tokens`、`night_tokens`、`distinct_models`、`max_single_tokens`、`media_requests`、`yesterday_tokens`、`yesterday_requests`。新增的八个数 MUST 由同一条聚合 SQL 在同一次扫描里产出，MUST NOT 另起扫描；扫描下界 MUST 相应从 `min(月初, 周一)` 放宽到 `min(月初, 周一, 昨日起点)`。解码 MUST 容忍段数不足的旧值：缺失的段 MUST 按 0 处理，MUST NOT 报错、MUST NOT 使整个窗口的快照被判为无效，两段式与四段式的历史 value MUST 都仍能读出榜单本体。ZSET MUST 只对应 Metric（排名指标）本身（见「每用户 Hash 第十三段是 Cost micros」），新增的八个数 MUST NOT 参与排名。`media_requests`（有图片或视频计数的成功请求数）MUST 只写入 Hash，MUST NOT 出现在任何响应字段里。Hash 里 MUST 仍然只有 `user_id` 与数值，MUST NOT 出现身份；金额只有第十三段的 Cost（消费金额）micros（见「每用户 Hash 第十三段是 Cost micros，每个 Window 三个 ZSET」）。
 
 #### Scenario: 一次扫描出十二个数
 - **WHEN** 后台作业执行一轮重建
@@ -291,7 +291,7 @@ Highlights（趣味卡）与 Insights（洞察）MUST 与 Snapshot（榜单快�
 
 #### Scenario: 新增的数不进 ZSET
 - **WHEN** 检查某个 Window 的 Redis 结构
-- **THEN** ZSET MUST 仍然只有 `total_tokens` 与 `successful_requests` 两个
+- **THEN** ZSET MUST 只有 `total_tokens`、`successful_requests` 与 `cost` 三个
 - **THEN** 系统 MUST NOT 为 `output_tokens`、`night_tokens` 或其余任何新增段建立排序结构
 
 #### Scenario: media_requests 只存不发
@@ -299,8 +299,26 @@ Highlights（趣味卡）与 Insights（洞察）MUST 与 Snapshot（榜单快�
 - **THEN** 响应 MUST NOT 包含 `media_requests` 或任何等价字段
 - **THEN** 该数值 MUST 仍然按位写进 Hash，以便后续增量直接可用
 
+### Requirement: 每用户 Hash 第十三段是 Cost micros，每个 Window 三个 ZSET
+Metric（排名指标）扩成三项之后，每个 Window（榜单窗口）的 Hash value MUST 是十三段逗号分隔的数值：前十二段的顺序与口径一个字不变，第十三段 MUST 是该窗口 Cost（消费金额）的定点 micros（1 USD = 1e6，整数）。解码 MUST 沿用同一条向后兼容规则：缺失的段按 0 处理，因此十二段式的历史 value MUST 仍能读出榜单本体，表现为该窗口的 Cost 为 0 并在下一轮重建后补齐，MUST NOT 报错、MUST NOT 使整个窗口的快照被判为无效。每个 Window MUST 有三个 ZSET，第三个的 key 后缀 MUST 是 metric 字符串 `cost`、score MUST 是 Cost micros；它 MUST 与另两个 ZSET 同一轮 pipeline 写入、同样先写临时 key 再 `RENAME`、同一个 TTL，Top 50、Participant Count（参与人数）与 Rank（名次）在它上面 MUST 用与另两个 Metric 完全相同的算法。金额 MUST NOT 以浮点 USD 作为 ZSET 的 score，也 MUST NOT 以 USD 写进 Hash——换算回 USD MUST 只发生在响应组装时。Hash 与 ZSET 里 MUST 仍然只有 `user_id` 与数值，MUST NOT 出现身份。
+
+#### Scenario: 读到旧的十二段式 value
+- **WHEN** Redis 上还留着上一版写入的、只有十二段的 Hash value
+- **THEN** 系统 MUST 把缺失的第十三段按 0 处理并照常渲染榜单
+- **THEN** 该窗口的 Cost MUST 表现为 0 而不是解码失败，并 MUST 在下一轮重建后自动补齐
+
+#### Scenario: 第三个 ZSET 与另两个同源
+- **WHEN** 某个请求恰好落在一轮重建的写入过程中
+- **THEN** 该请求读到的三个 ZSET MUST 出自同一轮快照
+- **THEN** 该请求 MUST NOT 读到只写了一半的 `cost` ZSET
+
+#### Scenario: 金额以定点整数排序
+- **WHEN** 两个用户在该 Window 的 `actual_cost` 之和完全相同
+- **THEN** 两人在 `cost` ZSET 上的 score MUST 完全相同，Rank MUST 并列
+- **THEN** 系统 MUST NOT 因为浮点误差让两人分出先后
+
 ### Requirement: Extremes 与新增 Insights 在同一轮作业里算好
-Extremes（之最）与新增的五块 Insights（洞察）MUST 与 Snapshot（榜单快照）在同一轮 5 分钟作业里算好并写入 Redis，请求路径 MUST NOT 为它们触发任何聚合或回源查询。按 Window（榜单窗口）计算的两块——`extremes` 与 `profiles`——MUST 写进该 Window 的 Highlights（趣味卡）JSON，与该 Window 的 ZSET、Hash 同一轮写入、同样先写临时 key 再 `RENAME`、同一个 TTL，因此一次请求读到的榜单、Highlights、Extremes 与 `profiles` MUST 必然同源。与 Window 无关的三块——`platforms_today`、`weekly_rhythm`、`cache_trend_14`——MUST 写进站点级 Insights 的 JSON；`composition_today` MUST 由今日窗口聚合的站点合计导出，MUST NOT 另查一次。`streak` MUST 读 `usage_dashboard_daily_users` 并回溯 90 天，MUST NOT 回去扫 `usage_logs`；它与 Window 无关，三个窗口的结果 MUST 相同。`profiles` 的按用户与模型聚合 MUST 只对该 Window 的前 50 名（与榜单本体的 Top 50 同一个数）一次查出，MUST NOT 逐人各查一次。这两块 JSON MUST 只记录 `user_id` 与数值，MUST NOT 记录身份或任何金额——身份仍在响应时按 `users` 表当前状态渲染。
+Extremes（之最）与新增的五块 Insights（洞察）MUST 与 Snapshot（榜单快照）在同一轮 5 分钟作业里算好并写入 Redis，请求路径 MUST NOT 为它们触发任何聚合或回源查询。按 Window（榜单窗口）计算的两块——`extremes` 与 `profiles`——MUST 写进该 Window 的 Highlights（趣味卡）JSON，与该 Window 的 ZSET、Hash 同一轮写入、同样先写临时 key 再 `RENAME`、同一个 TTL，因此一次请求读到的榜单、Highlights、Extremes 与 `profiles` MUST 必然同源。与 Window 无关的三块——`platforms_today`、`weekly_rhythm`、`cache_trend_14`——MUST 写进站点级 Insights 的 JSON；`composition_today` MUST 由今日窗口聚合的站点合计导出，MUST NOT 另查一次。`streak` MUST 读 `usage_dashboard_daily_users` 并回溯 90 天，MUST NOT 回去扫 `usage_logs`；它与 Window 无关，三个窗口的结果 MUST 相同。`profiles` 的按用户与模型聚合 MUST 只对该 Window 的前 50 名（与榜单本体的 Top 50 同一个数）一次查出，MUST NOT 逐人各查一次。这两块 JSON MUST 只记录 `user_id` 与数值，MUST NOT 记录身份，也 MUST NOT 记录任何金额（Cost（消费金额）只出现在每用户 Hash 的第十三段、`cost` ZSET 与 Highlights 的站点合计三处）——身份仍在响应时按 `users` 表当前状态渲染。
 
 #### Scenario: 请求不触发之最的计算
 - **WHEN** 大量用户在两轮作业之间访问 Leaderboard（排行榜）
@@ -328,12 +346,17 @@ Extremes（之最）与新增的五块 Insights（洞察）MUST 与 Snapshot（�
 - **THEN** 本轮的三个 Window 快照 MUST 照常写入，正式 key MUST NOT 停留在上一轮
 
 ### Requirement: 名次历史每轮 upsert 并按保留期清理
-系统 SHALL 新增一张按「用户 × 日期」记录名次的表，主键 MUST 是 `(user_id, snapshot_date)`，每行 MUST 同时记录该日两个 Metric（排名指标）的名次。快照作业每一轮 MUST 对今日窗口的**全部参与者**做一次 upsert（`INSERT ... ON CONFLICT DO UPDATE`，分批写入），同一天的多轮 MUST 互相覆盖而不是追加，日终那一轮写下的 MUST 即该日的最终名次。同一轮 MUST 顺带删除保留期（90 天）之前的行。名次历史 MUST 只记录 `user_id`、日期与名次，MUST NOT 记录身份、数值或任何金额。响应里的名次走势 MUST 只取查看者本人近 14 天的行，MUST NOT 下发其他用户的任何名次历史。写入或清理失败 MUST NOT 让整轮快照重建失败，也 MUST NOT 阻断响应——该块降级为空数组。
+系统 SHALL 新增一张按「用户 × 日期」记录名次的表，主键 MUST 是 `(user_id, snapshot_date)`，每行 MUST 同时记录该日三个 Metric（排名指标）的名次（`rank_total_tokens`、`rank_successful_requests` 与 `rank_cost`，最后一列由迁移 241 补上，`INT NOT NULL DEFAULT 0`，`0` 表示「那天没有这个数」而 MUST NOT 被渲染成「第 0 名」）。快照作业每一轮 MUST 对今日窗口的**全部参与者**做一次 upsert（`INSERT ... ON CONFLICT DO UPDATE`，分批写入），同一天的多轮 MUST 互相覆盖而不是追加，日终那一轮写下的 MUST 即该日的最终名次。同一轮 MUST 顺带删除保留期（90 天）之前的行。名次历史 MUST 只记录 `user_id`、日期与名次，MUST NOT 记录身份、数值或任何金额——记的是按 Cost 的名次，不是金额本身。响应里的名次走势 MUST 只取查看者本人近 14 天的行，MUST NOT 下发其他用户的任何名次历史；折线 MUST 仍按 Total Tokens（总 tokens）的名次绘制，`rank_cost` 本轮 MUST NOT 出现在任何下发字段里——它只是为后续增量先攒着。写入或清理失败 MUST NOT 让整轮快照重建失败，也 MUST NOT 阻断响应——该块降级为空数组。
 
 #### Scenario: 同一天多轮覆盖
 - **WHEN** 某一天里作业跑了若干轮，某用户的名次从 18 变成 12
 - **THEN** 该用户当天 MUST 只有一行，`rank_total_tokens` MUST 是最近一轮写下的 12
 - **THEN** 系统 MUST NOT 为同一天同一用户追加多行
+
+#### Scenario: 三个名次一起写
+- **WHEN** 作业对今日窗口的参与者写一轮名次历史
+- **THEN** 每一行 MUST 同时写 `rank_total_tokens`、`rank_successful_requests` 与 `rank_cost`
+- **THEN** 三个名次 MUST 出自同一份 Snapshot（榜单快照），MUST NOT 各跑一次排名计算
 
 #### Scenario: 保留期清理
 - **WHEN** 作业执行一轮重建，表里存在 91 天前的行

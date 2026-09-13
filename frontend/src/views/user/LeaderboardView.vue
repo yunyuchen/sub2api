@@ -274,6 +274,12 @@ const metricOptions = computed(() => [
     label: t('leaderboard.masthead.metricRequests'),
     title: t('leaderboard.metrics.successfulRequests'),
   },
+  {
+    value: 'cost' as const,
+    testid: 'cost',
+    label: t('leaderboard.masthead.metricCost'),
+    title: t('leaderboard.metrics.cost'),
+  },
 ])
 /** 还没拿到响应时报头上的 tz 先留一个占位符，MUST NOT 猜一个时区名。 */
 const siteTimezoneFallback = '...'

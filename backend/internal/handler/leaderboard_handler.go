@@ -74,7 +74,8 @@ func (h *LeaderboardHandler) Get(c *gin.Context) {
 	if raw := strings.TrimSpace(c.Query("metric")); raw != "" {
 		parsed, valid := service.ParseLeaderboardMetric(raw)
 		if !valid {
-			// 金额既不是 Metric 也不是排序项，走的就是这条「非法 metric」分支。
+			// Metric 只有 total_tokens / successful_requests / cost 三项；写别的名字
+			// （money、actual_cost 之类）走的就是这条「非法 metric」分支。
 			response.ErrorFrom(c, service.ErrLeaderboardInvalidMetric)
 			return
 		}

@@ -958,7 +958,7 @@ export default {
   // User Leaderboard
   leaderboard: {
     title: 'Usage Leaderboard',
-    description: 'Usage rankings across all users for the today / this week / this month windows. No costs and no email addresses are shown.',
+    description: 'Usage rankings across all users for the today / this week / this month windows. No email addresses are shown.',
     windows: {
       label: 'Window',
       today: 'Today',
@@ -969,6 +969,7 @@ export default {
       label: 'Metric',
       totalTokens: 'Total tokens',
       successfulRequests: 'Successful requests',
+      cost: 'Spend',
     },
     // The masthead: brand on the left (site name plus one thin word), every dial on the
     // right. The date moved to the title block, the timezone to the footer and the snapshot
@@ -983,6 +984,7 @@ export default {
       rebuildIn: '(rebuilds in {minutes}m)',
       metricTokens: 'tokens',
       metricRequests: 'requests',
+      metricCost: 'spend',
       theme: 'Theme',
       themeLight: 'Light',
       themeDark: 'Dark',
@@ -1171,6 +1173,9 @@ export default {
       // Short label for the column header and the "your position" tile; the metric
       // segment keeps the full wording.
       successfulRequestsShort: 'Successful',
+      // The spend column: an absolute amount (USD) in named mode and Preview, a percentage
+      // relative to #1 for other people's rows in anonymous mode.
+      cost: 'Spend',
       relativePercent: '{percent}% of the top entry',
       // Anonymous mode, viewer row: #1 has no public absolute, so this cell has no value
       relativeUnknown: 'In anonymous mode the top entry usage is not public, so this row has no percentage relative to #1',
@@ -1189,6 +1194,7 @@ export default {
       hint: {
         gapTokens: '{gap} more tokens to reach the top {rank}',
         gapRequests: '{gap} more successful requests to reach the top {rank}',
+        gapCost: '{gap} more spend to reach the top {rank}',
         relative: 'You are at {percent}% of the top entry; rank {rank} sits at {target}%',
       },
     },
@@ -1223,12 +1229,14 @@ export default {
         barRelative: '{hour}:00 · {percent}% of the peak',
       },
     },
-    // The footer is one colophon line: `snapshot HH:MM · rebuild every 5m · <tz> · no costs`.
+    // The footer is one colophon line: `snapshot HH:MM · rebuild every 5m · <tz> · no emails`.
     // `snapshot` and the timezone name are literals and stay out of i18n (design D4); the
     // `COLOPHON` mark, "week starts Mon" and `successful_requests = actual_cost > 0` are gone.
+    // Spend is now the third metric (same tier rules as tokens), so only the email half of
+    // this line survives; the key stays `noMoney` because LbFooter.vue references it.
     footer: {
       rebuild: 'rebuild every 5m',
-      noMoney: 'No costs and no email addresses are shown',
+      noMoney: 'No email addresses are shown',
     },
     states: {
       loadFailed: 'Failed to load the leaderboard',

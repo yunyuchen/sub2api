@@ -53,7 +53,7 @@
 
 - 不提供公开（免登录）访问，不做模型 / 分组 / API Key 维度的排行。
 - 不提供自定义日期与「全部时间」窗口，不提供榜单长度选择器。
-- 不展示任何金额，也不提供按金额排序的选项。
+- 不展示任何金额，也不提供按金额排序的选项。（**已被 D24 取代**，2026-09-13：Cost（消费金额）成为第三个 Metric，金额与 tokens 走同一套档位规则。）
 - 不在仪表盘加排行榜卡片（可作后续增量）。
 - 不新增独立的「榜单展示名」字段，v1 用 `username` + 自选开关 + 校验。
 - 不预先建按用户 × 天的预聚合表，除非上线前实测需要。
@@ -83,6 +83,8 @@
 - 备选：新增独立的「榜单展示名」字段并在首次进入时强制设置。否决：见 ADR-0002 的 Considered Options——v1 用 username + 开关 + 校验已够用，字段可日后再加。
 
 ### D3：Metric 只有两项，Successful Requests 用 actual_cost > 0
+
+> **部分被 D24 取代**（2026-09-13）：Metric 从两项扩成三项，第三项是 Cost（消费金额，该 Window 的 `actual_cost` 之和）。本条里凡是「两项」「两个 Metric」的表述、「金额连排序项都不留」与「提供按金额排序但不显示金额是泄露路径」两句，以及末尾那条「Metric 固定为两项」的备选，都不再是实现依据；本条保留作决策沿革、不删。仍然成立的是三条口径：Total Tokens 含 cache 类 tokens、Successful Requests 用 `usageLogSuccessFilterUL`（`ul.actual_cost > 0`）、默认 Metric 是 Total Tokens。
 
 - Total Tokens = `input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens`，与用户仪表盘、管理端 User Breakdown 的口径一致。
 - Successful Requests 沿用 `usageLogSuccessFilterUL`（`ul.actual_cost > 0`）。
@@ -117,7 +119,7 @@
 
 - 每 5 分钟一轮，经 `TimingWheelService.ScheduleRecurring` 注册；每轮先 `tryAcquireSingletonLeaderLock` 取锁，保证多实例只有一份在跑，Redis 不可用时回落到 Postgres advisory lock。
 - SQL 形状：单次扫描 `usage_logs`，`WHERE created_at >= min(月初, 周一)`，`INNER JOIN users` 并过滤 `users.status <> 'disabled' AND users.deleted_at IS NULL`，`GROUP BY user_id`，用条件聚合一次产出六个数——每个 Window 各一组 `SUM(...) FILTER (WHERE ul.created_at >= $窗口起点)` 与 `COUNT(*) FILTER (WHERE ul.created_at >= $窗口起点 AND ul.actual_cost > 0)`。用 `INNER JOIN` 而不是 `GetUserBreakdownStats` 的 `LEFT JOIN`，是因为不合格用户与孤儿日志都不该进榜。
-- Snapshot 只含 `user_id` 与数值，不含身份，也不含金额（数值在本轮重设计中从两个扩为四个，见 D17）。
+- Snapshot 只含 `user_id` 与数值，不含身份（数值在本轮重设计中从两个扩为四个，见 D17；D24 再加第十三段 Cost micros）。
 - 备选：照仪表盘那套请求触发 + stale-while-revalidate + 双 TTL + 进程内 singleflight + Redis 刷新锁。否决：见 ADR-0003——要同时补四个机制才正确，且仪表盘的单飞是全 service 一个 `int32`、跨实例无效；冷启动和 key 过期时并发请求会各自跑一次整月扫描。
 - 备选：请求路径实时查库。否决：面向全体登录用户，本月窗口约占 `usage_logs` 全表三分之一。
 - 备选：每日重建一次。否决：今日榜会一整天不动。
@@ -125,7 +127,7 @@
 
 ### D7：Redis 存派生结构，key 带窗口起点
 
-- 每个 Window × Metric 一个 ZSET（member = `user_id`，score = 该 Metric 的值），用于 Top 50（`ZREVRANGE`）、Participant Count（`ZCARD`）与竞争名次（`ZCOUNT (score +inf)` 严格大于后 +1）——Rank 的定义正好是 `ZCOUNT` 的语义。另有一个 Hash 存 `user_id` → 两个数值，供「每行显示两个 Metric」用；再存一个 Snapshot 更新时间。（本轮重设计把这个 Hash 扩为四个数值，并给每个 Window 增加一个 highlights key、给站点级洞察增加一个 insights key，见 D17。）
+- 每个 Window × Metric 一个 ZSET（member = `user_id`，score = 该 Metric 的值），用于 Top 50（`ZREVRANGE`）、Participant Count（`ZCARD`）与竞争名次（`ZCOUNT (score +inf)` 严格大于后 +1）——Rank 的定义正好是 `ZCOUNT` 的语义。另有一个 Hash 存 `user_id` → 两个数值，供「每行显示两个 Metric」用；再存一个 Snapshot 更新时间。（本轮重设计把这个 Hash 扩为四个数值，并给每个 Window 增加一个 highlights key、给站点级洞察增加一个 insights key，见 D17；D24 把 Metric 扩成三个，因此每个 Window 是三个 ZSET，Hash 扩到十三段。）
 - 写入用 pipeline 先写临时 key，再 `RENAME` 到正式 key 做原子切换，读者不会看到半份榜。
 - key 命名带窗口起点：`leaderboard:v1:today:20260911`、`leaderboard:v1:week:20260907`、`leaderboard:v1:month:202609`，前缀沿用 `cfg.Dashboard.KeyPrefix` 做环境隔离。TTL 取 `min(60 分钟, 距窗口结束)`，跨零点 / 周一 / 月初时旧 key 自然作废；60 分钟的硬上限保证作业停摆时旧快照最多再服务一小时（15 分钟起已有陈旧警告），之后退回「正在计算」而不是无限期展示旧数据。
 - 备选：整块 JSON 存一个 key。否决：每个请求都要反序列化整份，复杂度 O(N)；10 万用户量级下单份 5–10 MB。
@@ -145,7 +147,7 @@
 - Leaderboard Mode 为 `off` 时，普通用户请求返回 404，不确认功能存在；前端路由守卫照 `/model-plaza` 的写法 fail-closed（先确保公开设置已加载，只在明确为 `off` 时拦截，瞬时加载失败交给后端 404 兜底）；侧边栏入口隐藏。
 - 管理员在 `off` 下放行，响应带 `preview` 标记，页面显示「预览，普通用户不可见」横幅。
 - Preview 下响应的 `mode` 回显 `off`、`preview` 为 `true`，条目按 `named` 档的身份形态与数值精度渲染，`participant_count` 为精确整数。理由沿用 Q15/Q32 对 Preview 的定位：管理员要预览的正是开启后最开放的形态，若只按 `anonymous` 渲染，他仍要靠「先开后关」才能看到 `named` 的效果，而那恰是 Preview 要消除的短暂真实泄露。`off` 档下侧边栏入口对所有角色隐藏，管理员经直接访问 `/leaderboard` 进入 Preview。
-- 模式开启后管理员与普通用户看到完全相同的数据，Leaderboard 不做角色分支——需要全字段（邮箱、金额、任意日期）的管理员走 User Breakdown。
+- 模式开启后管理员与普通用户看到完全相同的数据，Leaderboard 不做角色分支——需要全字段（邮箱、三种金额口径、任意日期）的管理员走 User Breakdown。
 - 备选：只在前端隐藏。否决：隐私控制必须服务端强制。
 - 备选：返回 403。否决：403 会确认功能存在。
 - 备选：`off` 下一律拒绝、不给管理员预览。否决：会逼管理员「先开后关」来看效果，造成一段真实泄露。
@@ -155,7 +157,7 @@
 
 - 每个条目的身份是 `identity{kind: self|anonymous|named, username?}`，后端不拼展示名字符串。`self` 由前端渲染成查看者本人的 `username`（缺席或全空白时才回退「当前用户」），`anonymous` 渲染成「第 Ordinal 位」，`named` 直接用 `username`；这四条分支只在 `frontend/src/components/user/leaderboard/displayName.ts` 里实现一次。
 - 术语沿用 `channelMonitorV2.currentUser`（「当前用户」/「Current user」），不再出现字面量 `"Me"`。
-- 响应不下发 `user_id`、邮箱与任何金额字段。
+- 响应不下发 `user_id` 与邮箱；金额只有 Cost 这一个口径，按与 tokens 相同的档位规则下发（见 D24），其它金额口径（`total_cost` 之类）一律不出现。
 - 备选：后端直接拼 `display_name` 字符串。否决：与 zh / en 双语互斥；渠道监控页面已经因此出现过 `"Me"` 与「当前用户」混排。
 
 ### D11：设置接入按 channel_monitor_mode 逐点对齐，前端用枚举读取器派生布尔 flag
@@ -181,11 +183,11 @@
 
 ### D14：单一 GET 接口，查询参数表达 Window 与 Metric
 
-- `GET /api/v1/leaderboard?window=today|week|month&metric=total_tokens|successful_requests`，两个参数都有默认值（`today`、`total_tokens`），非法值 400。
+- `GET /api/v1/leaderboard?window=today|week|month&metric=total_tokens|successful_requests|cost`，两个参数都有默认值（`today`、`total_tokens`），非法值 400。`cost` 这一档是 D24 新增的。
 - 中间件：用户侧标准链（`jwtAuth` + `BackendModeUserGuard` + `Global()` 限流 + 审计）+ `panelRateLimiter.Heavy()`（与 `/usage/*`、`channel-monitor-v2` 一致）+ Leaderboard Mode guard。
-- 响应字段：`window`、`metric`、`mode`、`preview`、`timezone`、`status`（`ready` / `computing`）、`stale`、`snapshot_updated_at`、`participant_count`（`named` 档与 Preview 下为精确整数，`anonymous` 档下为分档字符串）、`entries[]{rank, ordinal, identity, total_tokens | total_tokens_relative_percent, successful_requests | successful_requests_relative_percent, is_self}`、`entries_suppressed`、`my_rank{rank, total_tokens, successful_requests} | null`。
+- 响应字段：`window`、`metric`、`mode`、`preview`、`timezone`、`status`（`ready` / `computing`）、`stale`、`snapshot_updated_at`、`participant_count`（`named` 档与 Preview 下为精确整数，`anonymous` 档下为分档字符串）、`entries[]{rank, ordinal, identity, total_tokens | total_tokens_relative_percent, successful_requests | successful_requests_relative_percent, cost | cost_relative_percent, is_self}`、`entries_suppressed`、`my_rank{rank, total_tokens, successful_requests, cost} | null`（`cost` 两处均由 D24 新增，单位 USD）。
 - `status` / `stale` / `entries_suppressed` 三个字段让前端能判定「正在计算」、陈旧与「人数过少暂不展示」三种状态，而不必从「`entries` 是空数组」反推——抑制态与空态的 `entries` 都是空数组，没有显式信号就无法分开渲染两套文案。
-- `anonymous` 档下他人条目里的绝对数值字段缺席，只给 `total_tokens_relative_percent` 与 `successful_requests_relative_percent`（各自相对该 Metric 第一名的整数百分比，第一名为 `100`）；本人条目与 `my_rank` 始终是真实数值。这样「档位决定字段是否存在」而不是「档位决定字段被清零」，客户端无法把缺席误读成 0。
+- `anonymous` 档下他人条目里的绝对数值字段缺席，只给 `total_tokens_relative_percent`、`successful_requests_relative_percent` 与 `cost_relative_percent`（各自相对该 Metric 第一名的整数百分比，第一名为 `100`）；本人条目与 `my_rank` 始终是真实数值。这样「档位决定字段是否存在」而不是「档位决定字段被清零」，客户端无法把缺席误读成 0。
 
 ### D15：`/leaderboard` 是全屏独立页，不再套 `AppLayout`；侧边栏入口保留
 
@@ -212,8 +214,8 @@
 
 ### D17：Highlights 与 Insights 在同一轮作业里算好，请求路径仍只读 Redis
 
-- 每用户 Hash 从两个数扩为四个：`total_tokens`、`successful_requests`、`input_tokens`、`cache_read_tokens`。同一条聚合 SQL 每个窗口多两个 `SUM(...) FILTER (...)`，`usagestats.LeaderboardAggregateRow` 相应多六个字段，`service.LeaderboardUserMetrics` 多 `InputTokens` 与 `CacheReadTokens` 两个字段。Hash value 的编码从 `"tokens,requests"` 扩成 `"tokens,requests,input,cache_read"`，仍是逗号分隔。ZSET 仍然只有两个 Metric——新增的两个数只用来算 Cache Hit Rate（缓存命中率），不参与排名。
-- Cache Hit Rate = `cache_read_tokens / (input_tokens + cache_read_tokens)`，按 Window 聚合。某用户该窗口 `input_tokens + cache_read_tokens` 为 0 时没有命中率（字段缺席），MUST NOT 记成 0。缓存的收益一律用命中率与命中 tokens 表达，不折算成金额——金额连这条侧门也不留。
+- 每用户 Hash 从两个数扩为四个：`total_tokens`、`successful_requests`、`input_tokens`、`cache_read_tokens`。同一条聚合 SQL 每个窗口多两个 `SUM(...) FILTER (...)`，`usagestats.LeaderboardAggregateRow` 相应多六个字段，`service.LeaderboardUserMetrics` 多 `InputTokens` 与 `CacheReadTokens` 两个字段。Hash value 的编码从 `"tokens,requests"` 扩成 `"tokens,requests,input,cache_read"`，仍是逗号分隔。ZSET 仍然只有两个 Metric（D24 之后是三个，见该条）——新增的两个数只用来算 Cache Hit Rate（缓存命中率），不参与排名。
+- Cache Hit Rate = `cache_read_tokens / (input_tokens + cache_read_tokens)`，按 Window 聚合。某用户该窗口 `input_tokens + cache_read_tokens` 为 0 时没有命中率（字段缺席），MUST NOT 记成 0。缓存的收益一律用命中率与命中 tokens 表达，不折算成金额——「省下多少钱」是估算，与 D24 下发的 Cost（实际计费金额）不是一回事，两者混在一起会让页面上出现两种口径的金额。
 - 每个 Window 一份 highlights，重建时算好，存成一个 JSON 串：key 是 `<cfg.Dashboard.KeyPrefix>leaderboard:v1:<window>:<窗口起点>:highlights`，与该 Window 的 ZSET / Hash 同一轮 pipeline 写入、同样先写临时 key 再 `RENAME`、同一个 TTL。内容是 `top_tokens`、`top_requests`、`cache_king`、`site` 四块，只存 `user_id` 与数值，不存身份——身份仍在响应时按 `users` 当前状态渲染，与 D8 一致。
 - `cache_king`（效率之星）要遍历该窗口全部用户才能选出，因此只在重建时做一次；门槛是该窗口 Successful Requests 大于 5，达不到门槛的用户不参与评选，全窗口无人达标时整块为 null。`dominant_model`（该用户该窗口请求最多的模型）需要一条按 `(user_id, model)` 的聚合，只对 `cache_king` 这一个用户查一次。
 - 站点级 insights 与 Window 无关，一个 key：`<cfg.Dashboard.KeyPrefix>leaderboard:v1:insights:<今日窗口起点>`，JSON 串，TTL 同样取 `min(60 分钟, 距今日窗口结束)`。key 带今日起点是为了跨零点自然作废，理由与 D7 相同。五个区块的来源：
@@ -232,18 +234,18 @@
 
 ### D18：Highlights 与 Insights 的数值裁剪逐条对齐 D1 的三档
 
-- `named` 档与 Preview：Highlights、模型热度、趋势、时段、缓存全部可给绝对值；`site` 给 Total Tokens、Successful Requests 与精确的 Participant Count。
+- `named` 档与 Preview：Highlights、模型热度、趋势、时段、缓存全部可给绝对值；`site` 给 Total Tokens、Successful Requests、Cost（D24 新增）与精确的 Participant Count。
 - `anonymous` 档：任何**他人的**或**站点级的**绝对量都不下发，一个都不留。逐块如下：
   - Highlights 的领先者身份用榜单 Ordinal 假名：`identity.kind` 为 `anonymous`、`ordinal` 为其在当前 Window + Metric 榜单上的 Ordinal，前端渲染成「第 Ordinal 位」；该用户不在前 50 时 `ordinal` 为 null，前端渲染成「榜外用户」。MUST NOT 用 Rank 代替 Ordinal（Rank 会并列，会出现两张卡都写「第 1 位」），更 MUST NOT 出现用户 id。
   - Highlights 的数值只给 `share_percent`（占全站该 Metric 的百分比，0–100 整数）与 `lead_percent`（比第 2 名多出的百分比，整数）；`total_tokens` / `successful_requests` 缺席。这两个相对量在 `named` 档同样下发——mockup 的实名卡也用到了 `share_percent`。
   - `cache_king` 的 `cache_hit_rate` 与 `dominant_model` 两档都给：命中率本身是比率，模型名不是某个人的绝对用量。
-  - `site` 只给分档后的 `participant_count`（规则与 D1 的下界序列一致）、`cache_hit_rate` 与 `peak_hour`；`total_tokens` 与 `successful_requests` 缺席。
+  - `site` 只给分档后的 `participant_count`（规则与 D1 的下界序列一致）、`cache_hit_rate` 与 `peak_hour`；`total_tokens`、`successful_requests` 与 `cost` 缺席。
   - `models_today` 只给 `share_percent`，`successful_requests` 缺席。
   - `daily_30` 只给 `relative_percent`（相对这 30 天里最高一天的 0–100 整数百分比），`requests` 与 `total_tokens` 缺席。`relative_percent` 两档都给——热力图的色阶与趋势条的宽度都靠它，`named` 档同样要用。
   - `hourly_today` 只给 `hour` 与 `relative_percent`（相对峰值小时），`requests` 缺席；峰值小时由 `relative_percent` 为 100 的桶给出，两档都可见。
   - `cache_today` 只给 `cache_hit_rate`，`cache_read_tokens` 与 `input_tokens` 缺席。
   - `month` 只给 `change_percent`（较上月的整数百分比，可为负），`total_tokens` 缺席；页面上「本月累计 165M」相应换成「本月累计 · 较上月 +18%」。
-- 「你的位置」的提示语受同一条约束：`anonymous` 档下 MUST NOT 含任何他人的绝对量，只能用相对第一名的百分比表达（如「相对第一名 2%，第 10 名是 3%」）；`named` 档可以用绝对差额（如「再多 24K tokens 就能进前 10」）。文案由前端按档位选，后端只下发数值。
+- 「你的位置」的提示语受同一条约束：`anonymous` 档下 MUST NOT 含任何他人的绝对量，只能用相对第一名的百分比表达（如「相对第一名 2%，第 10 名是 3%」）；`named` 档可以用绝对差额（如「再多 24K tokens 就能进前 10」，Cost 下是「再消费 $X 进前 10」，见 D24）。文案由前端按档位选，后端只下发数值。
 - 本人条目、`my_rank` 与「你的位置」的两个数值在任何档位都是真实值——这条是 D14 与 `leaderboard-mode` 已有的规则，Highlights 与 Insights 不改变它。查看者本人恰好是某张 Highlights 卡的领先者时，该卡的 `identity.kind` 为 `self`，但数值仍按当前档位裁剪：这张卡是给所有人看的同一份数据，不是「我的数据」，若在这里放行绝对值，等于给全站开了一个「只要自己第一就能看到自己绝对量被公开展示」的口子。
 - 备选：`anonymous` 档干脆不给 Highlights 与 Insights。否决：整页只剩一张榜，重设计的信息架构塌掉一半；相对量与比率本来就不泄露绝对规模。
 - 备选：把绝对量按档位清零而不是缺席。否决：与 D14 同一个理由——客户端会把 0 误读成「真的是 0」。
@@ -279,7 +281,7 @@
   - `max_single`（单次最大）：单次请求 tokens（`input + output + cache_creation + cache_read`）最大者。`max_single_tokens` 只在 `named` 档与 Preview 下给；`ratio_to_median` 是其相对全体参与者「各自单次最大值」中位数的倍数（一位小数），两档都给。
   - `streak`（连续活跃）：截至今日或昨日、连续有用量天数最长者，值是 `days`（两档都给）。数据来自 `usage_dashboard_daily_users`，回溯 90 天，用 gaps-and-islands 的写法（按 `bucket_date` 减去行号得到分组键）一条 SQL 出结果。它与 Window 无关，三个窗口的这张卡内容相同。
 - 聚合 SQL 在 D6「一条 SQL 同时产出三个窗口」的前提下扩容：每个窗口新增 `SUM(output_tokens)`、`SUM(cache_creation_tokens)`、`SUM(tokens) FILTER (0–6 点)`、`COUNT(DISTINCT model)`、`MAX(单次 tokens)` 与 `COUNT(*) FILTER (image_count > 0 OR video_count > 0)`（均带成功落账过滤）；另外加两个与窗口无关的「昨日」列 `yesterday_tokens` 与 `yesterday_requests`，扫描下界相应从 `min(月初, 周一)` 改成 `min(月初, 周一, 昨日起点)`。仍然是一条 SQL、一次扫描、同一个 `INNER JOIN users` 过滤。
-- 每用户 Hash 的 value 从 4 段扩到 12 段，顺序固定为 `tokens, requests, input, cache_read, output, cache_creation, night_tokens, distinct_models, max_single, media_requests, yesterday_tokens, yesterday_requests`。解码沿用 D17 与 Migration Plan 第 6 条已经定下的规则：按逗号切分后逐段取值，**段数不足时缺的段一律按 0**，因此上一版写入的 4 段式 value 仍能读（表现为该窗口缺对应的之最卡，而不是把 0 当成真值），下一轮作业最长 5 分钟后补齐；首两段解析失败仍视为无效行。ZSET 仍然只有两个 Metric，新增的八个数一律不参与排名。
+- 每用户 Hash 的 value 从 4 段扩到 12 段，顺序固定为 `tokens, requests, input, cache_read, output, cache_creation, night_tokens, distinct_models, max_single, media_requests, yesterday_tokens, yesterday_requests`。解码沿用 D17 与 Migration Plan 第 6 条已经定下的规则：按逗号切分后逐段取值，**段数不足时缺的段一律按 0**，因此上一版写入的 4 段式 value 仍能读（表现为该窗口缺对应的之最卡，而不是把 0 当成真值），下一轮作业最长 5 分钟后补齐；首两段解析失败仍视为无效行。ZSET 仍然只有两个 Metric，新增的八个数一律不参与排名。（D24 把 value 再扩到 13 段、第 13 段是 Cost micros，并因此把每个 Window 的 ZSET 增到三个；「缺段按 0」这条规则原样适用，12 段式旧值解出 `CostMicros = 0`。）
 - `media_requests` 是「有 `image_count > 0` 或 `video_count > 0` 的成功请求数」，本轮**只存不展示**：它已经占住 Hash 的第 10 段与聚合 SQL 的一列，但响应里没有对应字段，页面上也没有对应卡片。
 - 备选：为新增的八个数另起一个 Hash，或把 Hash value 换成 JSON。否决：段数扩展已经有既定且验证过的向后兼容写法（缺段按 0，见 Migration Plan 第 6 条），换结构反而要同时处理两种编码并存；JSON 还会让每个用户的 value 从几十字节涨到几百字节。
 - 备选：`rising` 在 `week` / `month` 窗口也算，与上周 / 上月比。否决：本轮只往聚合里加了「昨日」一组基线列，没有同口径的「上周 / 上月」；为两个窗口各加一组基线要再扩两列并把扫描下界推到上月初，代价与一张卡不成比例。
@@ -290,7 +292,7 @@
 ### D21：Viewer Stats 与名次历史表，`viewer.models` 是 D8「请求路径只读」的唯一例外
 
 - 「你的位置」之后、榜单之前加一块 `$ whoami --stats`，只给本人看，响应里是新的顶层字段 `viewer`。它有四部分：名次走势 `rank_history`、本人模型偏好 `models`、本人缓存命中率 `cache_hit_rate`、本人平均每请求 tokens `avg_tokens_per_request`。`viewer` 里全是**查看者自己的**数据，因此任何档位下都是真实值，不受 D18 的裁剪影响——这与「本人条目与 `my_rank` 始终真实」是同一条既有规则。
-- `rank_history` 是近 14 天每天在 `today` 窗口按 Total Tokens 的名次，形如 `[{date, rank}]`，前端画折线（名次越小画得越高）并给一句「从 #a 到 #b · 最好 #c」。它需要逐日留痕，因此新建表 `leaderboard_rank_history(user_id BIGINT, snapshot_date DATE, rank_total_tokens INT, rank_successful_requests INT, PRIMARY KEY (user_id, snapshot_date))`，迁移编号 `239`（见 Migration Plan）。快照作业每一轮对 `today` 窗口的**全部参与者**做一次 upsert（多行 `INSERT ... ON CONFLICT (user_id, snapshot_date) DO UPDATE`，每批 1000 行），当天的多轮互相覆盖，日终那一轮写下的就是当天的最终名次。同一轮里顺带 `DELETE FROM leaderboard_rank_history WHERE snapshot_date < 今日 - 90 天`，保留期 90 天，与 `rank_history` 只取 14 天留足余量。两个名次列都写，是因为它们本来就在同一份 Snapshot 里、写第二列不多一次计算，而只写一列会让「按成功请求数看走势」这种后续增量必须重新攒历史。
+- `rank_history` 是近 14 天每天在 `today` 窗口按 Total Tokens 的名次，形如 `[{date, rank}]`，前端画折线（名次越小画得越高）并给一句「从 #a 到 #b · 最好 #c」。它需要逐日留痕，因此新建表 `leaderboard_rank_history(user_id BIGINT, snapshot_date DATE, rank_total_tokens INT, rank_successful_requests INT, PRIMARY KEY (user_id, snapshot_date))`，迁移编号 `239`（见 Migration Plan）。（D24 加第三列 `rank_cost`，迁移 `241`；页面上的「近 N 天名次」折线仍按 Total Tokens 的名次画，cost 名次只是一并攒起来。）快照作业每一轮对 `today` 窗口的**全部参与者**做一次 upsert（多行 `INSERT ... ON CONFLICT (user_id, snapshot_date) DO UPDATE`，每批 1000 行），当天的多轮互相覆盖，日终那一轮写下的就是当天的最终名次。同一轮里顺带 `DELETE FROM leaderboard_rank_history WHERE snapshot_date < 今日 - 90 天`，保留期 90 天，与 `rank_history` 只取 14 天留足余量。两个名次列都写，是因为它们本来就在同一份 Snapshot 里、写第二列不多一次计算，而只写一列会让「按成功请求数看走势」这种后续增量必须重新攒历史。
 - `models` 是本人在**当前 Window** 的 Top 5 模型及占比。这一项做不到只读 Snapshot：按用户 × 模型的聚合如果要预先算好，就得给全站每个人每个窗口各存一份，聚合成本与用户数成正比，直接顶掉 Goals 里「聚合成本与在线用户数无关」的前提。因此在 D8 上开一个**唯一的例外**：请求路径允许一条 `WHERE user_id = 查看者` 且限定窗口区间的 `usage_logs` 聚合（`GROUP BY model`，走 `(user_id, created_at)` 索引，只扫这一个人的行）。例外的边界写死三条：只查查看者自己、只在这一个字段上、结果在 Redis 上按 `(user_id, window, 窗口起点)` 缓存 60 秒。除此之外请求路径对 `usage_logs` 的查询次数仍然是 0。
 - `cache_hit_rate` 与 `avg_tokens_per_request`（= 本人该窗口 tokens / 成功请求数）来自本人在该 Window Hash 里的那一行，不额外查库。页面把它们与全站值并排对比，全站值取 `highlights.site.cache_hit_rate` 与新增的 `highlights.site.avg_tokens_per_request`——两者都是比率，按 D18 两档都下发。
 - `viewer` 不随 `status` 变化：`rank_history` 来自 Postgres、`models` 来自那条例外查询，两者都不依赖 Snapshot，因此 `status` 为 `computing` 时 `viewer` 照常返回。查看者没有名次历史时 `rank_history` 是空数组，该窗口零用量时 `models` 是空数组、两个比率字段缺席；`viewer` 本身 MUST NOT 是 `null`。
@@ -329,7 +331,7 @@
 
 **页面骨架：masthead + 标题块 + 七章（取代 D19 的状态栏 + 命令行标题）**
 
-- **Masthead**（新组件 `LbMasthead.vue`，取代 `LbStatusBar.vue`）：**一行两端对齐、高度收紧、底部一根 `--line-hard`**（2026-09-12 晚按用户目视反馈收口）。左侧刊头只有一行：粗体站点名 + 一个细字「用量排行榜 / Leaderboard」；右侧一行放窗口分段（today / week / month）、指标分段（tokens / 请求数）、匿名档时的一个小 chip「匿名档」（实名档与档位未知时不挂任何档位 chip）、快照 chip（呼吸点 + `HH:MM` + `（+Nm 后重建）`）、主题分段（亮 / 暗，用 `aria-pressed` 表达选中）与「← 返回仪表盘」。`LEADERBOARD` 小字、日期行、`HH:MM · <tz>` 行以及 `WINDOW` / `METRIC` 两个键名、`MODE named` chip、`TZ <站点时区>` chip 全部删除——日期进标题块副题、时区进页脚、快照时分进那个 chip，同一个事实在页面上只出现一次。窗口与指标的切换在 masthead 与榜单章的工具条**两处都有**，两处共用同一份状态、同一个请求参数。`(+Nm)` 后缀沿用 v2 在 `LbStatusBar` 里的规则：按重建周期现算，pending / stale / 超过一个周期时不渲染。≤767px 时左块与右块各占一行。
+- **Masthead**（新组件 `LbMasthead.vue`，取代 `LbStatusBar.vue`）：**一行两端对齐、高度收紧、底部一根 `--line-hard`**（2026-09-12 晚按用户目视反馈收口）。左侧刊头只有一行：粗体站点名 + 一个细字「用量排行榜 / Leaderboard」；右侧一行放窗口分段（today / week / month）、指标分段（tokens / 请求数 / 金额，第三项由 D24 加入）、匿名档时的一个小 chip「匿名档」（实名档与档位未知时不挂任何档位 chip）、快照 chip（呼吸点 + `HH:MM` + `（+Nm 后重建）`）、主题分段（亮 / 暗，用 `aria-pressed` 表达选中）与「← 返回仪表盘」。`LEADERBOARD` 小字、日期行、`HH:MM · <tz>` 行以及 `WINDOW` / `METRIC` 两个键名、`MODE named` chip、`TZ <站点时区>` chip 全部删除——日期进标题块副题、时区进页脚、快照时分进那个 chip，同一个事实在页面上只出现一次。窗口与指标的切换在 masthead 与榜单章的工具条**两处都有**，两处共用同一份状态、同一个请求参数。`(+Nm)` 后缀沿用 v2 在 `LbStatusBar` 里的规则：按重建周期现算，pending / stale / 超过一个周期时不渲染。≤767px 时左块与右块各占一行。
 - **标题块**（新组件 `LbTitle.vue`，取代 `LbPrompt.vue`）：H1 随 Window 变化——`今天谁在用` / `本周谁在用` / `本月谁在用`，字号 28px，不做巨型 hero、不居中；`· today` 这段窗口回显已删（窗口字面量就印在报头的分段上）。副题只剩两段：`7 位活跃 · 2026-09-12`（匿名档是 `5+ 位活跃 · 2026-09-12`）。档位说明三句与「全站与他人只按口径聚合，不展示金额、邮箱与用户 ID」那一句都已删——档位在匿名档由报头的 chip 表达，隐私声明页脚已有一份。非 ready 时不渲染人数，沿用 v2 的 `ready` 判定。
 - **章节容器**（新组件 `LbChapter.vue`）：通栏；章名行是「章号（等宽、强调色）内联在章名前 + 右侧工具条」，下面是内容 slot；章与章之间用 1px `--line` 分隔。画板上的左侧边注栏（章号 + 口径说明 + 标签）在用户目视后被判「太冗余」，2026-09-12 晚分两步去掉：先删口径说明，再整栏去掉；同一轮里章名右侧那句小字副题（`chapters.NN.sub`）也整体去掉，`subtitle` 这个 prop 保留但页面上零传值，只有 04 章那一格让位给榜单工具条。章名文案走 i18n。
 - **章号是固定编号，不是序号**：某章因数据缺失整章不渲染时（典型是 05/06/07 这些只依赖 `insights` 的章：来源表缺行时后端给 null），其余章的章号 MUST NOT 重排——页面上出现 `01 02 04 05 06 07` 是正确行为。这条是报表皮肤独有的新约束，v2 的区块没有编号，不存在这个问题。
@@ -337,12 +339,12 @@
   - **01 今日高亮**（week / month 下是「本周高亮」/「本月高亮」）= `LbHighlights.vue`。三栏 `1.55fr 1fr 1.12fr`：左栏「卷王」大数字加与第 2 名的对比双条，配一句现算的对比（`比第 2 名多 <差值>（领先 N%），占全站当日 N%`，差值是 top1 与 top2 的 `total_tokens` 之差，只在 `named` 档与 Preview 下出现）；中栏上半是「效率之星」（缓存命中率大数字 + 用户 + `在 <模型> 上最有效 · 需成功请求 > 5 次`），下半是「最勤快」（请求数大数字 + 用户 + `占全站 N% · 与第 2 名并列 / 领先 N%`）；右栏是「全站今日」的引导点线五行（总 tokens、成功请求、活跃人数、峰值时段、缓存命中率），「站点级聚合，不落到任何个人」那行小字已删。卷王那句现算的对比句两档同形，压成 `领先第 2 名 66% · 占全站 41%`（并列时换成 `与第 2 名并列 · 占全站 41%`）；效率之星下方那一行压成 `最有效：<模型>`；最勤快下方保留 `占全站 21% · 与第 2 名并列 / 领先 N%`。`anonymous` 档下右栏只剩活跃人数（带 `5+`）、峰值时段与缓存命中率，没有绝对量的行整行不渲染。
   - **02 六个之最** = `LbExtremes.vue`。三列两行的 hairline 网格 `1.18fr 1fr 1.26fr`，每格是小标题、大数字与单位同行、强调色用户名一行（「单次最大」的用户名后保留 `· 中位数的 N 倍`，`· 只在 today 窗口` 那句注脚已删——进步之星本来就只在 today 窗口才有格子，缺席即是说明）；缺席的项整格不渲染（`rising` 在 week / month 必然缺席），序列用 `margin-top: calc(var(--i) * 4px)` 做阶梯位移，因此缺项时后面的格子自动前移。
   - **03 我的位置** = `LbWhoami.vue`。两栏 `.82fr 1.8fr`：左栏是 `#1` 大数字、`参与人数 N 人 · 相对第一名 N%`、一个「仅本人可见」的私密标记与模型偏好 chip；右栏是「近 N 天名次」（N 取折线实际点数）的折线（复用 `LbSparkline.vue`，纵轴反转；坐标轴说明那句已删）、下方只剩 `最好 #a · 最差 #b`，再下方是「我 VS 全站」两组双条（缓存命中率、平均每请求）。「已进前 10，你在榜单里高亮显示」那一句提示删掉（名次那个大数字已经说完），「只有你自己能看到这一块」压成一个极小的「仅本人可见」标签，全页只留这一处。只要拿到响应就渲染本章（含 `computing` 与零用量态：零用量时名次格显示「本窗口暂无用量」，与 user-leaderboard spec 的 My Rank 要求一致）；`rank_history` 为空时右栏折线不渲染、两栏收成单栏（`.is-single`）。章号固定不重排。
-  - **04 榜单 Top 50** = `LbRankList.vue`。右上角工具条是 window 分段、metric 分段与一个刷新 `LbIcon`；表头是 `名次 / 用户 / 相对第一名 / TOKENS / 成功请求`；名次补零成 `01`；本人行左侧 3px 强调色边条加淡底加「你」标记；相对第一名画成细条加百分比。表下只剩**一行解读句**，由前端从响应数据现算，两档同形：`第 1 名是第 2 名的 1.7 倍 · 前三名占全站 88%`，缺数据的分句整句省略（两句都缺时整行不渲染），分句不带句末标点、由前端用 ` · ` 连起来。第 1 名的绝对量、「是末名的几倍」、相邻两名在另一个 Metric 下互换那句，以及整段注脚（「共 N 位活跃…」「竞赛排名…」「本人行带…」）全部删除——前者表格第一行已经印着，后者说的是表格自己已经画出来的东西。
+  - **04 榜单 Top 50** = `LbRankList.vue`。右上角工具条是 window 分段、metric 分段与一个刷新 `LbIcon`；表头是 `名次 / 用户 / 相对第一名 / TOKENS / 成功请求 / 金额`（末列由 D24 加入，右对齐、按查看者 locale 用 `formatCurrency` 渲染）；名次补零成 `01`；本人行左侧 3px 强调色边条加淡底加「你」标记；相对第一名画成细条加百分比。表下只剩**一行解读句**，由前端从响应数据现算，两档同形：`第 1 名是第 2 名的 1.7 倍 · 前三名占全站 88%`，缺数据的分句整句省略（两句都缺时整行不渲染），分句不带句末标点、由前端用 ` · ` 连起来。两个分句都按当前 Metric 现算，`metric=cost` 时分母取 `highlights.site.cost`（D24）。第 1 名的绝对量、「是末名的几倍」、相邻两名在另一个 Metric 下互换那句，以及整段注脚（「共 N 位活跃…」「竞赛排名…」「本人行带…」）全部删除——前者表格第一行已经印着，后者说的是表格自己已经画出来的东西。
   - **05 模型与平台** = `LbModelHeat.vue` + `LbProfiles.vue` + `LbPlatforms.vue`。上半是 `1.32fr 1fr` 两栏（左今日模型条、右画像 chip 表，chip 左边界对齐成一条轴），下半是通栏的平台堆叠条加图例；图例最后一项「其他 N%」只在各项之和小于 100 时出现，且 MUST NOT 为它编一个请求数（`· 取整残差` 那句解释已删）。模型块的标签是「今日模型」，画像块是「模型偏好 · 按成功请求占比」。
   - **06 活跃节奏** = `LbHeatmap.vue` + `LbRhythm.vue` + `LbHourly.vue`。顶部通栏是 30 天条形热力（一行 30 格加起止日期刻度）；下方 `1.42fr 1fr`：左是 7 × 24 周内节奏（标签是「周内节奏 · 近 4 周」，周一起算，四级明度加「少…多」图例），右是今日时段柱加**唯一一句** `峰值 HH:00 · N 次`。「主要落在 HH:00 — HH:00」那半句、整段现算的节奏说明（最密的两个时段 / 最深的一格 / 有用量的天数）以及两处「计数含失败请求的占位记录…」的口径注脚都已删——柱形与格子本身已经把这些画出来了，口径差异留在 `CONTEXT.md` 词条里。
   - **07 趋势与构成** = `LbTrend.vue` + `LbComposition.vue` + `LbCacheTrend.vue`。上半 `3.3fr 1fr`：左是 14 天柱，右是「本月累计」大数字加「较前一日 +N%」；下半是「今日 TOKEN 构成」四段堆叠条加图例、「缓存命中率 · 近 14 天」大数字加折线加一个「今日」标签（`· 区间 a–b%` 已删，区间由右边的折线自己说）。
 - **断轴规则**（07 章的 14 天柱，报表皮肤新增）：取这 14 天里第三大的值 `T`，若最大值大于 `5T` 则纵轴在 `T` 处压缩——`T` 以下占柱区 66% 高、`T` 以上占 22%、中间 12% 画断轴虚线并标注「轴在 <T> 压缩」；否则线性、不画断轴。图下那句「最高一天是第三高那天的 N 倍…」的说明已删，标注本身就说明轴被压缩了。阈值与比例是固定常量，MUST NOT 随数据自适应，也 MUST NOT 在不满足条件时仍画断轴——断轴只在它确实发生时出现，否则读者会以为轴一直是断的。
-- **页脚**（`LbFooter.vue` 换皮）：一行四段 `snapshot HH:MM · 每 5 分钟重建 · <tz> · 不展示金额与邮箱`。`COLOPHON` 小字、`一周从周一起算` 与 `successful_requests = actual_cost > 0` 已删；`snapshot` 与时区名是字面量不进 i18n，「每 5 分钟重建」与隐私声明走 i18n。
+- **页脚**（`LbFooter.vue` 换皮）：一行四段 `snapshot HH:MM · 每 5 分钟重建 · <tz> · 不展示金额与邮箱`（D24 之后金额是可展示的量，这一段只剩邮箱那一句；i18n 键名 `leaderboard.footer.noMoney` 沿用不改，`LbFooter.vue` 本身不动）。`COLOPHON` 小字、`一周从周一起算` 与 `successful_requests = actual_cost > 0` 已删；`snapshot` 与时区名是字面量不进 i18n，「每 5 分钟重建」与隐私声明走 i18n。
 - **非正常态**（`LbStates.vue` 换皮）：加载 / 计算中 / 失败 / 空 / 抑制的判定字段与文案一个字不改，只换皮——骨架用 `--bg-sunk` 色块，MUST NOT 用圆形 spinner；做 shimmer 的话只动 `transform`。
 
 **动效**
@@ -356,11 +358,11 @@
 **断点**
 
 - ≤1180px：三栏收成两栏（照画板的 `@media (max-width: 1180px)` 规则）。
-- ≤767px：一律单列；masthead 换行成两行；榜单改两行式（第一行名次 · 用户 · tokens，第二行相对条 · 百分比 · 请求数，相对条 MUST NOT 被隐藏）；7 × 24 网格的轨道一律 `minmax(0, 1fr)` 自适应收窄。任何宽度下页面 MUST NOT 出现横向滚动（表格、7 × 24 网格这类必须更宽的东西各自套自己的 `overflow-x: auto` 容器）。
+- ≤767px：一律单列；masthead 换行成两行；榜单改两行式（第一行名次 · 用户 · tokens · 金额，第二行相对条 · 百分比 · 请求数，三个数值格一律靠右，相对条 MUST NOT 被隐藏）；7 × 24 网格的轨道一律 `minmax(0, 1fr)` 自适应收窄。任何宽度下页面 MUST NOT 出现横向滚动（表格、7 × 24 网格这类必须更宽的东西各自套自己的 `overflow-x: auto` 容器）。
 
 **档位与隐私（与 D1、D18、D20 一致，此处重申）**
 
-- 实名档：开着昵称展示的用户显示 username，其余是「第 N 位」；本人行是本人的 username（缺席时「当前用户」）加「你」标记。匿名档：他人一律「第 N 位」，他人与站点级只有占比、相对值与倍数，参与人数带 `5+` 分档；本人行与 03 章的本人统计保留真实数值；「杂食者」的「N 种模型」是类别数不是绝对量，两档都给。任何档位下都 MUST NOT 出现金额、邮箱与 `user_id`。
+- 实名档：开着昵称展示的用户显示 username，其余是「第 N 位」；本人行是本人的 username（缺席时「当前用户」）加「你」标记。匿名档：他人一律「第 N 位」，他人与站点级只有占比、相对值与倍数，参与人数带 `5+` 分档；本人行与 03 章的本人统计保留真实数值；「杂食者」的「N 种模型」是类别数不是绝对量，两档都给。任何档位下都 MUST NOT 出现邮箱与 `user_id`；金额只有 Cost 一个口径，与 tokens 同一套档位规则（D24）。
 - 解读句、节奏说明、对比句这类**现算文案** MUST 全部由前端从响应数据算出，缺哪个数就省哪个分句，MUST NOT 把 mockup 里的示例数字写死进模板——画板上的 `4.37M`、`+241%`、`28 天` 全是假数据。
 
 **i18n 命名**
@@ -380,6 +382,21 @@
 - 备选：Geist 走 Google Fonts。否决：D16 与 D19 都记过——CSP 没放行那两个域名，`@import` 会被静默拦截（页面不报错，字体直接不生效），为一张页面放宽全站 `style-src` / `font-src` 不划算。
 
 
+### D24：Cost 是第三个 Metric，金额与 tokens 同一套档位规则（2026-09-13）
+
+**取代关系**：本条取代 D3 的「Metric 只有两项」、Non-Goals 的「不展示任何金额，也不提供按金额排序的选项」、D10 与 D14 的「响应不下发任何金额字段」，以及 v1 / v2 两段重设计背景里「金额仍然永不出现」那句。D1 的三档语义、D5 的名次规则、D8 的「请求路径只读」与 D18 的逐条裁剪方法一个字不改——改的只是「金额算不算可下发的量」。
+
+- Metric 从两项扩成三项：`total_tokens`、`successful_requests`、`cost`。Cost = 该 Window 内 `usage_logs.actual_cost` 之和（实际计费金额，USD）。用 `actual_cost` 而不是 `total_cost`，因为用户自己的用量页「花费」用的就是它，而且成功落账口径（`usageLogSuccessFilterUL`）本来就是 `actual_cost > 0`，两个口径同源才对得上账。
+- 隐私档位规则与 tokens 完全一致，不另立一套：`named` 档与 Preview 下发绝对金额（USD，`float64`），`anonymous` 档下他人只给 `cost_relative_percent`（相对该 Window 第一名的整数百分比，第一名为 `100`），本人条目与 `my_rank` 始终是真实金额。与 tokens 一样是「档位决定字段是否存在」而不是「档位把字段清零」。
+- 不新增趣味卡（不做 `highlights.top_cost`）。站点合计 `highlights.site.cost` 要给（`named` 档与 Preview，`anonymous` 档缺席），04 章的解读句「前三名占全站 N%」在 `metric=cost` 下拿它做分母。
+- 金额在 Snapshot 内部一律用定点 micros（1 USD = 1e6，`int64`）：ZSET 分数、Hash 第 13 段、名次计算与「还差多少进前 10」都用 micros 算，只在响应组装时用 `LeaderboardCostUSD` 换回 USD。理由是 ZSET 的 score 是 float64、名次要用 `ZCOUNT` 做严格比较，浮点金额直接进 score 会让「同一个金额」在并列判定上不稳定。
+- 落到既有结构上的四处扩容：每个 Window 从两个 ZSET 变三个（key 后缀就是 metric 字符串，`metricKey` 天然支持）；Hash value 从 12 段扩到 13 段，第 13 段是 Cost micros，解码沿用 D20 的「缺段按 0」——12 段式旧值解出 `CostMicros = 0`，下一轮作业最长 5 分钟后补齐；`leaderboard_rank_history` 加第三列 `rank_cost`（迁移 241），每轮与另两列一起写；`LeaderboardMyRankHint.Value` 从 `*int64` 改成 `*float64`，并新增 kind `cost_to_top10`（常量 `LeaderboardHintCostToTop10`）——tokens / requests 两种 hint 仍是整数，JSON 形态不变，cost 的差额按 micros 算完再换回 USD。
+- 名次历史表虽然攒了 `rank_cost`，页面上的「近 N 天名次」折线仍按 Total Tokens 的名次画，不给折线加 Metric 切换：那条折线是「你在总榜上的走势」，一条线一个口径最省解释成本；列先攒着，等确实需要再出。
+- 备选：金额只在 `named` 档下发、`anonymous` 档整列缺席。否决：那会让匿名档的第三个 Metric 变成一列空白（排序仍按金额，却一个数都看不到），与 tokens 列在同一档下仍给相对百分比的处理自相矛盾。
+- 备选：金额用 `total_cost`（账面成本）而不是 `actual_cost`。否决：用户用量页「花费」用的是 `actual_cost`，两个口径并存会让用户拿两个页面对账时对不上，这是 D3 拒绝「排除 cache 类 tokens」时用过的同一条理由。
+- 备选：响应直接下发 micros，由前端换算。否决：micros 是存储层的定点技巧，不是接口口径；下发 micros 等于把这个技巧漏给每一个客户端，且前端还要再定一次「1e6」这个常量。
+- 备选：给 Cost 也出一张趣味卡（`highlights.top_cost`「花得最多」）。否决：四张 Highlights 讲的是「谁最多」，卷王那张已经是同一个人的概率极高，多一张只是把同一件事说两遍；站点合计里给 `site.cost` 足够支撑解读句。
+
 ## Risks / Trade-offs
 
 - [`named` 档下关掉了昵称展示的用户仍是假名 + 精确数值，熟人可对着仪表盘数值反查身份] → 见 ADR-0002 的 Consequences：这是管理员选择最开放档时接受的残余风险，设置项旁写明；想要更严就用 `anonymous` 档。
@@ -398,6 +415,8 @@
 - [aurora、卡片光晕、进度条流光与骨架 shimmer 这些持续动效在低端设备上掉帧] → 持续动效集中在 `.cr-ambient` 一个开关后面，默认值取 `!prefers-reduced-motion` 并 `localStorage` 持久化；`prefers-reduced-motion: reduce` 时样式层把时长压到 `0.01ms`、脚本层直接跳终值；入场动效只跑一次，条形生长用 `width` 过渡而不是逐帧脚本。
 - [`leaderboard_rank_history` 按「人 × 天」增长，作业每 5 分钟对 `today` 窗口的全部参与者 upsert 一次，写入量与参与人数成正比] → 每天每人只有一行，覆盖写不产生新行，稳态行数是「参与人数 × 90」；一万人的站点约九十万行，主键 `(user_id, snapshot_date)` 就是唯一索引，upsert 分批 1000 行、每 5 分钟一次，对写入通道的占用可以忽略。真正的增长风险在保留期，因此清理写在同一轮作业里而不是靠人工。达到量级问题时先把 upsert 改成每日一次，再考虑按天分区。
 - [`streak` 要回溯 90 天的 `usage_dashboard_daily_users` 做 gaps-and-islands，随站点存量线性变大] → 这张表每天每人只有一行，90 天的切片是「参与人数 × 90」量级，且有 `bucket_date` 索引可以先按日期裁剪；整条查询在后台作业里跑，即使慢也不阻塞任何请求。与月窗口聚合一样，上线前用生产量级数据跑一次 `EXPLAIN (ANALYZE, BUFFERS)`；达到秒级就把回溯窗口从 90 天缩短，或改成只对 Top N 用户算。
+- [`named` 档下 Cost 是绝对金额，等于把每个显示着昵称的用户的消费规模对全站公开] → 这是 D24 明确接受的代价：金额与 tokens 走同一套档位规则，不接受的运营者用 `anonymous` 档（他人只剩 `cost_relative_percent`）或 `off`。风险与「`named` 档 + 今日窗口构成活动时间线」同源，退出通道仍是个人资料里的昵称展示开关。
+- [Hash 从 12 段扩到 13 段、ZSET 从 2 个增到 3 个，旧快照与新代码并存] → 沿用 D20 已经验证过的「缺段按 0」：12 段式旧值解出 `CostMicros = 0`，表现为该窗口的金额列全 0 而不是解码失败，最长 5 分钟后被下一轮重建补齐；第三个 ZSET 在旧快照上不存在，读到缺失即按「正在计算」处理。回滚同理，旧代码只读前 12 段、忽略第三个 ZSET。
 - [`viewer.models` 在 D8「请求路径只读」上开了一个口子，一旦被扩用就会把整条链拖回实时聚合] → 例外的边界写死在三处并各有测试：SQL 必须带 `user_id = 查看者`、只服务 `viewer.models` 这一个字段、结果在 Redis 上按 `(user_id, window, 窗口起点)` 缓存 60 秒。最坏情况是每个活跃用户每分钟一条只扫自己数据的聚合，走 `(user_id, created_at)` 索引；配合 `panelRateLimiter.Heavy()`，它的量级与「用户自己的用量页」同级。Redis 不可用时这一块降级为空数组，MUST NOT 让整个响应失败。
 
 ## Migration Plan
@@ -410,3 +429,5 @@
 6. v2 重设计新增一张表，迁移编号取现有最大加一：当前最大为 `238_user_leaderboard_named_participation.sql`，因此用 `239_leaderboard_rank_history.sql`。内容是 `CREATE TABLE IF NOT EXISTS leaderboard_rank_history (user_id BIGINT NOT NULL, snapshot_date DATE NOT NULL, rank_total_tokens INT NOT NULL, rank_successful_requests INT NOT NULL, PRIMARY KEY (user_id, snapshot_date));` 外加一条 `CREATE INDEX IF NOT EXISTS idx_leaderboard_rank_history_snapshot_date ON leaderboard_rank_history (snapshot_date);`（保留期清理按日期删，需要这条索引）。整份幂等，是新建表因此没有锁表风险，普通事务迁移即可，不用 `_notx.sql` 后缀——与 238 同理，正文与注释里都 MUST NOT 出现并发建索引的那个关键字，迁移校验器对非 `_notx.sql` 文件是整文件裸匹配。
 7. v2 的回滚：页面与响应字段随代码版本回退，新表保留无副作用（没有其它读者，也不参与任何外键）；确需彻底清理时手工 `DROP TABLE leaderboard_rank_history`。`leaderboard_mode` 改回 `off` 同样能让整个功能对普通用户消失，与 v1 一致。Redis 上 `leaderboard:v1:viewer:models:*` 这一类新 key 在旧代码上根本不存在，随 60 秒 TTL 自然消失。
 8. Redis 上的旧快照与新代码兼容，不需要为这一轮单独做 Redis 迁移：Hash value 从 `"tokens,requests"` 扩成 `"tokens,requests,input,cache_read"` 后，解码按逗号切分再逐段取值，段数不足时缺的两个数一律按 0 处理，因此上一版写入的两段式 value 仍能读（表现为该窗口「无缓存命中率」而不是 0%），下一轮作业最长 5 分钟后重建即补齐。新增的 `:highlights` 与 `leaderboard:v1:insights:*` 两类 key 在旧快照上根本不存在，读到缺失即按 null 处理，页面隐藏对应区块。回滚同理：旧代码只读前两段，多出来的两段会被忽略，`:highlights` 与 `insights:*` 随 TTL 自然过期。v2 把 Hash value 再从 4 段扩到 12 段（顺序见 D20），走的是同一条规则：缺的段一律按 0，因此 2 段式与 4 段式的旧 value 都仍能读，表现为对应的之最卡缺席而不是 0；回滚时多出来的八段同样被忽略。
+9. Cost 这一轮（D24）新增一个迁移，编号取现有最大加一：当前最大为 `240_leaderboard_named_participation_default_true.sql`，因此用 `241_leaderboard_rank_history_cost.sql`。内容是 `ALTER TABLE leaderboard_rank_history ADD COLUMN IF NOT EXISTS rank_cost INT NOT NULL DEFAULT 0;` 外加一条 `COMMENT ON COLUMN`，幂等，普通事务迁移即可，不用 `_notx.sql` 后缀——新增带默认值的 INT 列在 PostgreSQL 11+ 不重写表。与 238 / 239 / 240 同理，正文与注释里都 MUST NOT 出现并发建索引的那个关键字（`migrations_runner.go` 对非 `_notx.sql` 文件是整文件裸匹配）。回滚时该列保留无副作用（默认 `0`，旧代码不读它），确需彻底清理时手工 `ALTER TABLE leaderboard_rank_history DROP COLUMN rank_cost`。
+10. Redis 上 D24 的兼容同样不需要单独迁移：Hash value 从 12 段扩到 13 段（第 13 段是 Cost micros），解码仍按逗号切分逐段取值、缺段按 0，因此 2 / 4 / 12 段式的历史 value 全都仍能读出榜单本体，表现为金额列为 0 而不是解码失败，下一轮作业最长 5 分钟后补齐；每个 Window 新增的第三个 ZSET（key 后缀 `cost`）在旧快照上不存在，读到缺失即按「正在计算」处理。回滚同理：旧代码只读前 12 段并忽略 `cost` 这个 ZSET，多出来的一段与一个 key 随 TTL 自然过期。

@@ -962,7 +962,7 @@ export default {
   // User Leaderboard(用量排行榜)
   leaderboard: {
     title: '用量排行榜',
-    description: '按今日、本周和本月三个时间窗口，展示所有用户的用量排名。榜单不展示金额和邮箱地址。',
+    description: '按今日、本周和本月三个时间窗口，展示所有用户的用量与消费排名。榜单不展示邮箱地址。',
     windows: {
       label: '窗口',
       today: '今日',
@@ -973,6 +973,7 @@ export default {
       label: '排名指标',
       totalTokens: '总 tokens',
       successfulRequests: '成功请求数',
+      cost: '消费金额',
     },
     // 报头：左刊头（站名 + 一个细字），右一行拨盘。日期进标题块副题、时区进页脚、
     // 快照时分进右侧 chip，因此这里不再有 window / metric / mode / tz / snapshot 这些键名。
@@ -985,6 +986,7 @@ export default {
       rebuildIn: '（{minutes}m 后重建）',
       metricTokens: 'tokens',
       metricRequests: '请求数',
+      metricCost: '金额',
       theme: '主题',
       themeLight: '亮',
       themeDark: '暗',
@@ -1168,6 +1170,8 @@ export default {
       totalTokens: '总 tokens',
       // 表头与「你的位置」那两个小标签用短词，Metric 分段仍用完整的「成功请求数」。
       successfulRequestsShort: '成功请求',
+      // 金额列：实名档与 Preview 下是绝对金额（USD），匿名档他人行是相对第一名的百分比。
+      cost: '金额',
       relativePercent: '第一名的 {percent}%',
       // 匿名档本人行：第一名的绝对量前端拿不到，这一格只能留占位符
       relativeUnknown: '匿名档下第一名的用量不公开，无法算出本行相对第一名的百分比',
@@ -1187,6 +1191,7 @@ export default {
       hint: {
         gapTokens: '再增加 {gap} tokens 即可进入前 {rank}',
         gapRequests: '再增加 {gap} 次成功请求即可进入前 {rank}',
+        gapCost: '再消费 {gap} 即可进入前 {rank}',
         relative: '你为第一名的 {percent}%，第 {rank} 名为 {target}%',
       },
     },
@@ -1220,12 +1225,14 @@ export default {
         barRelative: '{hour}:00 · 相对峰值 {percent}%',
       },
     },
-    // 页脚是一行 colophon：`snapshot HH:MM · 每 5 分钟重建 · <站点时区> · 不展示金额与邮箱`。
+    // 页脚是一行 colophon：`snapshot HH:MM · 每 5 分钟重建 · <站点时区> · 不展示邮箱地址`。
     // `snapshot` 与时区名是字面量，不进 i18n（design D4）；`COLOPHON` 字样、
     // 「一周从周一起算」与 `successful_requests = actual_cost > 0` 已删。
+    // 金额已是第三个 Metric（与 tokens 同一套档位规则），这一段因此只剩邮箱那一句；
+    // 键名 `noMoney` 是 LbFooter.vue 引用的既有键，保持不变。
     footer: {
       rebuild: '每 5 分钟重建',
-      noMoney: '不展示金额与邮箱',
+      noMoney: '不展示邮箱地址',
     },
     states: {
       loadFailed: '榜单加载失败，请稍后重试',

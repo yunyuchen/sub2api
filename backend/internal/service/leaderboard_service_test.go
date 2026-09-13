@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -211,6 +210,14 @@ func leaderboardUsers(users ...User) *fakeLeaderboardUserRepo {
 
 func metricsRow(id, tokens, requests int64) LeaderboardUserMetrics {
 	return LeaderboardUserMetrics{UserID: id, TotalTokens: tokens, SuccessfulRequests: requests}
+}
+
+// costMetricsRow 是带消费金额的快照条目。金额在 Snapshot 内部一律是定点 micros，
+// 因此这里走 LeaderboardCostMicros 换算，与作业写 ZSET 分数的那一步同一条路径。
+func costMetricsRow(id, tokens, requests int64, costUSD float64) LeaderboardUserMetrics {
+	row := metricsRow(id, tokens, requests)
+	row.CostMicros = LeaderboardCostMicros(costUSD)
+	return row
 }
 
 // fakeLeaderboardViewerRepo 是 viewer（「你的统计」）那两条只查本人的查询。
@@ -603,7 +610,8 @@ func TestLeaderboardService_QueryNamedIdentityFallsBackToAnonymous(t *testing.T)
 	require.NotContains(t, string(payload), "user_id")
 	require.NotContains(t, string(payload), "email")
 	require.NotContains(t, string(payload), "someone@example.com")
-	require.NotContains(t, strings.ToLower(string(payload)), "cost")
+	// 金额是第三个 Metric，named 档下与 tokens 一样精确下发（design §1）。
+	require.Contains(t, string(payload), `"cost":`)
 }
 
 // 7.4 Snapshot 缺失（key 不存在）时是「正在计算」，不是空榜也不是 500。
@@ -760,7 +768,8 @@ func leaderboardHighlightsFixture() *LeaderboardHighlights {
 		TopRequests: &LeaderboardHighlightUser{UserID: 4, TotalTokens: 100, SuccessfulRequests: 30, SharePercent: 23, LeadPercent: 23},
 		CacheKing:   &LeaderboardCacheKing{UserID: 77, CacheHitRate: 0.873, DominantModel: "claude-sonnet-5"},
 		Site: LeaderboardSiteSummary{
-			TotalTokens: 21_400_000, SuccessfulRequests: 1234, ParticipantCount: 137,
+			// 站点合计的金额是 micros（7.8 USD），下发时才换回 USD。
+			TotalTokens: 21_400_000, SuccessfulRequests: 1234, CostMicros: 7_800_000, ParticipantCount: 137,
 			CacheHitRate: &siteRate, PeakHour: &peakHour, AvgTokensPerRequest: &siteAvg,
 		},
 		Extremes: &LeaderboardExtremes{
@@ -1008,6 +1017,7 @@ func TestLeaderboardService_QueryAnonymousCropsHighlightsAndInsights(t *testing.
 var leaderboardAbsoluteFieldNames = []string{
 	`"total_tokens"`,
 	`"successful_requests"`,
+	`"cost"`,
 	`"requests"`,
 	`"input_tokens"`,
 	`"output_tokens"`,
@@ -1197,7 +1207,7 @@ func TestLeaderboardService_MyRankHintNamedGivesAbsoluteGap(t *testing.T) {
 	require.Equal(t, LeaderboardHintTokensToTop10, byTokens.MyRank.Hint.Kind)
 	require.NotNil(t, byTokens.MyRank.Hint.Value)
 	// 第 10 名是 300，本人是 100：再多 200 就够得着第 10 名。
-	require.Equal(t, int64(200), *byTokens.MyRank.Hint.Value)
+	require.InDelta(t, 200.0, *byTokens.MyRank.Hint.Value, 1e-9)
 	require.Nil(t, byTokens.MyRank.Hint.Self)
 	require.Nil(t, byTokens.MyRank.Hint.Tenth)
 
@@ -1205,7 +1215,7 @@ func TestLeaderboardService_MyRankHintNamedGivesAbsoluteGap(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, byRequests.MyRank.Hint)
 	require.Equal(t, LeaderboardHintRequestsToTop10, byRequests.MyRank.Hint.Kind)
-	require.Equal(t, int64(2), *byRequests.MyRank.Hint.Value)
+	require.InDelta(t, 2.0, *byRequests.MyRank.Hint.Value, 1e-9)
 }
 
 // 「你的位置」的提示：anonymous 档只给相对第一名的百分比，MUST NOT 含他人绝对量。
@@ -1254,6 +1264,163 @@ func TestLeaderboardService_MyRankHintAbsentInsideTopTen(t *testing.T) {
 	payload, err := json.Marshal(view.MyRank)
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), `"hint"`)
+}
+
+// ---------------------------------------------------------------------------
+// Cost（消费金额）：第三个 Metric 在 named / anonymous / Preview 三档下的形态
+// ---------------------------------------------------------------------------
+
+// leaderboardCostCache 是一份带金额的五人快照：金额顺序与 tokens 顺序刻意不同
+// （tokens 第 1 的 user 1 金额只排第 3），因此「按 cost 排」必须给出另一套名次，
+// 而不是沿用 tokens 的。查看者是 user 3：金额第 2、tokens 第 3。
+func leaderboardCostCache() *fakeLeaderboardSnapshotCache {
+	cache := leaderboardHighlightsCache()
+	cache.entries = []LeaderboardUserMetrics{
+		costMetricsRow(1, 1000, 20, 1),
+		costMetricsRow(2, 500, 15, 4),
+		costMetricsRow(3, 250, 10, 2.5),
+		costMetricsRow(4, 100, 30, 0.25),
+		costMetricsRow(5, 40, 1, 0.05),
+	}
+	return cache
+}
+
+// named 档：按金额重新排名，entries / my_rank / site 的金额都是精确 USD。
+func TestLeaderboardService_QueryCostMetricNamed(t *testing.T) {
+	cache := leaderboardCostCache()
+	view, err := newTestLeaderboardService(cache, leaderboardHighlightsUsers()).Query(
+		context.Background(), 3, LeaderboardWindowToday, LeaderboardMetricCost, LeaderboardModeNamed, false)
+	require.NoError(t, err)
+
+	require.Equal(t, string(LeaderboardMetricCost), view.Metric)
+	require.Len(t, view.Entries, 5)
+	require.Equal(t, []int64{1, 2, 3, 4, 5},
+		[]int64{view.Entries[0].Rank, view.Entries[1].Rank, view.Entries[2].Rank, view.Entries[3].Rank, view.Entries[4].Rank})
+
+	// 金额最高的 user 2 排第 1，tokens 最高的 user 1 只排第 3：名次跟着 Metric 走。
+	require.NotNil(t, view.Entries[0].Cost)
+	require.InDelta(t, 4.0, *view.Entries[0].Cost, 1e-9)
+	require.NotNil(t, view.Entries[0].TotalTokens)
+	require.Equal(t, int64(500), *view.Entries[0].TotalTokens, "另外两个 Metric 的值照常同时下发")
+	require.NotNil(t, view.Entries[2].Cost)
+	require.InDelta(t, 1.0, *view.Entries[2].Cost, 1e-9)
+	require.Nil(t, view.Entries[0].CostRelativePercent, "named 档没有相对百分比")
+
+	self := view.Entries[1]
+	require.True(t, self.IsSelf)
+	require.NotNil(t, self.Cost)
+	require.InDelta(t, 2.5, *self.Cost, 1e-9)
+
+	require.NotNil(t, view.MyRank)
+	require.Equal(t, int64(2), view.MyRank.Rank)
+	require.InDelta(t, 2.5, view.MyRank.Cost, 1e-9)
+	require.Equal(t, int64(250), view.MyRank.TotalTokens)
+
+	require.NotNil(t, view.Highlights)
+	require.NotNil(t, view.Highlights.Site.Cost)
+	require.InDelta(t, 7.8, *view.Highlights.Site.Cost, 1e-9, "站点合计由 micros 换回 USD")
+
+	payload, err := json.Marshal(view.MyRank)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), `"cost":2.5`, "本人的金额始终下发，MUST NOT 用指针表达缺席")
+}
+
+// anonymous 档：他人条目只给相对第一名的百分比，本人行与 my_rank 仍是真实金额，
+// 站点合计的金额一并缺席。
+func TestLeaderboardService_QueryCostMetricAnonymous(t *testing.T) {
+	cache := leaderboardCostCache()
+	view, err := newTestLeaderboardService(cache, leaderboardHighlightsUsers()).Query(
+		context.Background(), 3, LeaderboardWindowToday, LeaderboardMetricCost, LeaderboardModeAnonymous, false)
+	require.NoError(t, err)
+
+	require.False(t, view.EntriesSuppressed)
+	require.Len(t, view.Entries, 5)
+
+	first := view.Entries[0]
+	require.Nil(t, first.Cost, "他人的绝对金额 MUST 缺席而不是清零")
+	require.NotNil(t, first.CostRelativePercent)
+	require.Equal(t, 100, *first.CostRelativePercent)
+	// 分母是该 Window 的 CostMicros 最大值（4 USD）：1 / 4 = 25%，0.25 / 4 向下取整是 6%。
+	require.Equal(t, 25, *view.Entries[2].CostRelativePercent)
+	require.Equal(t, 6, *view.Entries[3].CostRelativePercent)
+
+	self := view.Entries[1]
+	require.True(t, self.IsSelf)
+	require.NotNil(t, self.Cost)
+	require.InDelta(t, 2.5, *self.Cost, 1e-9)
+	require.Nil(t, self.CostRelativePercent)
+
+	require.NotNil(t, view.MyRank)
+	require.InDelta(t, 2.5, view.MyRank.Cost, 1e-9)
+	require.Nil(t, view.Highlights.Site.Cost, "站点级金额与 tokens 同一条裁剪规则")
+
+	payload, err := json.Marshal(first)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), `"cost"`)
+	require.Contains(t, string(payload), `"cost_relative_percent"`)
+}
+
+// Preview（off 档的管理员）按 named 档渲染金额。
+func TestLeaderboardService_QueryCostMetricPreview(t *testing.T) {
+	cache := leaderboardCostCache()
+	view, err := newTestLeaderboardService(cache, leaderboardHighlightsUsers()).Query(
+		context.Background(), 3, LeaderboardWindowToday, LeaderboardMetricCost, LeaderboardModeOff, true)
+	require.NoError(t, err)
+
+	require.True(t, view.Preview)
+	require.NotNil(t, view.Entries[0].Cost)
+	require.InDelta(t, 4.0, *view.Entries[0].Cost, 1e-9)
+	require.Nil(t, view.Entries[0].CostRelativePercent)
+	require.InDelta(t, 2.5, view.MyRank.Cost, 1e-9)
+	require.NotNil(t, view.Highlights.Site.Cost)
+	require.InDelta(t, 7.8, *view.Highlights.Site.Cost, 1e-9)
+}
+
+// leaderboardCostHintCache 是一份带金额的十二人快照：查看者（user 12）稳定排在第 12 名，
+// 因此「你的位置」总有一句「再消费多少进前 10」的提示。
+func leaderboardCostHintCache() (*fakeLeaderboardSnapshotCache, *fakeLeaderboardUserRepo) {
+	entries := make([]LeaderboardUserMetrics, 0, 12)
+	users := make([]User, 0, 12)
+	for i := int64(1); i <= 12; i++ {
+		entries = append(entries, costMetricsRow(i, (13-i)*100, 13-i, float64(13-i)*0.5))
+		users = append(users, activeLeaderboardUser(i, "user"))
+	}
+	return &fakeLeaderboardSnapshotCache{entries: entries}, leaderboardUsers(users...)
+}
+
+// 「你的位置」在 cost 下是第三个 kind：差额按 micros 算完再换成 USD。
+func TestLeaderboardService_MyRankHintCostToTop10(t *testing.T) {
+	cache, repo := leaderboardCostHintCache()
+	svc := newTestLeaderboardService(cache, repo)
+
+	view, err := svc.Query(context.Background(), 12, LeaderboardWindowToday, LeaderboardMetricCost, LeaderboardModeNamed, false)
+	require.NoError(t, err)
+	require.NotNil(t, view.MyRank)
+	require.Equal(t, int64(12), view.MyRank.Rank)
+
+	hint := view.MyRank.Hint
+	require.NotNil(t, hint)
+	require.Equal(t, LeaderboardHintCostToTop10, hint.Kind)
+	require.NotNil(t, hint.Value)
+	// 第 10 名是 1.5 USD，本人是 0.5 USD：再消费 1 USD 就够得着。
+	require.InDelta(t, 1.0, *hint.Value, 1e-9)
+	require.Nil(t, hint.Self)
+	require.Nil(t, hint.Tenth)
+
+	// anonymous 档仍然只给相对第一名的百分比：他人的金额连差额形式都不出现。
+	anonymous, err := svc.Query(context.Background(), 12, LeaderboardWindowToday, LeaderboardMetricCost, LeaderboardModeAnonymous, false)
+	require.NoError(t, err)
+	require.Equal(t, LeaderboardHintRelativePercent, anonymous.MyRank.Hint.Kind)
+	require.Nil(t, anonymous.MyRank.Hint.Value)
+	require.Equal(t, 8, *anonymous.MyRank.Hint.Self)   // 0.5 / 6
+	require.Equal(t, 25, *anonymous.MyRank.Hint.Tenth) // 1.5 / 6
+
+	// tokens / requests 的差额仍是整数形态：Value 改成 float64 不改变 JSON。
+	byTokens, err := svc.Query(context.Background(), 12, LeaderboardWindowToday, LeaderboardMetricTotalTokens, LeaderboardModeNamed, false)
+	require.NoError(t, err)
+	payload, err := json.Marshal(byTokens.MyRank.Hint)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), `"value":200`)
 }
 
 // ---------------------------------------------------------------------------

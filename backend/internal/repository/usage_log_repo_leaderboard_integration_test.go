@@ -29,7 +29,8 @@ func leaderboardRowsByUser(t *testing.T, rows []usagestats.LeaderboardAggregateR
 	return byUser
 }
 
-// 一次调用同时返回三个窗口的六个数：条件聚合 FILTER 收敛，绝不是每个窗口各跑一次。
+// 一次调用同时返回三个窗口的九个数（tokens / requests / cost 各三份）：
+// 条件聚合 FILTER 收敛，绝不是每个窗口各跑一次。
 // 同时验证 Successful Requests 只计 actual_cost > 0 的成功落账行，
 // 而 Total Tokens 对窗口内所有行求和（与 GetUserBreakdownStats 口径一致）。
 func TestUsageLog_AggregateLeaderboardWindows_ThreeWindowsInOnePass(t *testing.T) {
@@ -258,6 +259,61 @@ func TestUsageLog_AggregateLeaderboardWindows_CacheColumnsMatchUserBreakdown(t *
 	require.Equal(t, breakdown[0].InputTokens, got.MonthInputTokens, "输入 tokens 必须与 User Breakdown 对得上")
 	// User Breakdown 的 CacheTokens 是「创建 + 读取」，榜单只取读取那一半。
 	require.Equal(t, breakdown[0].CacheTokens, got.MonthCacheReadTokens+int64(17+31+0))
+}
+
+// 第三个 Metric（Cost）的三列：窗口内 actual_cost 之和（USD），
+// 与管理端 User Breakdown（用户用量明细）的 actual_cost 合计对得上——
+// 用户自己的用量页「花费」用的就是这一列，两处对账不该出现差额。
+func TestUsageLog_AggregateLeaderboardWindows_CostColumnsMatchUserBreakdown(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newUsageLogRepositoryWithSQL(client, tx)
+
+	user := mustCreateUser(t, client, &service.User{Email: "leaderboard-cost-parity@test.com"})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-leaderboard-cost-parity", Name: "k"})
+	account := mustCreateAccount(t, client, &service.Account{Name: "acc-leaderboard-cost-parity"})
+
+	// 金额取二进制可精确表示的值，断言才不会被浮点尾差干扰。
+	mustCreateLeaderboardLog(t, repo, user.ID, apiKey.ID, account.ID, leaderboardMonthStart.Add(time.Hour), 1, 1, 1, 1, 0.25)
+	mustCreateLeaderboardLog(t, repo, user.ID, apiKey.ID, account.ID, leaderboardWeekStart.Add(time.Hour), 1, 1, 1, 1, 0.5)
+	mustCreateLeaderboardLog(t, repo, user.ID, apiKey.ID, account.ID, leaderboardTodayStart.Add(time.Hour), 1, 1, 1, 1, 1.125)
+	// 失败占位行：actual_cost = 0，token 照常进求和，金额则原样不变。
+	mustCreateLeaderboardLog(t, repo, user.ID, apiKey.ID, account.ID, leaderboardTodayStart.Add(2*time.Hour), 9, 0, 0, 0, 0)
+	// 唯一一条 total_cost != actual_cost 的行：求和 MUST 取 actual_cost，
+	// 否则这三条断言与下面的 User Breakdown 对账都会失败（其余 fixture 两列相等，钉不住列的选择）。
+	_, err := repo.Create(ctx, &service.UsageLog{
+		UserID:      user.ID,
+		APIKeyID:    apiKey.ID,
+		AccountID:   account.ID,
+		Model:       "claude-3",
+		InputTokens: 1,
+		TotalCost:   10,
+		ActualCost:  2,
+		CreatedAt:   leaderboardTodayStart.Add(3 * time.Hour),
+	})
+	require.NoError(t, err)
+
+	rows, err := repo.AggregateLeaderboardWindows(ctx, leaderboardTodayStart, leaderboardWeekStart, leaderboardMonthStart)
+	require.NoError(t, err)
+	got, ok := leaderboardRowsByUser(t, rows)[user.ID]
+	require.True(t, ok)
+
+	require.InDelta(t, 3.125, got.TodayCost, 1e-9, "求和取 actual_cost，MUST NOT 取 total_cost")
+	require.InDelta(t, 3.625, got.WeekCost, 1e-9)
+	require.InDelta(t, 3.875, got.MonthCost, 1e-9)
+	require.Equal(t, int64(4), got.MonthRequests, "失败占位行不计入成功请求，但金额本来就是 0")
+
+	breakdown, err := repo.GetUserBreakdownStats(ctx,
+		leaderboardMonthStart,
+		leaderboardTodayStart.Add(24*time.Hour),
+		usagestats.UserBreakdownDimension{UserID: user.ID},
+		0,
+	)
+	require.NoError(t, err)
+	require.Len(t, breakdown, 1)
+	require.InDelta(t, breakdown[0].ActualCost, got.MonthCost, 1e-9,
+		"本月 Cost 必须与 User Breakdown 的 actual_cost 合计对得上")
 }
 
 // 今日模型热度只计成功落账的请求，并给出今日全站总数作为占比分母。

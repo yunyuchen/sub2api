@@ -183,12 +183,12 @@ type UserBreakdownItem struct {
 // 一条 SQL 同时产出的三个 Window（榜单窗口）聚合行：一次扫描 usage_logs，
 // 每个窗口各给出 Total Tokens（总 tokens）与 Successful Requests（成功请求数）两个数。
 //
-// 与 UserBreakdownItem 的区别：这里不含身份（email / username）与任何金额，
+// 与 UserBreakdownItem 的区别：这里不含身份（email / username），金额只有 actual_cost 合计这一个口径，
 // 因为 Snapshot 只记录 user_id 与数值，身份在响应组装时按 users 当前状态渲染。
 // Requests 一律是「成功落账」口径（actual_cost > 0），不是裸 COUNT(*)。
 //
 // InputTokens 与 CacheReadTokens 两列只用来算 Cache Hit Rate（缓存命中率）
-// = cache_read /(input + cache_read)，MUST NOT 参与排名：ZSET 仍然只有两个 Metric。
+// = cache_read /(input + cache_read)，MUST NOT 参与排名：ZSET 只有 tokens / requests / cost 三个 Metric。
 //
 // v2 起每个窗口另出六个数、外加两个与窗口无关的「昨日」数，合计十四个：它们只喂
 // Extremes（之最）与 Token 构成，同样 MUST NOT 参与排名。口径分两类，刻意不统一：
@@ -211,6 +211,11 @@ type LeaderboardAggregateRow struct {
 	MonthRequests        int64 `json:"month_requests"`          // 本月窗口 Successful Requests
 	MonthInputTokens     int64 `json:"month_input_tokens"`      // 本月窗口输入 tokens（只用于命中率）
 	MonthCacheReadTokens int64 `json:"month_cache_read_tokens"` // 本月窗口缓存读取 tokens（只用于命中率）
+
+	// 三个窗口的消费金额：actual_cost（实际计费，USD）之和，第三个 Metric（Cost）的来源。
+	TodayCost float64 `json:"today_cost"`
+	WeekCost  float64 `json:"week_cost"`
+	MonthCost float64 `json:"month_cost"`
 
 	TodayOutputTokens        int64 `json:"today_output_tokens"`         // 今日窗口输出 tokens（话痨 / Token 构成）
 	TodayCacheCreationTokens int64 `json:"today_cache_creation_tokens"` // 今日窗口缓存创建 tokens（Token 构成）
@@ -278,13 +283,14 @@ type LeaderboardStreakRow struct {
 	Days   int   `json:"days"`
 }
 
-// LeaderboardRankHistoryRow 是 leaderboard_rank_history 的一行：某人某天在今日窗口的两个名次。
-// 只有 user_id、日期与名次，没有身份、没有数值、没有任何金额。
+// LeaderboardRankHistoryRow 是 leaderboard_rank_history 的一行：某人某天在今日窗口的三个名次。
+// 只有 user_id、日期与名次，没有身份、没有数值（金额也只以名次出现）。
 type LeaderboardRankHistoryRow struct {
 	UserID                 int64     `json:"user_id"`
 	SnapshotDate           time.Time `json:"snapshot_date"`
 	RankTotalTokens        int       `json:"rank_total_tokens"`
 	RankSuccessfulRequests int       `json:"rank_successful_requests"`
+	RankCost               int       `json:"rank_cost"` // 按 Cost 的竞争名次；迁移 241 之前的旧行为 0（无数据）
 }
 
 // LeaderboardPlatformUsageRow 是「今日按平台聚合」的一行，供 Insights（洞察）的平台分布使用。

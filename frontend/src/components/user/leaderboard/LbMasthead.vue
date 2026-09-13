@@ -142,6 +142,12 @@ const metricOptions = computed(() => [
     label: t('leaderboard.masthead.metricRequests'),
     title: t('leaderboard.metrics.successfulRequests'),
   },
+  {
+    value: 'cost' as const,
+    testid: 'cost',
+    label: t('leaderboard.masthead.metricCost'),
+    title: t('leaderboard.metrics.cost'),
+  },
 ])
 
 /** 只有匿名档才挂 chip；实名档与「还没拿到响应」都不挂。 */

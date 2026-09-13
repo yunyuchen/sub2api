@@ -88,6 +88,7 @@ func TestLeaderboardCache_ReplaceSnapshot_KeyNaming(t *testing.T) {
 	for _, tc := range cases {
 		require.Contains(t, keys, tc.wantBase+":z:total_tokens")
 		require.Contains(t, keys, tc.wantBase+":z:successful_requests")
+		require.Contains(t, keys, tc.wantBase+":z:cost")
 		require.Contains(t, keys, tc.wantBase+":h")
 		require.Contains(t, keys, tc.wantBase+":updated_at")
 	}
@@ -172,7 +173,7 @@ func TestLeaderboardCache_SnapshotTTL(t *testing.T) {
 			Entries:     []service.LeaderboardUserMetrics{{UserID: 1, TotalTokens: 10, SuccessfulRequests: 1}},
 		}))
 		base := "prod:leaderboard:v1:today:20260911"
-		for _, suffix := range []string{":z:total_tokens", ":z:successful_requests", ":h", ":updated_at"} {
+		for _, suffix := range []string{":z:total_tokens", ":z:successful_requests", ":z:cost", ":h", ":updated_at"} {
 			ttl := mr.TTL(base + suffix)
 			require.Greater(t, ttl, 29*time.Minute, suffix)
 			require.LessOrEqual(t, ttl, 30*time.Minute, suffix)
@@ -189,7 +190,7 @@ func TestLeaderboardCache_SnapshotTTL(t *testing.T) {
 			Entries:     []service.LeaderboardUserMetrics{{UserID: 1, TotalTokens: 10, SuccessfulRequests: 1}},
 		}))
 		base := "prod:leaderboard:v1:month:202609"
-		for _, suffix := range []string{":z:total_tokens", ":z:successful_requests", ":h", ":updated_at"} {
+		for _, suffix := range []string{":z:total_tokens", ":z:successful_requests", ":z:cost", ":h", ":updated_at"} {
 			require.Equal(t, service.LeaderboardSnapshotMaxTTL, mr.TTL(base+suffix), suffix)
 		}
 	})
@@ -249,14 +250,14 @@ func TestLeaderboardCache_ReplaceSnapshotIsFullSwap(t *testing.T) {
 // 否则页面会一直读到上一轮的旧榜。
 func TestLeaderboardCache_ReplaceSnapshotWithNoEntries(t *testing.T) {
 	ctx := context.Background()
-	cache, _ := newLeaderboardTestCache(t, "prod")
+	cache, mr := newLeaderboardTestCache(t, "prod")
 	start := time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)
 
 	require.NoError(t, cache.ReplaceSnapshot(ctx, service.LeaderboardSnapshotWindow{
 		Window: service.LeaderboardWindowToday, WindowStart: start, WindowEnd: end,
 		UpdatedAt: time.Now(),
-		Entries:   []service.LeaderboardUserMetrics{{UserID: 1, TotalTokens: 10, SuccessfulRequests: 1}},
+		Entries:   []service.LeaderboardUserMetrics{{UserID: 1, TotalTokens: 10, SuccessfulRequests: 1, CostMicros: 500_000}},
 	}))
 	require.NoError(t, cache.ReplaceSnapshot(ctx, service.LeaderboardSnapshotWindow{
 		Window: service.LeaderboardWindowToday, WindowStart: start, WindowEnd: end,
@@ -270,6 +271,13 @@ func TestLeaderboardCache_ReplaceSnapshotWithNoEntries(t *testing.T) {
 	count, err := cache.ParticipantCount(ctx, service.LeaderboardWindowToday, start, service.LeaderboardMetricTotalTokens)
 	require.NoError(t, err)
 	require.Zero(t, count)
+
+	// 第三个 ZSET 与另外两个同一条规则：空快照要把上一轮的金额榜一起清掉，
+	// MUST NOT 让窗口空了之后还在下发上一轮的消费名次。
+	costCount, err := cache.ParticipantCount(ctx, service.LeaderboardWindowToday, start, service.LeaderboardMetricCost)
+	require.NoError(t, err)
+	require.Zero(t, costCount, "空快照 MUST NOT 留下上一轮的金额榜")
+	require.NotContains(t, mr.Keys(), "prod:leaderboard:v1:today:20260911:z:cost")
 
 	metrics, err := cache.MetricsOf(ctx, service.LeaderboardWindowToday, start, []int64{1})
 	require.NoError(t, err)
@@ -389,9 +397,10 @@ func TestLeaderboardCache_TopEntriesRespectsLimit(t *testing.T) {
 	require.Equal(t, int64(60), count, "Participant Count 取 ZCARD，不受榜单长度限制")
 }
 
-// Hash value 是十二段：前两段是 Metric，其余十段只喂 Cache Hit Rate（缓存命中率）、Extremes（之最）
-// 与 Token 构成，MUST NOT 参与排名（顺序见 leaderboard_cache.go 的 encodeLeaderboardMetrics）。
-func TestLeaderboardCache_MetricsRoundTripTwelveFields(t *testing.T) {
+// Hash value 是十三段：第 1、2、13 段是三个 Metric，其余十段只喂 Cache Hit Rate（缓存命中率）、
+// Extremes（之最）与 Token 构成，MUST NOT 参与排名
+// （顺序见 leaderboard_cache.go 的 encodeLeaderboardMetrics）。
+func TestLeaderboardCache_MetricsRoundTripThirteenFields(t *testing.T) {
 	ctx := context.Background()
 	cache, mr := newLeaderboardTestCache(t, "prod")
 	start := time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC)
@@ -400,6 +409,7 @@ func TestLeaderboardCache_MetricsRoundTripTwelveFields(t *testing.T) {
 		UserID: 1, TotalTokens: 500, SuccessfulRequests: 7, InputTokens: 120, CacheReadTokens: 380,
 		OutputTokens: 60, CacheCreationTokens: 40, NightTokens: 220, DistinctModels: 3,
 		MaxSingleTokens: 190, MediaRequests: 2, YesterdayTokens: 300, YesterdayRequests: 5,
+		CostMicros: 1_234_567,
 	}
 	require.NoError(t, cache.ReplaceSnapshot(ctx, service.LeaderboardSnapshotWindow{
 		Window:      service.LeaderboardWindowToday,
@@ -411,15 +421,16 @@ func TestLeaderboardCache_MetricsRoundTripTwelveFields(t *testing.T) {
 
 	metrics, err := cache.MetricsOf(ctx, service.LeaderboardWindowToday, start, []int64{1})
 	require.NoError(t, err)
-	require.Equal(t, entry, metrics[1], "十二段编解码必须往返无损")
+	require.Equal(t, entry, metrics[1], "十三段编解码必须往返无损")
 
 	// 段序是契约的一部分：tokens, requests, input, cache_read, output, cache_creation,
-	// night_tokens, distinct_models, max_single, media_requests, yesterday_tokens, yesterday_requests。
-	require.Equal(t, "500,7,120,380,60,40,220,3,190,2,300,5",
+	// night_tokens, distinct_models, max_single, media_requests, yesterday_tokens,
+	// yesterday_requests, cost_micros。
+	require.Equal(t, "500,7,120,380,60,40,220,3,190,2,300,5,1234567",
 		mr.HGet("prod:leaderboard:v1:today:20260911:h", "1"),
-		"Hash 里仍然只有数值，没有身份也没有金额")
+		"金额以 micros 存在第 13 段，Hash 里仍然只有数值，没有身份")
 
-	// 新增的数只进 Hash，MUST NOT 另建排序结构：ZSET 仍然只有两个 Metric。
+	// 只进 Hash 的那十段 MUST NOT 另建排序结构：ZSET 只有三个 Metric。
 	for _, k := range mr.Keys() {
 		for _, forbidden := range []string{
 			":z:input_tokens", ":z:cache_read_tokens", ":z:output_tokens",
@@ -431,8 +442,52 @@ func TestLeaderboardCache_MetricsRoundTripTwelveFields(t *testing.T) {
 	}
 }
 
-// 上一版写入的两段式与四段式 value 仍能读：缺的段一律按 0 处理，
-// 表现为「没有命中率 / 没有之最卡」而不是 0，榜单本体照常渲染。
+// 第三个 Metric（Cost）有自己的 ZSET：分数是 micros，排序与名次都按它算，
+// 与另外两个 Metric 的次序无关。
+func TestLeaderboardCache_CostMetric(t *testing.T) {
+	ctx := context.Background()
+	cache, mr := newLeaderboardTestCache(t, "prod")
+	start := time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC)
+
+	require.NoError(t, cache.ReplaceSnapshot(ctx, service.LeaderboardSnapshotWindow{
+		Window:      service.LeaderboardWindowToday,
+		WindowStart: start,
+		WindowEnd:   time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:   time.Now(),
+		Entries: []service.LeaderboardUserMetrics{
+			// tokens 最多的那个人花得最少：三个 Metric 的次序互不相干。
+			{UserID: 1, TotalTokens: 900, SuccessfulRequests: 9, CostMicros: service.LeaderboardCostMicros(0.25)},
+			{UserID: 2, TotalTokens: 100, SuccessfulRequests: 1, CostMicros: service.LeaderboardCostMicros(12.5)},
+			{UserID: 3, TotalTokens: 200, SuccessfulRequests: 2, CostMicros: service.LeaderboardCostMicros(12.5)},
+		},
+	}))
+
+	entries, err := cache.TopEntries(ctx, service.LeaderboardWindowToday, start, service.LeaderboardMetricCost, service.LeaderboardTopEntryLimit)
+	require.NoError(t, err)
+	require.Equal(t, []service.LeaderboardScoreEntry{
+		{UserID: 3, Score: 12_500_000},
+		{UserID: 2, Score: 12_500_000},
+		{UserID: 1, Score: 250_000},
+	}, entries, "分数是 micros，不是 USD")
+	require.Equal(t, 12.5, service.LeaderboardCostUSD(entries[0].Score), "micros 换回 USD 必须无损")
+
+	count, err := cache.ParticipantCount(ctx, service.LeaderboardWindowToday, start, service.LeaderboardMetricCost)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), count)
+
+	// 同额并列同名次，其后跳号（1、1、3），与另外两个 Metric 同一条规则。
+	for userID, wantRank := range map[int64]int64{2: 1, 3: 1, 1: 3} {
+		rank, found, err := cache.RankOf(ctx, service.LeaderboardWindowToday, start, service.LeaderboardMetricCost, userID)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, wantRank, rank, "user %d", userID)
+	}
+
+	require.Contains(t, mr.Keys(), "prod:leaderboard:v1:today:20260911:z:cost")
+}
+
+// 上一版写入的两段式、四段式与十二段式 value 仍能读：缺的段一律按 0 处理，
+// 表现为「没有命中率 / 没有之最卡 / 金额为 0」而不是整行作废，榜单本体照常渲染。
 func TestLeaderboardCache_DecodeLegacyHashValue(t *testing.T) {
 	ctx := context.Background()
 	cache, mr := newLeaderboardTestCache(t, "prod")
@@ -446,8 +501,10 @@ func TestLeaderboardCache_DecodeLegacyHashValue(t *testing.T) {
 	mr.HSet(hashKey, "5", "500,7,120,380")     // v1 的四段式
 	mr.HSet(hashKey, "6", "500,7,120,380,60")  // 扩容中途的五段
 	mr.HSet(hashKey, "7", "500,7,1,2,3,4,5,z") // 新增段坏了：该段按 0，整行仍有效
+	// Cost 之前的十二段式：只差第 13 段，解出 CostMicros = 0。
+	mr.HSet(hashKey, "8", "500,7,120,380,60,40,220,3,190,2,300,5")
 
-	metrics, err := cache.MetricsOf(ctx, service.LeaderboardWindowToday, start, []int64{1, 2, 3, 4, 5, 6, 7})
+	metrics, err := cache.MetricsOf(ctx, service.LeaderboardWindowToday, start, []int64{1, 2, 3, 4, 5, 6, 7, 8})
 	require.NoError(t, err)
 	require.Equal(t, service.LeaderboardUserMetrics{UserID: 1, TotalTokens: 500, SuccessfulRequests: 7}, metrics[1])
 	require.Zero(t, metrics[1].InputTokens)
@@ -471,6 +528,15 @@ func TestLeaderboardCache_DecodeLegacyHashValue(t *testing.T) {
 
 	require.Equal(t, int64(500), metrics[7].TotalTokens)
 	require.Zero(t, metrics[7].DistinctModels, "坏掉的新增段按 0，MUST NOT 让整行作废")
+
+	// 十二段式：前十二段照常解出，只有金额缺席——该窗口暂时「金额为 0」，
+	// 下一轮重建即补齐，升级后 MUST NOT 需要清 Redis。
+	require.Equal(t, service.LeaderboardUserMetrics{
+		UserID: 8, TotalTokens: 500, SuccessfulRequests: 7, InputTokens: 120, CacheReadTokens: 380,
+		OutputTokens: 60, CacheCreationTokens: 40, NightTokens: 220, DistinctModels: 3,
+		MaxSingleTokens: 190, MediaRequests: 2, YesterdayTokens: 300, YesterdayRequests: 5,
+	}, metrics[8])
+	require.Zero(t, metrics[8].CostMicros, "缺第 13 段的旧值解出 CostMicros = 0")
 }
 
 // viewer:models 的 key 必须带 cfg.Dashboard.KeyPrefix、window、窗口起点与 user_id：

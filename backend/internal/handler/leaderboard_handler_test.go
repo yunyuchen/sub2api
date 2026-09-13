@@ -196,8 +196,15 @@ func TestLeaderboardHandlerGetParams(t *testing.T) {
 			wantReason: "LEADERBOARD_INVALID_WINDOW",
 		},
 		{
+			name:       "金额是第三个 metric",
+			query:      "?window=week&metric=cost",
+			wantStatus: http.StatusOK,
+			wantWindow: service.LeaderboardWindowWeek,
+			wantMetric: service.LeaderboardMetricCost,
+		},
+		{
 			name:       "非法 metric 返回 400",
-			query:      "?metric=cost",
+			query:      "?metric=money",
 			wantStatus: http.StatusBadRequest,
 			wantReason: "LEADERBOARD_INVALID_METRIC",
 		},
@@ -346,6 +353,7 @@ func TestLeaderboardHandlerGetRequiresAuthSubject(t *testing.T) {
 var leaderboardAbsoluteFieldNames = []string{
 	"total_tokens",
 	"successful_requests",
+	"cost",
 	"requests",
 	"input_tokens",
 	"output_tokens",
@@ -401,19 +409,19 @@ func leaderboardFullSnapshotStub() *leaderboardCacheStub {
 	rhythm[0][9] = 4
 	return &leaderboardCacheStub{
 		entries: []service.LeaderboardUserMetrics{
-			{UserID: 1, TotalTokens: 1000, SuccessfulRequests: 20, InputTokens: 400, CacheReadTokens: 600},
-			{UserID: 2, TotalTokens: 800, SuccessfulRequests: 18},
-			{UserID: 3, TotalTokens: 600, SuccessfulRequests: 16},
-			{UserID: 4, TotalTokens: 400, SuccessfulRequests: 14},
-			{UserID: 5, TotalTokens: 200, SuccessfulRequests: 12},
-			{UserID: 7, TotalTokens: 100, SuccessfulRequests: 5, InputTokens: 40, CacheReadTokens: 60},
+			{UserID: 1, TotalTokens: 1000, SuccessfulRequests: 20, InputTokens: 400, CacheReadTokens: 600, CostMicros: 4_000_000},
+			{UserID: 2, TotalTokens: 800, SuccessfulRequests: 18, CostMicros: 3_000_000},
+			{UserID: 3, TotalTokens: 600, SuccessfulRequests: 16, CostMicros: 2_000_000},
+			{UserID: 4, TotalTokens: 400, SuccessfulRequests: 14, CostMicros: 1_000_000},
+			{UserID: 5, TotalTokens: 200, SuccessfulRequests: 12, CostMicros: 500_000},
+			{UserID: 7, TotalTokens: 100, SuccessfulRequests: 5, InputTokens: 40, CacheReadTokens: 60, CostMicros: 250_000},
 		},
 		highlights: &service.LeaderboardHighlights{
 			TopTokens:   &service.LeaderboardHighlightUser{UserID: 1, TotalTokens: 1000, SuccessfulRequests: 20, SharePercent: 32, LeadPercent: 25},
 			TopRequests: &service.LeaderboardHighlightUser{UserID: 2, TotalTokens: 800, SuccessfulRequests: 18, SharePercent: 21, LeadPercent: 12},
 			CacheKing:   &service.LeaderboardCacheKing{UserID: 99, CacheHitRate: 0.873, DominantModel: "claude-sonnet-5"},
 			Site: service.LeaderboardSiteSummary{
-				TotalTokens: 3100, SuccessfulRequests: 85, ParticipantCount: 137,
+				TotalTokens: 3100, SuccessfulRequests: 85, CostMicros: 10_750_000, ParticipantCount: 137,
 				CacheHitRate: &siteRate, PeakHour: &peakHour, AvgTokensPerRequest: &siteAvg,
 			},
 			Extremes: &service.LeaderboardExtremes{
@@ -478,6 +486,7 @@ func TestLeaderboardHandlerAnonymousResponseHasNoForeignAbsolutes(t *testing.T) 
 	require.True(t, ok)
 	require.Contains(t, myRank, "total_tokens")
 	require.Contains(t, myRank, "successful_requests")
+	require.Contains(t, myRank, "cost", "本人的金额在任何档位都是真实值")
 
 	entries, ok := data["entries"].([]any)
 	require.True(t, ok)
@@ -488,10 +497,13 @@ func TestLeaderboardHandlerAnonymousResponseHasNoForeignAbsolutes(t *testing.T) 
 		if isSelf, _ := entry["is_self"].(bool); isSelf {
 			selfSeen = true
 			require.Contains(t, entry, "total_tokens")
+			require.Contains(t, entry, "cost")
 			continue
 		}
 		require.NotContains(t, entry, "total_tokens")
+		require.NotContains(t, entry, "cost")
 		require.Contains(t, entry, "total_tokens_relative_percent")
+		require.Contains(t, entry, "cost_relative_percent")
 	}
 	require.True(t, selfSeen, "查看者应当出现在榜单里，否则这条断言是空跑")
 
@@ -515,6 +527,7 @@ func TestLeaderboardHandlerAnonymousResponseHasNoForeignAbsolutes(t *testing.T) 
 	site, ok := highlights["site"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "100+", site["participant_count"])
+	require.NotContains(t, site, "cost", "站点级金额与 tokens 同一条裁剪规则")
 	require.Contains(t, site, "cache_hit_rate")
 	require.Contains(t, site, "peak_hour")
 
@@ -534,6 +547,7 @@ func TestLeaderboardHandlerNamedResponseKeepsAbsolutes(t *testing.T) {
 	require.NotEmpty(t, paths, "named 档下他人与站点级的绝对量本来就该出现")
 	require.Contains(t, paths, "data.highlights.top_tokens.total_tokens")
 	require.Contains(t, paths, "data.highlights.site.total_tokens")
+	require.Contains(t, paths, "data.highlights.site.cost")
 	require.Contains(t, paths, "data.insights.month.total_tokens")
 	require.NotContains(t, strings.Join(paths, ","), "user_id")
 

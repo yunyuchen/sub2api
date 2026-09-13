@@ -777,9 +777,11 @@ html.dark .rp {
 .rp-lb {
   border-top: 1px solid var(--line-hard);
 }
+/* 六列：名次 / 用户 / 相对第一名 / tokens / 成功请求 / 金额，后三列都是右对齐的数值列。
+   改这里的列数时，1180 与 767 两个断点处的覆写要一起改，否则窄屏会少一格。 */
 .rp-lb-row {
   display: grid;
-  grid-template-columns: 48px minmax(112px, 1.2fr) minmax(0, 2.4fr) 96px 74px;
+  grid-template-columns: 48px minmax(112px, 1.2fr) minmax(0, 2.2fr) 96px 74px 104px;
   align-items: center;
   column-gap: 16px;
   padding: 5.5px 10px 5.5px 0;
@@ -1534,7 +1536,7 @@ html.dark .rp {
     text-align: left;
   }
   .rp-lb-row {
-    grid-template-columns: 44px minmax(96px, 1.1fr) minmax(0, 1.9fr) 88px 66px;
+    grid-template-columns: 44px minmax(96px, 1.1fr) minmax(0, 1.7fr) 88px 66px 96px;
     column-gap: 12px;
   }
   /* 断轴之上通常有两根柱各带一个读数，而列宽在 768px 处已经收到约 21px
@@ -1618,8 +1620,11 @@ html.dark .rp {
   .rp-sup > li {
     margin-top: 0 !important;
   }
+  /* 窄屏折成两行四列：首行是名次 / 用户 / tokens / 金额，次行是相对条 / 成功请求。
+     金额与 tokens 并排在首行（当前 Metric 是哪一列都看得见），成功请求贴着次行右端
+     与它们对齐；条那一格 MUST NOT 被隐藏。 */
   .rp-lb-row {
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto auto;
     row-gap: 6px;
     column-gap: 10px;
     padding: 11px 8px 11px 0;
@@ -1633,11 +1638,14 @@ html.dark .rp {
   .rp-lb-tok {
     grid-area: 1 / 3 / 2 / 4;
   }
+  .rp-lb-cost {
+    grid-area: 1 / 4 / 2 / 5;
+  }
   .rp-lb-barcell {
     grid-area: 2 / 1 / 3 / 3;
   }
   .rp-lb-req {
-    grid-area: 2 / 3 / 3 / 4;
+    grid-area: 2 / 3 / 3 / 5;
   }
   .rp-lb-row.is-self::before {
     left: -8px;

@@ -5,7 +5,7 @@
 ## ADDED Requirements
 
 ### Requirement: Leaderboard 接口的参数取值与默认值
-系统 SHALL 提供 `GET /api/v1/leaderboard`，接受查询参数 `window`（`today` / `week` / `month`）与 `metric`（`total_tokens` / `successful_requests`）。两个参数 MUST 都有默认值：`window` 默认 `today`，`metric` 默认 `total_tokens`。取值不在枚举内时 MUST 返回 400 且 MUST NOT 回落到默认值。接口 MUST NOT 接受自定义起止日期、「全部时间」窗口或榜单长度参数。Leaderboard Mode（排行榜模式）guard MUST 先于参数校验执行：`off` 档下普通用户的任何请求（含携带非法参数的请求）MUST 一律返回 404，MUST NOT 返回 400。
+系统 SHALL 提供 `GET /api/v1/leaderboard`，接受查询参数 `window`（`today` / `week` / `month`）与 `metric`（`total_tokens` / `successful_requests` / `cost`）。两个参数 MUST 都有默认值：`window` 默认 `today`，`metric` 默认 `total_tokens`。取值不在枚举内时 MUST 返回 400 且 MUST NOT 回落到默认值。接口 MUST NOT 接受自定义起止日期、「全部时间」窗口或榜单长度参数。Leaderboard Mode（排行榜模式）guard MUST 先于参数校验执行：`off` 档下普通用户的任何请求（含携带非法参数的请求）MUST 一律返回 404，MUST NOT 返回 400。
 
 #### Scenario: 不带任何参数
 - **WHEN** 客户端请求 `GET /api/v1/leaderboard`
@@ -18,8 +18,14 @@
 - **THEN** 系统 MUST NOT 按 `today` 返回数据
 
 #### Scenario: 非法 metric
-- **WHEN** 请求携带 `metric=cost`
+- **WHEN** 请求携带 `metric=money`
 - **THEN** 系统 MUST 返回 400
+- **THEN** 系统 MUST NOT 按 `total_tokens` 返回数据
+
+#### Scenario: 按 Cost 排序
+- **WHEN** 请求携带 `metric=cost`
+- **THEN** 系统 MUST 按 Cost（消费金额）返回，响应里的 `metric` MUST 回显 `cost`
+- **THEN** 系统 MUST NOT 返回 400
 
 #### Scenario: 携带自定义日期参数
 - **WHEN** 请求额外携带 `start_date` / `end_date` 之类的参数
@@ -66,8 +72,8 @@ Window MUST 只有今日 / 本周 / 本月三个取值，边界一律按站点�
 - **THEN** 两人 MUST 看到同一张榜、同一个窗口起点
 - **THEN** 响应 MUST 带同一个 `timezone` 值
 
-### Requirement: Metric 只有 Total Tokens 与 Successful Requests
-Metric MUST 只有两项：Total Tokens（总 tokens）= `input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens`，与用户仪表盘、管理端 User Breakdown（用户用量明细）口径一致；Successful Requests（成功请求数）= `actual_cost > 0` 的请求数，失败占位记录 MUST NOT 计入。每个 Leaderboard Entry MUST 同时给出两个 Metric 的值（在 `anonymous` 档下按该档规则替换为相对值），按选中的 Metric 排序并在页面上高亮该列。系统 MUST NOT 展示任何金额，也 MUST NOT 提供按金额排序的选项。页面 MUST 注明 Successful Requests 只计成功落账的请求。
+### Requirement: Metric 有三项：Total Tokens、Successful Requests 与 Cost
+Metric MUST 只有三项：Total Tokens（总 tokens）= `input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens`，与用户仪表盘、管理端 User Breakdown（用户用量明细）口径一致；Successful Requests（成功请求数）= `actual_cost > 0` 的请求数，失败占位记录 MUST NOT 计入；Cost（消费金额）= 该 Window（榜单窗口）内 `actual_cost` 之和（USD），与用户自己的用量页「花费」同一个口径，MUST NOT 改用 `total_cost` 之类的其它金额口径。默认 Metric MUST 是 Total Tokens。每个 Leaderboard Entry MUST 同时给出三个 Metric 的值（在 `anonymous` 档下按该档规则替换为相对值），按选中的 Metric 排序并在页面上高亮该列。页面 MUST 注明 Successful Requests 只计成功落账的请求。
 
 #### Scenario: 失败占位记录不计入
 - **WHEN** 某用户在窗口内产生了 100 条 `actual_cost = 0` 的失败记录与 10 条成功记录
@@ -82,12 +88,17 @@ Metric MUST 只有两项：Total Tokens（总 tokens）= `input_tokens + output_
 #### Scenario: 按 Successful Requests 排序
 - **WHEN** 请求携带 `metric=successful_requests`
 - **THEN** `entries` MUST 按 Successful Requests 降序排列
-- **THEN** 每个条目 MUST 仍然给出 Total Tokens 的值，页面 MUST 高亮 Successful Requests 列
+- **THEN** 每个条目 MUST 仍然给出 Total Tokens 与 Cost（消费金额）的值，页面 MUST 高亮 Successful Requests 列
 
-#### Scenario: 金额不可达
-- **WHEN** 客户端尝试请求按金额排序或读取金额字段
-- **THEN** 系统 MUST 返回 400（非法 `metric`）
-- **THEN** 响应体 MUST NOT 包含任何金额字段
+#### Scenario: Cost 与成功落账口径同源
+- **WHEN** 某用户在窗口内产生了 100 条 `actual_cost = 0` 的失败记录与 10 条成功记录
+- **THEN** 其 Cost MUST 只是那 10 条的 `actual_cost` 之和
+- **THEN** 该数值 MUST 与用户自己的用量页同一窗口的「花费」口径一致
+
+#### Scenario: 其它金额口径不可达
+- **WHEN** 客户端尝试读取 `total_cost` 之类的其它金额字段
+- **THEN** 响应体 MUST NOT 包含它
+- **THEN** 响应体里唯一的金额 MUST 只有 Cost（`actual_cost` 之和）这一个口径
 
 ### Requirement: Rank 是竞争排名
 Rank（名次）MUST 等于同一 Window + Metric 下该 Metric 值严格高于自己的合格用户数加一。数值相同的用户 MUST 得到相同的 Rank，其后的 Rank MUST 跳号（1、1、3）。Leaderboard Entry 与 My Rank MUST 使用同一条规则，两处 MUST NOT 互相矛盾。系统 MUST NOT 把 Rank 取成行下标。
@@ -146,7 +157,7 @@ Ordinal（行序号）MUST 是当前 Window + Metric 下 `entries` 的连续序�
 - **THEN** `entries` MUST 包含 12 条，MUST NOT 补空行
 
 ### Requirement: My Rank 与 Participant Count
-`my_rank` MUST 在查看者不进前 50 时也返回，字段包含 `rank`、`total_tokens`、`successful_requests`，且 MUST 始终是查看者的真实数值。查看者在该 Window 内没有任何用量时 `my_rank` MUST 为 `null`，页面 MUST 提示「本窗口暂无用量」而 MUST NOT 给出一个名次。`participant_count` MUST 是该 Window 内有过任何用量的合格用户总数，作为 My Rank 的分母展示；其表达形式随档位而定：`named` 档与 Preview（预览）下 MUST 是精确整数，`anonymous` 档下 MUST 是分档字符串，取值规则见 `leaderboard-mode`。查看者进入前 50 时，对应的 Leaderboard Entry MUST 标记 `is_self` 并被页面高亮。
+`my_rank` MUST 在查看者不进前 50 时也返回，字段包含 `rank`、`total_tokens`、`successful_requests`、`cost`，且 MUST 始终是查看者的真实数值。查看者在该 Window 内没有任何用量时 `my_rank` MUST 为 `null`，页面 MUST 提示「本窗口暂无用量」而 MUST NOT 给出一个名次。`participant_count` MUST 是该 Window 内有过任何用量的合格用户总数，作为 My Rank 的分母展示；其表达形式随档位而定：`named` 档与 Preview（预览）下 MUST 是精确整数，`anonymous` 档下 MUST 是分档字符串，取值规则见 `leaderboard-mode`。查看者进入前 50 时，对应的 Leaderboard Entry MUST 标记 `is_self` 并被页面高亮。
 
 #### Scenario: 查看者不在前 50
 - **WHEN** 查看者在该 Window 有用量但 Rank 是 137
@@ -273,7 +284,7 @@ Ordinal（行序号）MUST 是当前 Window + Metric 下 `entries` 的连续序�
 - **THEN** 系统 MUST NOT 另外暴露一个管理端专用的 Leaderboard 路由
 
 ### Requirement: 响应包含 Highlights 与 Insights 两个顶层字段
-响应体 MUST 在既有字段之外包含 `highlights` 与 `insights` 两个顶层字段。`highlights` MUST 是该 Window（榜单窗口）的四块 Highlights（趣味卡）数据 `{top_tokens, top_requests, cache_king, site}`；`top_tokens`、`top_requests`、`cache_king` 在无人满足条件时 MUST 为 `null`，MUST NOT 用零值对象顶替。`insights` MUST 是与 Window 无关的站点级 Insights（洞察）`{models_today, daily_30, hourly_today, cache_today, month}`；任一区块的数据源缺失时该区块 MUST 为 `null`，MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败。`status` 为 `computing` 时 `highlights` MUST 为 `null`。Highlights 里的身份 MUST 与 Leaderboard Entry（榜单条目）用同一个结构化形态 `{kind, username?}`，并额外带一个 `ordinal`：该用户不在当前 Window + Metric（排名指标）的前 50 内时 `ordinal` MUST 为 `null`。Highlights 与 Insights MUST NOT 使响应出现 `user_id`、邮箱或任何金额字段。Cache Hit Rate（缓存命中率）MUST 以 `cache_hit_rate` 表达，取值范围是 0 到 1；对应窗口的 `input_tokens + cache_read_tokens` 为 0 时该字段 MUST 缺席，MUST NOT 记成 0。
+响应体 MUST 在既有字段之外包含 `highlights` 与 `insights` 两个顶层字段。`highlights` MUST 是该 Window（榜单窗口）的四块 Highlights（趣味卡）数据 `{top_tokens, top_requests, cache_king, site}`；`top_tokens`、`top_requests`、`cache_king` 在无人满足条件时 MUST 为 `null`，MUST NOT 用零值对象顶替。`insights` MUST 是与 Window 无关的站点级 Insights（洞察）`{models_today, daily_30, hourly_today, cache_today, month}`；任一区块的数据源缺失时该区块 MUST 为 `null`，MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败。`status` 为 `computing` 时 `highlights` MUST 为 `null`。Highlights 里的身份 MUST 与 Leaderboard Entry（榜单条目）用同一个结构化形态 `{kind, username?}`，并额外带一个 `ordinal`：该用户不在当前 Window + Metric（排名指标）的前 50 内时 `ordinal` MUST 为 `null`。Highlights 与 Insights MUST NOT 使响应出现 `user_id` 或邮箱；其中唯一允许出现的金额 MUST 是 `highlights.site.cost`（该 Window 的 `actual_cost` 之和，`named` 档与 Preview 才给），MUST NOT 出现其它金额口径，也 MUST NOT 为 Cost（消费金额）新增一张 Highlights 卡。Cache Hit Rate（缓存命中率）MUST 以 `cache_hit_rate` 表达，取值范围是 0 到 1；对应窗口的 `input_tokens + cache_read_tokens` 为 0 时该字段 MUST 缺席，MUST NOT 记成 0。
 
 #### Scenario: Highlights 的领先者不在前 50
 - **WHEN** 某个 Window 的效率之星在当前 Metric 的榜单上排在第 51 名之后
@@ -297,7 +308,7 @@ Ordinal（行序号）MUST 是当前 Window + Metric 下 `entries` 的连续序�
 
 #### Scenario: Highlights 不引入新的身份字段
 - **WHEN** 检查任意档位下的完整响应体
-- **THEN** `highlights` 与 `insights` 里 MUST NOT 出现 `user_id`、邮箱或金额
+- **THEN** `highlights` 与 `insights` 里 MUST NOT 出现 `user_id` 或邮箱，金额 MUST 只可能是 `highlights.site.cost`
 - **THEN** Highlights 里唯一可能出现的身份信息 MUST 只有 `identity.username`
 
 ### Requirement: Leaderboard 是全屏独立页，自带顶栏
@@ -390,7 +401,7 @@ Leaderboard（排行榜）页面的视觉 MUST 由一套页面私有的皮肤渲
 - **THEN** 页面内容 MUST 照常完整渲染
 
 ### Requirement: 响应包含 Extremes、Viewer Stats 与五块新增 Insights
-响应体 MUST 在既有字段之外满足三件事。其一，`highlights` MUST 增加 `extremes`，包含 `night_owl`、`rising`、`omnivore`、`talker`、`max_single`、`streak` 六项，每一项在无人满足条件时 MUST 为 `null`，MUST NOT 用零值对象顶替；`rising` MUST 只在 `window=today` 时可能有值，其余两个 Window（榜单窗口）下 MUST 为 `null`。每一项 MUST 与 Leaderboard Entry（榜单条目）用同一个结构化身份 `{kind, username?}` 并额外带 `ordinal`，该用户不在下发的 `entries` 内时 `ordinal` MUST 为 `null`。其二，`insights` MUST 增加 `profiles`、`platforms_today`、`weekly_rhythm`、`composition_today`、`cache_trend_14` 五块，任一块的数据源缺失时该块 MUST 为 `null`，MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败；`highlights.site` MUST 增加 `avg_tokens_per_request`（全站该 Window 的 Total Tokens（总 tokens）除以 Successful Requests（成功请求数）），全站成功请求数为 0 时该字段 MUST 缺席、MUST NOT 记成 0。其三，响应 MUST 增加顶层字段 `viewer`，包含 `rank_history`、`models`、`cache_hit_rate` 与 `avg_tokens_per_request`，全部是查看者**本人**的真实数据。`viewer` MUST NOT 为 `null`，也 MUST NOT 随 `status` 变化——它不出自 Snapshot（榜单快照）；查看者没有名次历史时 `rank_history` MUST 是空数组，本窗口零用量时 `models` MUST 是空数组且两个比率字段 MUST 缺席。`extremes`、新增的 Insights（洞察）与 `viewer` MUST NOT 使响应出现 `user_id`、邮箱或任何金额字段。
+响应体 MUST 在既有字段之外满足三件事。其一，`highlights` MUST 增加 `extremes`，包含 `night_owl`、`rising`、`omnivore`、`talker`、`max_single`、`streak` 六项，每一项在无人满足条件时 MUST 为 `null`，MUST NOT 用零值对象顶替；`rising` MUST 只在 `window=today` 时可能有值，其余两个 Window（榜单窗口）下 MUST 为 `null`。每一项 MUST 与 Leaderboard Entry（榜单条目）用同一个结构化身份 `{kind, username?}` 并额外带 `ordinal`，该用户不在下发的 `entries` 内时 `ordinal` MUST 为 `null`。其二，`insights` MUST 增加 `profiles`、`platforms_today`、`weekly_rhythm`、`composition_today`、`cache_trend_14` 五块，任一块的数据源缺失时该块 MUST 为 `null`，MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败；`highlights.site` MUST 增加 `avg_tokens_per_request`（全站该 Window 的 Total Tokens（总 tokens）除以 Successful Requests（成功请求数）），全站成功请求数为 0 时该字段 MUST 缺席、MUST NOT 记成 0。其三，响应 MUST 增加顶层字段 `viewer`，包含 `rank_history`、`models`、`cache_hit_rate` 与 `avg_tokens_per_request`，全部是查看者**本人**的真实数据。`viewer` MUST NOT 为 `null`，也 MUST NOT 随 `status` 变化——它不出自 Snapshot（榜单快照）；查看者没有名次历史时 `rank_history` MUST 是空数组，本窗口零用量时 `models` MUST 是空数组且两个比率字段 MUST 缺席。`extremes`、新增的 Insights（洞察）与 `viewer` MUST NOT 使响应出现 `user_id`、邮箱或任何金额字段——Cost（消费金额）只出现在 Leaderboard Entry、`my_rank` 与 `highlights.site` 三处。
 
 #### Scenario: rising 只在今日窗口存在
 - **WHEN** 客户端请求 `window=week`
@@ -421,3 +432,31 @@ Leaderboard（排行榜）页面的视觉 MUST 由一套页面私有的皮肤渲
 - **WHEN** 检查任意档位下的完整响应体
 - **THEN** `extremes`、新增的五块 Insights 与 `viewer` 里 MUST NOT 出现 `user_id`、邮箱或金额
 - **THEN** 它们里唯一可能出现的身份信息 MUST 只有 `identity.username`
+
+### Requirement: Cost 的下发形态、提示语与站点合计
+Cost（消费金额）MUST 以 USD 的浮点数下发，字段名在 Leaderboard Entry（榜单条目）与 `my_rank` 上都是 `cost`，在站点合计上是 `highlights.site.cost`。它 MUST 与 Total Tokens（总 tokens）走同一套档位规则：`named` 档与 Preview（预览）下发绝对金额；`anonymous` 档下他人条目的 `cost` MUST 缺席、由 `cost_relative_percent`（相对该 Window（榜单窗口）Cost 第一名的 0 到 100 整数百分比，第一名 MUST 是 `100`）代替，`highlights.site.cost` MUST 缺席；查看者本人的条目与 `my_rank.cost` MUST 在任何档位下都是真实金额。系统 MUST NOT 为 Cost 新增 Highlights（趣味卡）——`highlights` 里 MUST NOT 出现 `top_cost` 或等价的卡。金额在 Snapshot（榜单快照）内部以定点 micros（1 USD = 1e6）存放，响应 MUST 只下发换算回 USD 的值，MUST NOT 把 micros 泄露给客户端。「你的位置」的提示语 MUST 增加一种 kind `cost_to_top10`，其数值 MUST 是 USD 的金额差额（按 micros 算完再换算），tokens 与 requests 两种 kind 的 JSON 形态 MUST 不变。名次历史 MUST 一并记录按 Cost 的当日名次（见 `leaderboard-snapshot`），但页面上的名次走势折线 MUST 仍按 Total Tokens 的名次绘制，MUST NOT 因此新增一个折线的 Metric 切换。
+
+#### Scenario: named 档下的金额列
+- **WHEN** `named` 档下客户端请求 `metric=cost`
+- **THEN** `entries` MUST 按 Cost 降序排列，每个条目 MUST 给出 `cost`（USD）
+- **THEN** 每个条目 MUST 仍然给出 `total_tokens` 与 `successful_requests`，页面 MUST 高亮金额列
+
+#### Scenario: anonymous 档下他人的金额
+- **WHEN** `anonymous` 档下查看者查看榜单
+- **THEN** 他人条目 MUST NOT 包含 `cost`
+- **THEN** 他人条目 MUST 给出 `cost_relative_percent`，是 0 到 100 的整数，该 Window Cost 第一名的值 MUST 是 `100`
+
+#### Scenario: 本人金额始终真实
+- **WHEN** `anonymous` 档下查看者本人进入前 50
+- **THEN** 其条目的 `cost` 与 `my_rank.cost` MUST 都是真实金额
+- **THEN** 系统 MUST NOT 因为档位而把本人的金额换成相对百分比
+
+#### Scenario: 还差多少进前 10
+- **WHEN** `named` 档下查看者按 `metric=cost` 排在第 10 名之外
+- **THEN** `my_rank.hint.kind` MUST 是 `cost_to_top10`，其数值 MUST 是进前 10 所差的金额（USD）
+- **THEN** 页面 MUST 按查看者语言渲染成「再消费 $X 进前 10」一类的句子
+
+#### Scenario: 不为金额新增趣味卡
+- **WHEN** 检查任意档位下的完整响应体
+- **THEN** `highlights` MUST NOT 包含 `top_cost` 或任何以金额为主角的新卡
+- **THEN** `named` 档与 Preview 下 `highlights.site.cost` MUST 照常给出，供页面算「前三名占全站百分之多少」
