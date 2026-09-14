@@ -12,6 +12,7 @@ import type { OpsRequestDetailsPreset } from './OpsRequestDetailsModal.vue'
 import { useAdminSettingsStore } from '@/stores'
 import { formatNumber } from '@/utils/format'
 import { formatMemorySizeMB } from '../utils/opsFormatters'
+import { isTtftP99High, ttftThresholdLevel, type OpsThresholdLevel } from '../utils/opsThresholds'
 
 type RealtimeWindow = '1min' | '5min' | '30min' | '1h'
 
@@ -216,7 +217,8 @@ function openErrorDetails(kind: 'request' | 'upstream') {
 }
 
 // --- Threshold checking helpers ---
-type ThresholdLevel = 'normal' | 'warning' | 'critical'
+// 'off' 目前只有首字（TTFT）会返回：阈值填 0 / 为空即关闭首字预警，卡片显示中性色。
+type ThresholdLevel = OpsThresholdLevel
 
 function getSLAThresholdLevel(slaPercent: number | null): ThresholdLevel {
   if (slaPercent == null) return 'normal'
@@ -233,13 +235,9 @@ function getSLAThresholdLevel(slaPercent: number | null): ThresholdLevel {
   return 'normal'
 }
 
+// 首字阈值为空或 0 表示关闭首字预警（与诊断面板共用同一判定，见 utils/opsThresholds）。
 function getTTFTThresholdLevel(ttftMs: number | null): ThresholdLevel {
-  if (ttftMs == null) return 'normal'
-  const threshold = props.thresholds?.ttft_p99_ms_max
-  if (threshold == null) return 'normal'
-  if (ttftMs >= threshold) return 'critical'
-  if (ttftMs >= threshold * 0.8) return 'warning'
-  return 'normal'
+  return ttftThresholdLevel(ttftMs, props.thresholds?.ttft_p99_ms_max)
 }
 
 function getRequestErrorRateThresholdLevel(errorRatePercent: number | null): ThresholdLevel {
@@ -266,6 +264,8 @@ function getThresholdColorClass(level: ThresholdLevel): string {
       return 'text-red-600 dark:text-red-400'
     case 'warning':
       return 'text-yellow-600 dark:text-yellow-400'
+    case 'off':
+      return 'text-gray-900 dark:text-white'
     default:
       return 'text-green-600 dark:text-green-400'
   }
@@ -543,7 +543,7 @@ const diagnosisReport = computed<DiagnosisItem[]>(() => {
   }
 
   const ttftP99 = ov.ttft?.p99_ms ?? 0
-  if (ttftP99 > 500) {
+  if (isTtftP99High(ttftP99, props.thresholds?.ttft_p99_ms_max)) {
     report.push({
       type: 'warning',
       message: t('admin.ops.diagnosis.ttftHigh', { ttft: ttftP99.toFixed(0) }),

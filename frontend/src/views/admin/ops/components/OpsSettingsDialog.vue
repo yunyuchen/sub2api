@@ -178,17 +178,21 @@ const validation = computed(() => {
     }
   }
 
-  // 验证指标阈值
-  if (metricThresholds.value.sla_percent_min != null && (metricThresholds.value.sla_percent_min < 0 || metricThresholds.value.sla_percent_min > 100)) {
+  // 验证指标阈值：v-model.number 在输入框被清空时会得到 ''，先排除非数值再做范围比较，
+  // 否则 '' 会绕过校验并让后端以 400 拒绝整次保存。
+  const thresholdOutOfRange = (value: number | null | undefined, min: number, max?: number): boolean =>
+    value != null && (!Number.isFinite(value) || value < min || (max != null && value > max))
+  const mt = metricThresholds.value
+  if (thresholdOutOfRange(mt.sla_percent_min, 0, 100)) {
     errors.push(t('admin.ops.settings.validation.slaMinPercentRange'))
   }
-  if (metricThresholds.value.ttft_p99_ms_max != null && metricThresholds.value.ttft_p99_ms_max < 0) {
+  if (thresholdOutOfRange(mt.ttft_p99_ms_max, 0)) {
     errors.push(t('admin.ops.settings.validation.ttftP99MaxRange'))
   }
-  if (metricThresholds.value.request_error_rate_percent_max != null && (metricThresholds.value.request_error_rate_percent_max < 0 || metricThresholds.value.request_error_rate_percent_max > 100)) {
+  if (thresholdOutOfRange(mt.request_error_rate_percent_max, 0, 100)) {
     errors.push(t('admin.ops.settings.validation.requestErrorRateMaxRange'))
   }
-  if (metricThresholds.value.upstream_error_rate_percent_max != null && (metricThresholds.value.upstream_error_rate_percent_max < 0 || metricThresholds.value.upstream_error_rate_percent_max > 100)) {
+  if (thresholdOutOfRange(mt.upstream_error_rate_percent_max, 0, 100)) {
     errors.push(t('admin.ops.settings.validation.upstreamErrorRateMaxRange'))
   }
 

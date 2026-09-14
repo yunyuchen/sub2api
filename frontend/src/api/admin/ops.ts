@@ -752,7 +752,7 @@ export interface EmailNotificationConfig {
 
 export interface OpsMetricThresholds {
   sla_percent_min?: number | null                 // SLA低于此值变红
-  ttft_p99_ms_max?: number | null                 // TTFT P99高于此值变红
+  ttft_p99_ms_max?: number | null                 // TTFT P99高于此值变红；0 表示关闭首字预警
   request_error_rate_percent_max?: number | null  // 请求错误率高于此值变红
   upstream_error_rate_percent_max?: number | null // 上游错误率高于此值变红
 }
