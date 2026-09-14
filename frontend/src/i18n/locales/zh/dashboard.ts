@@ -993,9 +993,9 @@ export default {
     // （router/index.ts 的 titleKey），因此这里另起 titleBlock，MUST NOT 把 title 改成对象。
     titleBlock: {
       heading: {
-        today: '今天谁在用',
-        week: '本周谁在用',
-        month: '本月谁在用',
+        today: '今日概览',
+        week: '本周概览',
+        month: '本月概览',
       },
       participantsUnit: '位活跃',
     },

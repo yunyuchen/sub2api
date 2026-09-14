@@ -46,7 +46,12 @@
               <span class="rp-win-dot rp-win-d1" aria-hidden="true"></span>
               <span class="rp-win-dot rp-win-d2" aria-hidden="true"></span>
               <span class="rp-win-dot rp-win-d3" aria-hidden="true"></span>
-              <span class="rp-win-title">{{ t('leaderboard.chapters.01.name') }}</span>
+              <!-- 窗口标题栏左侧是一个静态 mono 标签，MUST NOT 再印一遍章名：
+                   「排行榜（前 50 名）」已经在上方 01 章的章头里印过一次，标题栏里重复第二遍
+                   是页顶最显眼的一处冗余。`usage.board` 与右侧状态小字分工——左边说「这是什么」
+                   （用量数据的榜单视图），右边说「是哪一片」（window · metric · top N）；
+                   两边都是技术字面量，不进 i18n（design D4）。 -->
+              <span class="rp-win-title">usage.board</span>
               <!-- 状态小字三段都是技术字面量（window · metric · top N），不进 i18n（design D4）。
                    窄屏按段收起而不是整条截断：先丢「· top 50」，再丢「· tokens」，最后只剩
                    window（原型 final/build.py 的 .lb-wsx / .lb-wsx2 是同一套做法）。三段拼起来

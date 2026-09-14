@@ -993,9 +993,9 @@ export default {
     // under titleBlock and MUST NOT turn title into an object.
     titleBlock: {
       heading: {
-        today: 'Who is using it today',
-        week: 'Who is using it this week',
-        month: 'Who is using it this month',
+        today: "Today's overview",
+        week: "This week's overview",
+        month: "This month's overview",
       },
       participantsUnit: 'active',
     },

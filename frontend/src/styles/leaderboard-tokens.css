@@ -32,7 +32,7 @@
 /* 变量：深色专属，定义在页面根节点上                                     */
 /* ------------------------------------------------------------------ */
 .rp {
-  --bg: #1a1a1a; /* 页面底（暖黑） */
+  --bg: #020617; /* 页面底：与站点 dark-950 同值（tailwind.config `dark.950`），面板与系统同色温 */
   --accent: #d97757; /* 赤陶：唯一强调色 */
   --accent-2: #f59e0b; /* 琥珀：渐变第二段、峰值 */
   --cream: #f5e0c3; /* 大标题与重点数字 */
@@ -46,9 +46,10 @@
 
   /* 卡片底：半透明的 --panel 压在 --bg 上（首页 .spool-card 原配方）。 */
   --card: rgba(15, 23, 42, 0.5);
-  /* 同一个卡片底合成出来的不透明色（0.5 × #0f172a + 0.5 × #1a1a1a）。挖空折线端点、
-     盖住断轴虚线、钉住热力图周几标签这三处需要一块与卡片一模一样的实色，透明色会露馅。 */
-  --card-solid: #151922;
+  /* 同一个卡片底合成出来的不透明色（0.5 × #0f172a + 0.5 × #020617 = rgb(8.5,14.5,32.5)）。
+     挖空折线端点、盖住断轴虚线、钉住热力图周几标签这三处需要一块与卡片一模一样的实色，
+     透明色会露馅。--bg 改成 #020617 后这个值 MUST 跟着重算，否则三处会浮出一块暖灰。 */
+  --card-solid: #090f21;
 
   --sans: 'MiSans', 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
     sans-serif;
@@ -60,7 +61,7 @@
   overflow: hidden;
   /* 深色专属的面板会长期出现在亮色站点里（契约 9.3 有意为之）：不声明 color-scheme 时
      `.rp-lb` / `.rp-win-body` 的原生横向滚动条会按 UA 的亮色方案画成一条浅灰条，压在
-     #1a1a1a / #0d1117 上非常刺眼。面板自己有显式 background，不会因此借到宿主底色；
+     #020617 / #0d1117 上非常刺眼。面板自己有显式 background，不会因此借到宿主底色；
      `.rp` 内没有原生表单控件，没有其它连带影响。 */
   color-scheme: dark;
   background: var(--bg);
@@ -85,8 +86,8 @@
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 .rp::after {
@@ -96,12 +97,12 @@
   left: 50%;
   transform: translateX(-50%);
   width: min(100%, 1320px);
-  height: 620px;
+  height: 420px;
   z-index: 0;
   pointer-events: none;
   background: radial-gradient(
-    ellipse 620px 360px at 50% 0%,
-    rgba(217, 119, 87, 0.15),
+    ellipse 620px 300px at 50% 0%,
+    rgba(217, 119, 87, 0.08),
     rgba(217, 119, 87, 0) 72%
   );
 }
@@ -189,24 +190,26 @@
 /* ------------------------------------------------------------------ */
 /* 页头（内页：一块，无整屏 hero）                                        */
 /* ------------------------------------------------------------------ */
+/* 面板顶边到榜单第一行数据 MUST ≤340px（1440 + 侧边栏展开）：页头三件套、第一章的
+   章间距、章头细线与窗口标题栏各让一点，H1 仍 ≥30px、控制条仍是一行。 */
 .rp-phead {
-  padding-top: 24px;
-  padding-bottom: 24px;
+  padding-top: 20px;
+  padding-bottom: 16px;
 }
 .rp-phead h1 {
-  font-size: 38px;
+  font-size: 34px;
   font-weight: 700;
   line-height: 1.2;
-  letter-spacing: -1px;
+  letter-spacing: -0.8px;
   color: var(--cream);
 }
 .rp-phead-sub {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 15px;
   color: var(--muted);
 }
 .rp-ctls {
-  margin-top: 20px;
+  margin-top: 14px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -295,10 +298,16 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* 章：48px 段距 + 左对齐细线小标题（docs .body h2）                       */
+/* 章：48px 段距（第一章 20px）+ 左对齐细线小标题（docs .body h2）          */
 /* 章号 chip 是 `.rp-h2row` 的直接子元素，不再内联在 h2 里。                */
 /* ------------------------------------------------------------------ */
+/* 紧跟页头的第一章（榜单）比其余各章紧：页头与它之间已经有一条章头细线划界，48px 在
+   面板顶部读成一段空白。其余六章的章间距保持原节奏——因此用相邻兄弟选择器而不是
+   `:first-of-type`：只有「前面还有一章」的那些章才拿 48px。 */
 .rp-chapter {
+  padding-top: 20px;
+}
+.rp-chapter + .rp-chapter {
   padding-top: 48px;
 }
 .rp-h2row {
@@ -306,9 +315,9 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 12px;
-  padding-bottom: 14px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 .rp-num {
   display: inline-flex;
@@ -348,7 +357,8 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* 窗口（docs .code-block：42px 标题栏 + 三圆点）                          */
+/* 窗口（docs .code-block：38px 标题栏 + 三圆点）                          */
+/* 标题栏左侧是静态 mono 标签 `usage.board`（章名 MUST NOT 在这里印第二遍）。 */
 /* ------------------------------------------------------------------ */
 .rp-win {
   background: var(--well);
@@ -357,7 +367,7 @@
   overflow: hidden;
 }
 .rp-win-head {
-  height: 42px;
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -632,7 +642,7 @@
   height: 100%;
   border-radius: 999px;
   /* 次级填充统一 rgba(148,163,184,.65)：压在 track（.12 灰压在卡片底/窗口底）上是
-     3.2:1（卡片）与 3.4:1（窗口），过非文本 3:1；原型的 .42 只有 2.2:1。 */
+     3.5:1（卡片）与 3.4:1（窗口），过非文本 3:1；原型的 .42 只有 2.2:1。 */
   background: rgba(148, 163, 184, 0.65);
   transform-origin: left center;
 }
@@ -874,8 +884,8 @@
 .rp-vs-me i {
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
-/* 对照条与轨道要过 3:1。轨道是 rgba(148,163,184,.12) 压在卡片底上（#242a34，L=.024）：
-   同色 .42 只有 2.2:1、.55 是 2.9:1，.65 到 3.2:1 才够，比「我」那一根仍明显弱。 */
+/* 对照条与轨道要过 3:1。轨道是 rgba(148,163,184,.12) 压在卡片底上（#192033，L=.015）：
+   同色 .42 只有 2.2:1、.55 是 2.9:1，.65 到 3.5:1 才够，比「我」那一根仍明显弱。 */
 .rp-vs-all i {
   background: rgba(148, 163, 184, 0.65);
 }
@@ -1060,7 +1070,7 @@
   color: var(--cream);
   white-space: nowrap;
 }
-/* 「你」徽标：不再是白字压赤陶（3.12:1），改成淡赤陶底 + 赤陶字（4.59:1）。 */
+/* 「你」徽标：不再是白字压赤陶（3.12:1），改成淡赤陶底 + 赤陶字（5.22:1）。 */
 .rp-you {
   display: inline-block;
   margin-left: 7px;
@@ -1686,7 +1696,7 @@
 .rp-cp {
   margin-top: 8px;
 }
-/* 版权行坐在 --bg #1a1a1a 上（首页 / docs 的同一行坐在更深的底上），用 --muted（7.3:1）。 */
+/* 版权行坐在 --bg #020617 上（与站点底色同值），用 --muted（7.9:1）。 */
 .rp-cp {
   font-size: 13px;
   color: var(--muted);
@@ -1794,20 +1804,23 @@
     padding-right: 20px;
   }
   .rp-chapter {
+    padding-top: 16px;
+  }
+  .rp-chapter + .rp-chapter {
     padding-top: 36px;
   }
   /* 页头总高 ≤200px：两组分段在窄屏并排一行，组名（窗口 / 排名指标）收起，
      label 仍在 aria-label 上。 */
   .rp-phead {
-    padding-top: 24px;
-    padding-bottom: 22px;
+    padding-top: 20px;
+    padding-bottom: 16px;
   }
   .rp-phead h1 {
     font-size: 32px;
     letter-spacing: -0.6px;
   }
   .rp-ctls {
-    margin-top: 16px;
+    margin-top: 12px;
     gap: 8px;
   }
   .rp-seg b {
@@ -1837,8 +1850,8 @@
 
 @media (max-width: 700px) {
   .rp-phead {
-    padding-top: 22px;
-    padding-bottom: 14px;
+    padding-top: 18px;
+    padding-bottom: 12px;
   }
   .rp-phead h1 {
     font-size: 29px;
@@ -1848,7 +1861,7 @@
     font-size: 14px;
   }
   .rp-ctls {
-    margin-top: 12px;
+    margin-top: 10px;
   }
   .rp-seg button {
     padding: 7px 12px;

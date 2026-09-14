@@ -77,9 +77,9 @@ const messages: Record<string, string> = {
   'leaderboard.masthead.metricTokens': 'tokens',
   'leaderboard.masthead.metricRequests': 'requests',
   'leaderboard.masthead.metricCost': 'spend',
-  'leaderboard.titleBlock.heading.today': 'Who is using it today',
-  'leaderboard.titleBlock.heading.week': 'Who is using it this week',
-  'leaderboard.titleBlock.heading.month': 'Who is using it this month',
+  'leaderboard.titleBlock.heading.today': "Today's overview",
+  'leaderboard.titleBlock.heading.week': "This week's overview",
+  'leaderboard.titleBlock.heading.month': "This month's overview",
   'leaderboard.titleBlock.participantsUnit': 'active',
   'leaderboard.chapters.01.name': 'Board, top 50',
   'leaderboard.chapters.02.name': 'Your position',
@@ -490,7 +490,7 @@ describe('user LeaderboardView', () => {
     await flushPromises()
 
     expect(squash(wrapper.find('[data-testid="leaderboard-title-heading"]').text())).toBe(
-      'Who is using it today',
+      "Today's overview",
     )
     expect(
       wrapper.find('[data-testid="leaderboard-window-today"]').attributes('aria-pressed'),
@@ -509,7 +509,7 @@ describe('user LeaderboardView', () => {
     await flushPromises()
 
     expect(squash(wrapper.find('[data-testid="leaderboard-title-heading"]').text())).toBe(
-      'Who is using it this week',
+      "This week's overview",
     )
     expect(
       wrapper.find('[data-testid="leaderboard-metric-successful-requests"]').attributes(
@@ -1535,7 +1535,11 @@ describe('user LeaderboardView', () => {
     expect(head.find('.rp-win-d1').exists()).toBe(true)
     expect(head.find('.rp-win-d2').exists()).toBe(true)
     expect(head.find('.rp-win-d3').exists()).toBe(true)
-    expect(head.find('.rp-win-title').text()).toBe('Board, top 50')
+    // 标题栏左侧是静态技术标签，不再复印章名（章头里已经有一遍）
+    expect(head.find('.rp-win-title').text()).toBe('usage.board')
+    expect(head.find('.rp-win-title').text()).not.toBe(
+      wrapper.find('[data-testid="leaderboard-chapter-01"] .rp-h2').text(),
+    )
     expect(head.find('.rp-win-meta').text()).toBe('today · tokens · top 50')
 
     // 刷新按钮沿用原来的 testid 与 disabled 语义，位置搬到窗口标题栏

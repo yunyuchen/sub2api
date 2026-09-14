@@ -110,7 +110,7 @@ const emit = defineEmits<{
   (event: 'select-metric', value: LeaderboardMetric): void
 }>()
 
-/** H1 随 Window 换一句：今天 / 本周 / 本月「谁在用」。窗口字面量已经在控制条的分段上，这里不回显。 */
+/** H1 随 Window 换一句：今日 / 本周 / 本月「概览」。窗口字面量已经在控制条的分段上，这里不回显。 */
 const headingText = computed(() => t(`leaderboard.titleBlock.heading.${props.activeWindow}`))
 
 const participantLabel = computed(() =>

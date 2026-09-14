@@ -19,9 +19,9 @@ const messages: Record<string, string> = {
   'leaderboard.masthead.metricTokens': 'tokens',
   'leaderboard.masthead.metricRequests': 'requests',
   'leaderboard.masthead.metricCost': 'spend',
-  'leaderboard.titleBlock.heading.today': 'Who is using it today',
-  'leaderboard.titleBlock.heading.week': 'Who is using it this week',
-  'leaderboard.titleBlock.heading.month': 'Who is using it this month',
+  'leaderboard.titleBlock.heading.today': "Today's overview",
+  'leaderboard.titleBlock.heading.week': "This week's overview",
+  'leaderboard.titleBlock.heading.month': "This month's overview",
   'leaderboard.titleBlock.participantsUnit': 'active',
 }
 
@@ -84,7 +84,7 @@ describe('LbMasthead', () => {
     const wrapper = mountMasthead()
 
     expect(wrapper.find('[data-testid="leaderboard-masthead"]').classes()).toContain('rp-phead')
-    expect(wrapper.find('.rp-phead h1').text()).toBe('Who is using it today')
+    expect(wrapper.find('.rp-phead h1').text()).toBe("Today's overview")
     expect(squash(wrapper.find('.rp-phead-sub').text())).toBe('137 active · 2026-09-12')
     expect(wrapper.findAll('.rp-ctls .rp-seg')).toHaveLength(2)
     expect(wrapper.find('[data-testid="leaderboard-masthead-stamp"]').exists()).toBe(false)
@@ -123,7 +123,7 @@ describe('LbMasthead', () => {
   // H1 只剩一句话：`· today` 那段窗口回显已删，窗口本身就印在控制条的分段上。
   it('changes the heading with the window and does not echo the window literal', () => {
     expect(squash(mountMasthead().find('[data-testid="leaderboard-title-heading"]').text())).toBe(
-      'Who is using it today',
+      "Today's overview",
     )
     expect(
       squash(
@@ -131,14 +131,14 @@ describe('LbMasthead', () => {
           .find('[data-testid="leaderboard-title-heading"]')
           .text(),
       ),
-    ).toBe('Who is using it this week')
+    ).toBe("This week's overview")
     expect(
       squash(
         mountMasthead({ activeWindow: 'month' })
           .find('[data-testid="leaderboard-title-heading"]')
           .text(),
       ),
-    ).toBe('Who is using it this month')
+    ).toBe("This month's overview")
   })
 
   // 副题只剩两段：人数与日期。档位说明与隐私声明都不在这里。
