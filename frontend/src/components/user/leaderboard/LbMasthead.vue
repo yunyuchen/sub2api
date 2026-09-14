@@ -1,8 +1,8 @@
 <template>
   <!-- 页头：H1 + 副题 + 唯一一组控制条（由 `LbTitle.vue` 合并进来）。
        站名归站点外壳（页面套 `AppLayout`，侧边栏就是导航），页内 MUST NOT 再提供
-       「返回仪表盘」这类跳转入口；主题切换整块删除——本页恒为深色，
-       MUST NOT 读写站点的 `html.dark` 与 `localStorage['theme']`。
+       「返回仪表盘」这类跳转入口；主题切换整块删除——明暗由样式层跟随站点的 `html.dark`，
+       开关归侧边栏，这里 MUST NOT 读写站点的 `html.dark` 与 `localStorage['theme']`。
 
        日期在副题、时区在页脚、快照时分在 chip——同一个事实只在页面上出现一次，
        因此这里 MUST NOT 再挂时区，也不挂 WINDOW / METRIC / MODE 这些键名。
@@ -34,7 +34,7 @@
           :data-testid="`leaderboard-window-${option.testid}`"
           @click="emit('select-window', option.value)"
         >
-          {{ option.value }}
+          {{ option.label }}
         </button>
       </span>
 
@@ -53,11 +53,11 @@
         </button>
       </span>
 
-      <!-- 快照 chip：呼吸点 + `snapshot HH:MM` + 「距下一次重建」。
-           `snapshot` 与页脚 colophon 上那个是同一个技术字面量，不进 i18n（design D4）。 -->
+      <!-- 快照 chip：呼吸点 + 「快照 HH:MM」+「距下一次重建」。标签与页脚 colophon 上那个
+           共用 `leaderboard.masthead.snapshot`；快照未生成时显示 `snapshotPending`，不留英文。 -->
       <span class="rp-snap" data-testid="leaderboard-masthead-snapshot">
         <span class="rp-pulse" aria-hidden="true"></span>
-        snapshot <span class="rp-n">{{ snapshotValue }}</span>
+        {{ t('leaderboard.masthead.snapshot') }} <span class="rp-n">{{ snapshotValue }}</span>
         <span v-if="nextRebuildText" class="rp-snap-rebuild">{{ nextRebuildText }}</span>
       </span>
 
@@ -127,10 +127,14 @@ const dateText = computed(() =>
   formatDateOnlyInTimeZone(props.snapshotUpdatedAt ?? new Date(), props.timezone),
 )
 
+/**
+ * 分段上显示 i18n 标签（zh「今日 / 本周 / 本月」），`value` 才是请求参数 `today / week / month`。
+ * 界面文字 MUST 走 i18n，只有接口参数保持英文（2026-09-14 用户「顶部也做成中文」）。
+ */
 const windowOptions = computed(() => [
-  { value: 'today' as const, testid: 'today', title: t('leaderboard.windows.today') },
-  { value: 'week' as const, testid: 'week', title: t('leaderboard.windows.week') },
-  { value: 'month' as const, testid: 'month', title: t('leaderboard.windows.month') },
+  { value: 'today' as const, testid: 'today', label: t('leaderboard.windows.today'), title: t('leaderboard.windows.today') },
+  { value: 'week' as const, testid: 'week', label: t('leaderboard.windows.week'), title: t('leaderboard.windows.week') },
+  { value: 'month' as const, testid: 'month', label: t('leaderboard.windows.month'), title: t('leaderboard.windows.month') },
 ])
 
 /** 分段上是短标签，完整名字进 title。 */
@@ -161,11 +165,12 @@ const isAnonymous = computed(() => props.mode === 'anonymous')
 /**
  * 快照时间取 HH:MM，且按站点时区渲染：窗口边界是站点时区算的，
  * 用浏览器本地时区会让这个时分与页脚的 tz 自相矛盾。
- * 还没生成时用一个字面量而不是一句话，这一格放不下一句话。
+ * 还没生成时显示一个短词（zh「待生成」），而不是一句话，这一格放不下一句话。
  */
 const snapshotValue = computed(() => {
-  if (!props.snapshotUpdatedAt) return 'pending'
-  return formatTimeToMinuteInTimeZone(props.snapshotUpdatedAt, props.timezone) || 'pending'
+  const pending = t('leaderboard.masthead.snapshotPending')
+  if (!props.snapshotUpdatedAt) return pending
+  return formatTimeToMinuteInTimeZone(props.snapshotUpdatedAt, props.timezone) || pending
 })
 
 /**

@@ -15,6 +15,9 @@ const messages: Record<string, string> = {
   'leaderboard.metrics.successfulRequests': 'Successful requests',
   'leaderboard.metrics.cost': 'Spend',
   'leaderboard.masthead.modeAnonymous': 'Anonymous',
+  // 快照标签首字母大写：组件若写死小写 `snapshot` / `pending`，下面的断言会失败。
+  'leaderboard.masthead.snapshot': 'Snapshot',
+  'leaderboard.masthead.snapshotPending': 'Pending',
   'leaderboard.masthead.rebuildIn': '(rebuilds in {minutes}m)',
   'leaderboard.masthead.metricTokens': 'tokens',
   'leaderboard.masthead.metricRequests': 'requests',
@@ -235,6 +238,19 @@ describe('LbMasthead', () => {
     ).toBe('false')
   })
 
+  // 分段上显示 i18n 标签，发出去的仍是接口参数 today / week / month：界面文字走 i18n，
+  // 只有请求参数保持英文（2026-09-14 用户「顶部也做成中文」）。
+  it('labels the window segments through i18n while still emitting the api value', async () => {
+    const wrapper = mountMasthead()
+
+    expect(wrapper.find('[data-testid="leaderboard-window-today"]').text()).toBe('Today')
+    expect(wrapper.find('[data-testid="leaderboard-window-week"]').text()).toBe('This week')
+    expect(wrapper.find('[data-testid="leaderboard-window-month"]').text()).toBe('This month')
+
+    await wrapper.find('[data-testid="leaderboard-window-week"]').trigger('click')
+    expect(wrapper.emitted('select-window')?.[0]).toEqual(['week'])
+  })
+
   it('emits the picked window and metric instead of holding the state itself', async () => {
     const wrapper = mountMasthead()
 
@@ -261,12 +277,12 @@ describe('LbMasthead', () => {
     expect(wrapper.emitted('select-metric')?.[0]).toEqual(['total_tokens'])
   })
 
-  // 快照 chip：呼吸点 + `snapshot HH:MM` + `(+Nm)`；`(+Nm)` 按重建周期现算，MUST NOT 写死示例值。
+  // 快照 chip：呼吸点 + 快照标签 + HH:MM + 重建倒计时；倒计时按重建周期现算，MUST NOT 写死示例值。
   it('computes the minutes left until the next rebuild', () => {
     const snapshot = mountMasthead().find('[data-testid="leaderboard-masthead-snapshot"]')
 
     expect(snapshot.find('.rp-pulse').exists()).toBe(true)
-    expect(squash(snapshot.text())).toContain('snapshot 12:30')
+    expect(squash(snapshot.text())).toContain('Snapshot 12:30')
     expect(snapshot.text()).toContain('(rebuilds in 3m)')
   })
 
@@ -275,7 +291,7 @@ describe('LbMasthead', () => {
       mountMasthead({ snapshotUpdatedAt: null })
         .find('[data-testid="leaderboard-masthead-snapshot"]')
         .text(),
-    ).toContain('pending')
+    ).toContain('Pending')
     expect(
       mountMasthead({ snapshotUpdatedAt: null })
         .find('[data-testid="leaderboard-masthead-snapshot"]')

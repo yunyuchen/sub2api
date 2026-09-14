@@ -980,6 +980,9 @@ export default {
     // three theme-toggle keys are all gone (zero references).
     masthead: {
       // The mode chip only shows up in anonymous mode; named mode is the norm and gets none.
+      // Label shared by the snapshot chip and the footer colophon; snapshotPending shows before the first build.
+      snapshot: 'Snapshot',
+      snapshotPending: 'Pending',
       modeAnonymous: 'Anonymous',
       // Minutes until the next rebuild, computed from the rebuild period; dropped entirely
       // while the snapshot is missing or stale.
@@ -1031,6 +1034,7 @@ export default {
         name: 'Trend and composition',
       },
     },
+    // The status line on the right of the chapter 01 board window head,
     extremes: {
       nightOwl: {
         label: 'Night owl',
@@ -1230,7 +1234,7 @@ export default {
       },
     },
     // The footer is one colophon line: `snapshot HH:MM · rebuild every 5m · <tz> · no emails`.
-    // `snapshot` and the timezone name are literals and stay out of i18n (design D4); the
+    // `snapshot` and the timezone name are literals and stay out of i18n (design D23); the
     // `COLOPHON` mark, "week starts Mon" and `successful_requests = actual_cost > 0` are gone.
     // Spend is now the third metric (same tier rules as tokens), so only the email half of
     // this line survives; the key stays `noMoney` because LbFooter.vue references it.

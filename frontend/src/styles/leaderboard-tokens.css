@@ -7,7 +7,7 @@
  * 站点既有的 Tailwind 变量抢名字，其它页面完全不受影响。
  *
  * `.rp` 不是视口根节点：页面套在站点的 `AppLayout` 外壳里，`.rp` 是 `<main>` 内一块浮在站点
- * 底色上的深色内容面板（圆角 + 1px 边框），因此 MUST NOT 有 `min-height:100vh`，底纹的两个
+ * 底色上的内容面板（圆角 + 1px 边框），因此 MUST NOT 有 `min-height:100vh`，底纹的两个
  * 伪元素也 MUST 是 `position:absolute`（`fixed` 会铺满视口，连侧边栏一起盖住）。
  *
  * 取值照已确认的原型移植（scratchpad/lb-proto/final/build.py 的 CSS 常量与它生成的 index.html），
@@ -15,8 +15,13 @@
  * （内页版式节奏）。原型里的 `lb-` / `spool-` 类名 MUST NOT 带进仓库：落地一律用 `rp-` 前缀，
  * 各章内部的既有类名一个都没改名，换皮只改 CSS 取值。
  *
- * **深色专属**：不再有亮色基色与 `.rp.dark` 两套，页面根节点不带 `dark` 修饰类。站点其它页面的
- * 主题机制（`html.dark` + `localStorage['theme']`）MUST NOT 被本页触碰——本页既不读也不写它。
+ * **明暗跟随站点**（2026-09-14 用户看过线上后指出「没有做主题适配」，推翻了上一轮的深色专属）：
+ * 暗色是 `.rp` 上那一套变量（已验收，取值原样保留），亮色是紧随其后的 `html:not(.dark) .rp`
+ * 覆写块——它只覆写变量与 `color-scheme`，不写任何别的属性。明暗完全由这条选择器按站点的
+ * `html.dark` 推导：页面零 JS 主题状态，根节点不带任何主题 class，MUST NOT 读写 `html.dark`
+ * 与 `localStorage['theme']`，也 MUST NOT 提供页面内主题开关（开关归站点侧边栏）。
+ * 两个变量块之外 MUST NOT 出现任何颜色字面量（`transparent` 除外）：规则里的颜色一律走语义
+ * 变量，否则亮色下会漏出按深底推导的取值。新增颜色时两个块都要给值。
  *
  * 字体不再自托管：字体栈里的名字（MiSans / JetBrains Mono）有就用、没有就回落到系统字体，与首页、
  * docs.html 完全一致，全页不加载任何字体文件。
@@ -29,17 +34,19 @@
  */
 
 /* ------------------------------------------------------------------ */
-/* 变量：深色专属，定义在页面根节点上                                     */
+/* 变量（暗色）：定义在页面根节点上，站点 `html.dark` 时生效               */
+/* 亮色由下一个 `html:not(.dark) .rp` 块覆写同名变量。                     */
 /* ------------------------------------------------------------------ */
 .rp {
   --bg: #020617; /* 页面底：与站点 dark-950 同值（tailwind.config `dark.950`），面板与系统同色温 */
-  --accent: #d97757; /* 赤陶：唯一强调色 */
-  --accent-2: #f59e0b; /* 琥珀：渐变第二段、峰值 */
+  --accent: #d97757; /* 赤陶：唯一强调色（文字、线、焦点环、选中分段的实底） */
+  --accent-2: #f59e0b; /* 琥珀：前三名名次、峰值读数这类文字 */
   --cream: #f5e0c3; /* 大标题与重点数字 */
   --text: #e2e8f0; /* 正文 */
   --muted: #94a3b8; /* 次级文字：承载数据的灰字一律用它，不要更暗的 */
+  --strong: #fff; /* 章名、大数字、前三名与本人行：比 --text 更亮一档 */
   --line: #1e293b; /* 分隔线与边框 */
-  --panel: #0f172a; /* 标题栏 / 分段底 */
+  --panel: #0f172a; /* 标题栏 / 头像空圆 */
   --well: #0d1117; /* 窗口内容底 */
   --blue: #60a5fa;
   --green: #4ade80;
@@ -50,6 +57,52 @@
      挖空折线端点、盖住断轴虚线、钉住热力图周几标签这三处需要一块与卡片一模一样的实色，
      透明色会露馅。--bg 改成 #020617 后这个值 MUST 跟着重算，否则三处会浮出一块暖灰。 */
   --card-solid: #090f21;
+  /* 卡片与窗口的投影：暗色不画（站点暗色 `.card` 的 shadow-card 压在深底上本来就看不见），
+     亮色块给站点 `.card` 同一副投影。 */
+  --card-shadow: none;
+
+  /* 图形档强调色：条形与渐变的填充、热力最高档、图例色块、卡片悬停描边。暗色下与文字档
+     同值；亮色下文字档要加深到 4.5:1，图形只需 3:1（WCAG 非文本下限），两者因此分开。 */
+  --accent-fill: #d97757;
+  --accent-2-fill: #f59e0b;
+  --on-accent: #fff; /* 强调色实底上的字（选中分段） */
+  --peak-top: #fff; /* 峰值柱渐变的顶端 */
+  --sw4: #64748b; /* 平台 / 构成的第四段色块 */
+  --dot-1: #ef4444; /* 窗口标题栏三圆点 */
+  --dot-2: #eab308;
+  --dot-3: #22c55e;
+
+  /* 语义底色与描边：原先散落在各条规则里的 rgba，按深底推导，逐个提成变量。 */
+  --grid-line: rgba(255, 255, 255, 0.02); /* 24px 网格线 */
+  --glow: rgba(217, 119, 87, 0.08); /* 顶部光晕的中心 */
+  --seg-bg: rgba(15, 23, 42, 0.72); /* 分段控件底：比页面底亮一档 */
+  --seg-glow: rgba(217, 119, 87, 0.32); /* 选中分段的投影 */
+  --chip-bg: rgba(15, 23, 42, 0.6); /* 页头 chip 与重试按钮底 */
+  --chip-inset: rgba(2, 6, 23, 0.5); /* 卡片内的小 chip 底（比卡片深一档） */
+  --chip-inset-line: rgba(30, 41, 59, 0.9); /* 画像 chip 描边 */
+  --pulse-ring: rgba(74, 222, 128, 0.55); /* 快照呼吸点的光环 */
+  --accent-wash: rgba(217, 119, 87, 0.14); /* 章号 chip 与「你」徽标的底 */
+  --accent-tint: rgba(217, 119, 87, 0.08); /* 按钮悬停、领先 chip 的底 */
+  --accent-edge: rgba(217, 119, 87, 0.45); /* 按钮悬停、领先 chip 的描边 */
+  --note-bg: rgba(217, 119, 87, 0.07); /* 提示框与横幅底 */
+  --note-line: rgba(217, 119, 87, 0.28); /* 提示框与横幅描边 */
+  --thead-bg: rgba(15, 23, 42, 0.55); /* 榜单表头底 */
+  --row-line: rgba(30, 41, 59, 0.75); /* 榜单行间细线 */
+  --row-hover: rgba(217, 119, 87, 0.04); /* 榜单行悬停底 */
+  --self-wash: rgba(217, 119, 87, 0.06); /* 本人行淡底 */
+  --self-wash-hover: rgba(217, 119, 87, 0.09);
+  --track: rgba(148, 163, 184, 0.12); /* 条形轨道、零值柱、堆叠条底 */
+  --fill-dim: rgba(148, 163, 184, 0.65); /* 次级条形填充（非前三名 / 非本人 / 全站对照） */
+  --bar-dim: rgba(217, 119, 87, 0.45); /* 14 天柱里的普通柱 */
+  --heat-0: rgba(148, 163, 184, 0.08); /* 热力零值档：比卡片底亮一点 */
+  --heat-1: rgba(217, 119, 87, 0.24);
+  --heat-2: rgba(217, 119, 87, 0.46);
+  --heat-3: rgba(217, 119, 87, 0.72); /* 第四档直接用 --accent-2-fill */
+  --leader-dots: rgba(148, 163, 184, 0.2); /* 引导点线 */
+  --skel: rgba(148, 163, 184, 0.1); /* 骨架块 */
+
+  /* 与明暗无关：横滚渐隐的遮罩只读 alpha，颜色本身不参与渲染，亮色块不必覆写。 */
+  --mask-ink: #000;
 
   --sans: 'MiSans', 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
     sans-serif;
@@ -59,10 +112,9 @@
      伪元素以面板自身为包含块并被圆角裁掉。 */
   position: relative;
   overflow: hidden;
-  /* 深色专属的面板会长期出现在亮色站点里（契约 9.3 有意为之）：不声明 color-scheme 时
-     `.rp-lb` / `.rp-win-body` 的原生横向滚动条会按 UA 的亮色方案画成一条浅灰条，压在
-     #020617 / #0d1117 上非常刺眼。面板自己有显式 background，不会因此借到宿主底色；
-     `.rp` 内没有原生表单控件，没有其它连带影响。 */
+  /* 原生横向滚动条（`.rp-lb` / `.rp-win-body`）按 color-scheme 画：暗色面板不声明时会画成
+     一条浅灰条，压在 #020617 / #0d1117 上非常刺眼。亮色块里改回 light。面板自己有显式
+     background，不会因此借到宿主底色；`.rp` 内没有原生表单控件，没有其它连带影响。 */
   color-scheme: dark;
   background: var(--bg);
   border: 1px solid var(--line);
@@ -76,6 +128,109 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* 变量（亮色）：站点没有 `html.dark` 时覆写上面的同名变量                  */
+/*                                                                     */
+/* 只覆写变量与 color-scheme，不写别的属性。取值照站点亮色外壳而不是把暗色反色： */
+/* 面板底与 main 同为 gray-50、浮层（卡片 / 窗口内容 / 控件）是白、边框 gray-200， */
+/* 层次方向与暗色一致——底最淡、浮层更「亮」（这里即更白）+ 1px 边框。          */
+/* 中性色用 Tailwind 默认 gray（站点亮色外壳就是它）；半透明的线、轨道与骨架     */
+/* 用 slate-900 低 alpha，赤陶系 tint 仍从品牌赤陶 #d97757 取，不引入新色相。     */
+/*                                                                     */
+/* 下面注释里的对比度都是对实际坐着的底算的（叠 alpha 之后的合成色）：              */
+/* - 承载数据的文字 ≥4.5:1。唯一例外是 64–80px 粗体的名次大字 `.rp-rank-v`：按 WCAG */
+/*   大字档 ≥3:1（实测 3.47:1），理由见 --accent-fill 的注释。                      */
+/* - 承载读数的图形对邻接色 ≥3:1：条形对轨道（任何行状态下 3.01:1）、次级条 3.30:1、 */
+/*   图例色块、呼吸点、折线、焦点环、本人行色条、选中分段。                         */
+/* - 以下不追 3:1，与暗色同档或只是装饰，读数另有文字兜底：14 天普通柱对白 2.05:1    */
+/*   （暗色 2.10:1，读数在柱顶数字与峰值柱）；热力 0–3 档对白 1.13 / 1.37 / 1.92 /   */
+/*   2.85:1（暗色 1.11 / 1.39 / 2.15 / 3.65:1，每格有 title，刻度键带「少 / 多」）；  */
+/*   零值柱、骨架、边框、行间线、引导点线、标题栏三圆点（aria-hidden）、禁用态按钮。  */
+/* - 已知弱于暗色的一处：图形档赤陶与琥珀的亮度几乎相同（亮度比 1.00，暗色 1.45），   */
+/*   堆叠条的第一、三段与热力三、四档（1.22，暗色 2.43）主要靠色相区分。堆叠条是     */
+/*   aria-hidden，读数在带文字与百分比的图例里；热力格有 title。                     */
+/* ------------------------------------------------------------------ */
+html:not(.dark) .rp {
+  --bg: #f9fafb; /* gray-50：与站点 main 底同值 */
+  /* 赤陶加深（同色相 15°、同饱和度，只降明度到 40%）：白底 6.0:1；最差的一处是「你」
+     徽标坐在本人行悬停底上（两层赤陶 tint 叠在白上），仍有 4.75:1。白字压它（选中分段）
+     同为 6.0:1。 */
+  --accent: #a64526;
+  /* 琥珀加深（同色相 38°，明度降到 31%）：白底 5.14:1，行悬停底上 4.89:1。 */
+  --accent-2: #986206;
+  --cream: #111827; /* gray-900：白底上奶油色看不见，大标题改近黑，16.98:1（对 gray-50） */
+  --text: #1f2937; /* gray-800：白底 14.68:1，gray-100 标题栏上 13.34:1 */
+  /* gray-600 而不是 gray-500：gray-500 在 gray-100 标题栏（右侧状态小字）上只有 4.39:1。
+     白底 7.56:1、gray-50 7.23:1、gray-100 6.87:1、本人行悬停底 6.69:1。 */
+  --muted: #4b5563;
+  --strong: #111827; /* gray-900 */
+  --line: #e5e7eb; /* gray-200：面板与卡片边框，与站点侧边栏边框同值 */
+  --panel: #f3f4f6; /* gray-100：窗口标题栏、头像空圆 */
+  --well: #fff; /* 窗口内容底：与站点 .card 同为白 */
+  --blue: #3b82f6; /* blue-500：白底 3.68:1（blue-400 只有 2.5:1） */
+  --green: #16a34a; /* green-600：呼吸点在白 chip 上 3.30:1 */
+
+  --card: #fff;
+  --card-solid: #fff; /* 卡片本身就不透明，挖空色即卡片色 */
+  /* 站点亮色 `.card` 的 shadow-card（tailwind.config `boxShadow.card`）原值：白卡片坐在 gray-50
+     上只靠 1px 边框，比站点其它页面的卡片「平」一档，补上同一副投影才是一个观感。 */
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  /* 图形档：赤陶 hsl(15 63% 56%)、琥珀 hsl(38 92% 39%)。对白 3.47:1，对条形轨道 3.01:1——
+     轨道是条形真正的邻接色，两边都要过 3:1（轨道因此是不透明色，见 --track）。
+     64–80px 粗体的名次大字（`.rp-rank-v`）也用这一档，是「文字 ≥4.5:1」的唯一例外：WCAG 的
+     大字门槛（≥24px，或 ≥18.66px 粗体）是 3:1，3.47:1 过得了；文字档（6.00 / 5.14:1）在那个
+     字号上两端都是砖褐色，暗色版赤陶→琥珀的那道渐变就看不出来了。 */
+  --accent-fill: #d66b48;
+  --accent-2-fill: #bf7b08;
+  --on-accent: #fff;
+  --peak-top: #986206; /* 白底上白色的柱顶会消失：峰值柱顶端改用文字档琥珀，比普通柱顶更深 */
+  --sw4: #64748b; /* 白底 4.76:1 */
+  --dot-1: #ef4444;
+  --dot-2: #eab308;
+  --dot-3: #22c55e;
+
+  /* 网格线按与暗色同一观感取（Chrome 实测像素，alpha 会量化到 1/255）：叠 gray-50 横线
+     ΔE 2.5、竖线 2.8，暗色（白 .02 叠 #020617）两向都是 2.4。.04 时是 3.1 / 3.2、亮度对比
+     1.08:1（暗色 1.03:1），整块面板读成方格纸，比暗色重一档。 */
+  --grid-line: rgba(15, 23, 42, 0.03);
+  --glow: rgba(217, 119, 87, 0.07); /* 比暗色的 .08 低一档，观感（ΔE≈3.8 对 4.3）相当 */
+  --seg-bg: #fff;
+  --seg-glow: rgba(166, 69, 38, 0.25);
+  --chip-bg: #fff;
+  --chip-inset: #f9fafb; /* 白卡片里的小 chip 用 gray-50，比卡片「沉」一档 */
+  --chip-inset-line: #e5e7eb;
+  --pulse-ring: rgba(22, 163, 74, 0.6);
+  --accent-wash: rgba(217, 119, 87, 0.12); /* 章号 chip（叠在 gray-50 上）的赤陶字 5.10:1 */
+  --accent-tint: rgba(217, 119, 87, 0.1); /* 刷新按钮悬停：gray-100 上叠它，赤陶字 4.96:1 */
+  --accent-edge: rgba(217, 119, 87, 0.5);
+  --note-bg: rgba(217, 119, 87, 0.08);
+  --note-line: rgba(217, 119, 87, 0.35);
+  --thead-bg: #f9fafb;
+  --row-line: #f3f4f6;
+  /* 行悬停与头像空圆（--panel gray-100）不同色：悬停时空圆不会消失。 */
+  --row-hover: rgba(217, 119, 87, 0.05);
+  --self-wash: rgba(217, 119, 87, 0.08); /* 本人名次（赤陶字）5.53:1 */
+  --self-wash-hover: rgba(217, 119, 87, 0.12); /* 本人名次 5.31:1 */
+  /* 轨道 MUST 是不透明色：取 slate-900 .07 叠在白上的合成结果。写成半透明时它会叠在行底色上，
+     行一着色轨道就跟着变深——悬停的前三名行、本人行（常驻）上两种图形档对轨道会掉到
+     2.86 / 2.78:1，本人行悬停 2.67:1，偏偏是页面上最该看清的那一行。不透明之后任何行状态下都
+     固定在 3.01:1；卡片、「我 vs 全站」、24 小时零值柱、堆叠条都坐在白底上，渲染不变。
+     也不能再深：再深一档，两种图形档强调色对它就掉到 3:1 以下。 */
+  --track: #eeeff0;
+  --fill-dim: rgba(15, 23, 42, 0.5); /* 压在轨道上 3.30:1 */
+  --bar-dim: rgba(214, 107, 72, 0.6); /* 普通柱对白 2.05:1，与暗色版对卡片的 2.10:1 同档 */
+  /* 热力五档对白底的明度单调递减（Y .88 → .71 → .50 → .32 → .25），相邻档 ΔE 15–34。 */
+  --heat-0: rgba(15, 23, 42, 0.06);
+  --heat-1: rgba(214, 107, 72, 0.28);
+  --heat-2: rgba(214, 107, 72, 0.55);
+  --heat-3: rgba(214, 107, 72, 0.85);
+  --leader-dots: rgba(15, 23, 42, 0.18);
+  --skel: rgba(15, 23, 42, 0.08);
+
+  color-scheme: light;
+}
+
+/* ------------------------------------------------------------------ */
 /* 底纹：24px 网格 + 顶部赤陶光晕（docs.html 的 body::before / body::after）           */
 /* 面板形态下 MUST 是 absolute：fixed 会脱离 `.rp` 铺满视口，把侧边栏与顶栏一起盖住。   */
 /* ------------------------------------------------------------------ */
@@ -86,8 +241,8 @@
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 .rp::after {
@@ -100,11 +255,8 @@
   height: 420px;
   z-index: 0;
   pointer-events: none;
-  background: radial-gradient(
-    ellipse 620px 300px at 50% 0%,
-    rgba(217, 119, 87, 0.08),
-    rgba(217, 119, 87, 0) 72%
-  );
+  /* 渐变按预乘 alpha 插值，淡出到 `transparent` 不会带出灰边。 */
+  background: radial-gradient(ellipse 620px 300px at 50% 0%, var(--glow), transparent 72%);
 }
 
 /* ------------------------------------------------------------------ */
@@ -216,13 +368,13 @@
   gap: 12px;
 }
 
-/* 分段：控件比页面底亮一档（深色下不再是「控件底≈页面底，全靠 1px 边框划界」的纸张隐喻）。 */
+/* 分段：控件比页面底亮一档（暗色是半透明 slate 叠在底上，亮色是白底 + 1px 边框）。 */
 .rp-seg {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 4px;
-  background: rgba(15, 23, 42, 0.72);
+  background: var(--seg-bg);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -247,18 +399,18 @@
     transform 0.2s ease;
 }
 .rp-seg button:hover {
-  color: #fff;
+  color: var(--strong);
 }
 .rp-seg button[aria-pressed='true'] {
   background: var(--accent);
-  color: #fff;
-  box-shadow: 0 6px 18px rgba(217, 119, 87, 0.32);
+  color: var(--on-accent);
+  box-shadow: 0 6px 18px var(--seg-glow);
 }
 .rp-seg button:active {
   transform: translateY(1px);
 }
 
-/* 快照 chip 与档位 chip（匿名档）共用一套：999px 圆角 + rgba(15,23,42,.6) 底 + 1px --line。
+/* 快照 chip 与档位 chip（匿名档）共用一套：999px 圆角 + --chip-bg 底 + 1px --line。
    档位 chip 在页头里挂的是 `.rp-chip`（见下方 `.rp-ctls .rp-chip`）。 */
 .rp-snap {
   display: inline-flex;
@@ -267,7 +419,7 @@
   padding: 8px 15px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--chip-bg);
   font-size: 13px;
   color: var(--muted);
 }
@@ -293,7 +445,7 @@
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  border: 1px solid rgba(74, 222, 128, 0.55);
+  border: 1px solid var(--pulse-ring);
   animation: breathe 2.4s ease-out infinite;
 }
 
@@ -327,7 +479,7 @@
   padding: 0 9px;
   border-radius: 8px;
   flex: none;
-  background: rgba(217, 119, 87, 0.14);
+  background: var(--accent-wash);
   color: var(--accent);
   font-family: var(--mono);
   font-size: 12px;
@@ -340,7 +492,7 @@
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.5px;
-  color: #fff;
+  color: var(--strong);
 }
 .rp-h2sub {
   margin-left: auto;
@@ -358,12 +510,15 @@
 
 /* ------------------------------------------------------------------ */
 /* 窗口（docs .code-block：38px 标题栏 + 三圆点）                          */
-/* 标题栏左侧是静态 mono 标签 `usage.board`（章名 MUST NOT 在这里印第二遍）。 */
+/* 标题栏是三个圆点 + 右侧状态小字 + 刷新按钮。左侧 MUST NOT 放任何文字标签：   */
+/* 章名已在章头印过，上一轮自造的 `usage.board` 在中文界面下就是一个没翻译的     */
+/* 英文词（2026-09-14 用户反馈「这里的国际化也有问题」），已删。                */
 /* ------------------------------------------------------------------ */
 .rp-win {
   background: var(--well);
   border: 1px solid var(--line);
   border-radius: 12px;
+  box-shadow: var(--card-shadow);
   overflow: hidden;
 }
 .rp-win-head {
@@ -382,34 +537,13 @@
   border-radius: 50%;
 }
 .rp-win-d1 {
-  background: #ef4444;
+  background: var(--dot-1);
 }
 .rp-win-d2 {
-  background: #eab308;
+  background: var(--dot-2);
 }
 .rp-win-d3 {
-  background: #22c55e;
-}
-.rp-win-title {
-  margin-left: 8px;
-  min-width: 0;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--cream);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* 标题栏右侧的状态小字：窄屏按宽度截断而不是整条隐藏。 */
-.rp-win-meta {
-  margin-left: auto;
-  min-width: 0;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  background: var(--dot-3);
 }
 /* 窗口内容区：榜单表自己在 `.rp-lb` 里横滚，这一层只兜住别的内容。 */
 .rp-win-body {
@@ -423,9 +557,9 @@
   padding: 18px;
 }
 
-/* 刷新按钮：坐在窗口标题栏右端。 */
+/* 刷新按钮：标题栏里除三个圆点外唯一的元素，margin-left:auto 把它推到右端。 */
 .rp-ghost {
-  margin-left: 12px;
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -445,8 +579,8 @@
 }
 .rp-ghost:hover:not(:disabled) {
   color: var(--accent);
-  border-color: rgba(217, 119, 87, 0.45);
-  background: rgba(217, 119, 87, 0.08);
+  border-color: var(--accent-edge);
+  background: var(--accent-tint);
 }
 .rp-ghost:disabled {
   opacity: 0.55;
@@ -477,6 +611,7 @@
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
+  box-shadow: var(--card-shadow);
   padding: 24px;
   transition:
     border-color 0.2s ease,
@@ -493,7 +628,7 @@
 .rp-trendwrap > div:hover,
 .rp-comp > div:hover,
 .rp-body > .rp-r:hover {
-  border-color: var(--accent-2);
+  border-color: var(--accent-2-fill);
   transform: translateY(-2px);
 }
 
@@ -514,7 +649,7 @@
   column-gap: 18px;
   min-width: 720px;
   padding: 12px 18px;
-  border-top: 1px solid rgba(30, 41, 59, 0.75);
+  border-top: 1px solid var(--row-line);
   transition: background-color 0.2s ease;
 }
 .rp-lb-head {
@@ -523,7 +658,7 @@
   padding-bottom: 10px;
   border-top: 0;
   border-bottom: 1px solid var(--line);
-  background: rgba(15, 23, 42, 0.55);
+  background: var(--thead-bg);
   font-family: var(--mono);
   font-size: 12.5px;
   font-weight: 600;
@@ -539,7 +674,7 @@
   padding-left: 34px;
 }
 .rp-lb-row:hover {
-  background: rgba(217, 119, 87, 0.04);
+  background: var(--row-hover);
 }
 .rp-lb-rank {
   font-family: var(--mono);
@@ -563,7 +698,7 @@
   color: var(--text);
 }
 .rp-lb-row.is-top .rp-lb-name {
-  color: #fff;
+  color: var(--strong);
 }
 /* 榜单 / 画像 / 领先者三处的名字共用这一条：只有名字被压缩并省略，头像与「你」标记不动。 */
 .rp-lb-nametext {
@@ -586,8 +721,9 @@
 /* 头像空圆用 --panel 底 + 1px --line 描边：匿名行就是一个不带任何字符的素色空圆。
    选择器写到三层是为了盖掉组件自带的 Tailwind `bg-primary-*` / `text-primary-*`——
    本文件由 LeaderboardView 引入，与 utilities 的先后顺序不保证，只能靠权重赢。
-   MUST NOT 用行悬停底色（rgba(217,119,87,.04) 压在 --well 上）做空圆底，那样悬停时空圆会消失；
-   --panel #0f172a 压在 --well #0d1117 上仍有一档可见差，悬停也不受影响。 */
+   MUST NOT 用行悬停底色（--row-hover 压在 --well 上）做空圆底，那样悬停时空圆会消失。
+   暗色：--panel #0f172a 压在 --well #0d1117 上仍有一档可见差；亮色：--panel gray-100 对行悬停底
+   （赤陶 .05 叠在白上）ΔE≈3.3、再加 gray-200 描边，两套下悬停都不受影响。 */
 .rp .rp-lb-name .rp-lb-avatar,
 .rp .rp-u .rp-lb-avatar,
 .rp .rp-who .rp-lb-avatar {
@@ -599,20 +735,20 @@
 }
 /* 本人行：淡赤陶底 + 左缘 3px 内阴影色条（内阴影不受横滚裁剪，伪元素会被裁掉）。 */
 .rp-lb-row.is-self {
-  background: rgba(217, 119, 87, 0.06);
+  background: var(--self-wash);
   box-shadow: inset 3px 0 0 var(--accent);
-  color: #fff;
+  color: var(--strong);
   font-weight: 600;
 }
 .rp-lb-row.is-self:hover {
-  background: rgba(217, 119, 87, 0.09);
+  background: var(--self-wash-hover);
 }
 .rp-lb-row.is-self .rp-lb-rank {
   color: var(--accent);
   font-weight: 700;
 }
 .rp-lb-row.is-self .rp-lb-name {
-  color: #fff;
+  color: var(--strong);
   font-weight: 700;
 }
 .rp-lb-num {
@@ -626,7 +762,7 @@
   color: var(--muted);
 }
 .rp-lb-row.is-self .rp-lb-num {
-  color: #fff;
+  color: var(--strong);
 }
 
 /* 条与百分比（榜单、领先者、模型三处共用同一套 track / fill） */
@@ -634,21 +770,21 @@
   display: block;
   height: 8px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--track);
   overflow: hidden;
 }
 .rp-bar-fill {
   display: block;
   height: 100%;
   border-radius: 999px;
-  /* 次级填充统一 rgba(148,163,184,.65)：压在 track（.12 灰压在卡片底/窗口底）上是
-     3.5:1（卡片）与 3.4:1（窗口），过非文本 3:1；原型的 .42 只有 2.2:1。 */
-  background: rgba(148, 163, 184, 0.65);
+  /* 次级填充统一 --fill-dim，压在 --track 上要过非文本 3:1：暗色是 3.5:1（卡片）与 3.4:1
+     （窗口），原型的 .42 只有 2.2:1；亮色是 3.30:1。 */
+  background: var(--fill-dim);
   transform-origin: left center;
 }
 .rp-lb-row.is-top .rp-bar-fill,
 .rp-lb-row.is-self .rp-bar-fill {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background: linear-gradient(90deg, var(--accent-fill), var(--accent-2-fill));
 }
 .rp-barwrap {
   display: flex;
@@ -710,7 +846,10 @@
   font-weight: 700;
   line-height: 1;
   letter-spacing: -3px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  /* 名次是 64–80px 粗体，落在 WCAG 大字档（门槛 3:1），渐变两端取图形档：亮色下两端对白
+     3.47:1，仍是赤陶→琥珀；取文字档（≥5:1）时两端都压成砖褐色，渐变看不出来。这是亮色下
+     「文字 ≥4.5:1」的唯一例外（见亮色块表头）；两端亮度相同，亮色这道渐变只靠色相。暗色两档同值。 */
+  background: linear-gradient(90deg, var(--accent-fill), var(--accent-2-fill));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -725,8 +864,8 @@
   margin-top: 18px;
   padding: 12px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(217, 119, 87, 0.28);
-  background: rgba(217, 119, 87, 0.07);
+  border: 1px solid var(--note-line);
+  background: var(--note-bg);
   font-size: 14px;
   color: var(--cream);
 }
@@ -756,7 +895,7 @@
   padding: 6px 11px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(2, 6, 23, 0.5);
+  background: var(--chip-inset);
   font-family: var(--mono);
   font-size: 12.5px;
   color: var(--text);
@@ -768,14 +907,14 @@
   color: var(--cream);
 }
 .rp-chip.is-lead {
-  border-color: rgba(217, 119, 87, 0.45);
-  background: rgba(217, 119, 87, 0.08);
+  border-color: var(--accent-edge);
+  background: var(--accent-tint);
 }
 /* 页头控制条上的档位 chip（只在匿名档出现）与快照 chip 是同一副形状，
    只是文案是中文，走 --sans 而不是 mono。 */
 .rp-ctls .rp-chip {
   padding: 8px 15px;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--chip-bg);
   font-family: var(--sans);
   font-size: 13px;
   color: var(--muted);
@@ -800,7 +939,8 @@
 }
 .rp-chart .rp-chart-area {
   fill: var(--accent);
-  /* 深底上的面积填充要比亮底厚才看得出来（亮底是 .08/.09）。 */
+  /* .16 在两套底上观感相当（暗：赤陶叠卡片 ΔE≈12.7；亮：加深赤陶叠白 ΔE≈11.2），不随主题变。
+     亮底上的旧报表皮肤用过 .08/.09，那是按浅赤陶调的，加深后的赤陶用不着那么薄。 */
   opacity: 0.16;
   stroke: none;
 }
@@ -871,7 +1011,7 @@
   position: relative;
   height: 8px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--track);
   overflow: hidden;
 }
 .rp-vs-me i,
@@ -882,12 +1022,13 @@
   transform-origin: left center;
 }
 .rp-vs-me i {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background: linear-gradient(90deg, var(--accent-fill), var(--accent-2-fill));
 }
-/* 对照条与轨道要过 3:1。轨道是 rgba(148,163,184,.12) 压在卡片底上（#192033，L=.015）：
-   同色 .42 只有 2.2:1、.55 是 2.9:1，.65 到 3.5:1 才够，比「我」那一根仍明显弱。 */
+/* 对照条与轨道要过 3:1。暗色轨道是 slate-400 .12 压在卡片底上（#192033，L=.015）：同色 .42
+   只有 2.2:1、.55 是 2.9:1，.65 到 3.5:1 才够；亮色轨道是不透明的 #eeeff0（slate-900 .07 叠白
+   的结果），--fill-dim（slate-900 .5）压上去 3.30:1。两套下都比「我」那一根明显弱。 */
 .rp-vs-all i {
-  background: rgba(148, 163, 184, 0.65);
+  background: var(--fill-dim);
 }
 .rp-vs-val {
   text-align: right;
@@ -915,7 +1056,7 @@
   margin-top: 14px;
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
+  color: var(--strong);
 }
 /* 只有 tokens 领先者那一行在名字前挂头像，flex 只给它：
    `.rp-mini .rp-who` 没有头像，保持原来的行内文本形态。 */
@@ -934,7 +1075,7 @@
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -1.6px;
-  color: #fff;
+  color: var(--strong);
 }
 .rp-big small {
   font-size: 21px;
@@ -976,18 +1117,18 @@
   grid-column: 1 / -1;
   height: 8px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--track);
   overflow: hidden;
 }
 .rp-cmp-track i {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.65);
+  background: var(--fill-dim);
   transform-origin: left center;
 }
 .rp-cmp-row.is-lead .rp-cmp-track i {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background: linear-gradient(90deg, var(--accent-fill), var(--accent-2-fill));
 }
 .rp-say {
   margin-top: 6px;
@@ -1025,7 +1166,7 @@
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -1px;
-  color: #fff;
+  color: var(--strong);
 }
 .rp-mini-v small {
   font-size: 16px;
@@ -1059,7 +1200,7 @@
 .rp-dots {
   flex: 1 1 auto;
   min-width: 14px;
-  border-bottom: 1px dotted rgba(148, 163, 184, 0.2);
+  border-bottom: 1px dotted var(--leader-dots);
   transform: translateY(-4px);
 }
 .rp-ll .rp-ll-v {
@@ -1070,13 +1211,14 @@
   color: var(--cream);
   white-space: nowrap;
 }
-/* 「你」徽标：不再是白字压赤陶（3.12:1），改成淡赤陶底 + 赤陶字（5.22:1）。 */
+/* 「你」徽标：不再是白字压赤陶（3.12:1），改成淡赤陶底 + 赤陶字（暗色 5.22:1）。亮色下赤陶字
+   加深、底色 tint 调薄，最差的一处（本人行悬停时，两层 tint 叠在白上）仍有 4.75:1。 */
 .rp-you {
   display: inline-block;
   margin-left: 7px;
   padding: 2px 7px;
   border-radius: 8px;
-  background: rgba(217, 119, 87, 0.14);
+  background: var(--accent-wash);
   color: var(--accent);
   font-size: 12px;
   font-weight: 700;
@@ -1108,7 +1250,7 @@
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -1.2px;
-  color: #fff;
+  color: var(--strong);
 }
 .rp-sup-v small {
   font-family: var(--sans);
@@ -1228,9 +1370,9 @@
   align-items: center;
   gap: 5px;
   padding: 2px 7px;
-  border: 1px solid rgba(30, 41, 59, 0.9);
+  border: 1px solid var(--chip-inset-line);
   border-radius: 999px;
-  background: rgba(2, 6, 23, 0.5);
+  background: var(--chip-inset);
   font-family: var(--mono);
   font-size: 12px;
   color: var(--text);
@@ -1252,7 +1394,7 @@
   height: 16px;
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--track);
 }
 .rp-stackbar i {
   display: block;
@@ -1260,16 +1402,16 @@
   transform-origin: left center;
 }
 .rp-sw1 {
-  background: var(--accent);
+  background: var(--accent-fill);
 }
 .rp-sw2 {
   background: var(--blue);
 }
 .rp-sw3 {
-  background: var(--accent-2);
+  background: var(--accent-2-fill);
 }
 .rp-sw4 {
-  background: #64748b;
+  background: var(--sw4);
 }
 .rp-legend {
   display: flex;
@@ -1315,7 +1457,7 @@
   height: 28px;
   /* 热力格是圆角的唯一例外：8px 在小格上会读成圆点。 */
   border-radius: 4px;
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--heat-0);
 }
 .rp-heat-ticks {
   position: relative;
@@ -1376,7 +1518,7 @@
   aspect-ratio: 1;
   max-height: 28px;
   border-radius: 4px;
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--heat-0);
 }
 .rp-hourscale {
   display: grid;
@@ -1402,27 +1544,27 @@
   width: 12px;
   height: 12px;
   border-radius: 4px;
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--heat-0);
 }
 .rp-heat30 i.rp-lv1,
 .rp-week-row i.rp-lv1,
 .rp-scale-key i.rp-lv1 {
-  background: rgba(217, 119, 87, 0.24);
+  background: var(--heat-1);
 }
 .rp-heat30 i.rp-lv2,
 .rp-week-row i.rp-lv2,
 .rp-scale-key i.rp-lv2 {
-  background: rgba(217, 119, 87, 0.46);
+  background: var(--heat-2);
 }
 .rp-heat30 i.rp-lv3,
 .rp-week-row i.rp-lv3,
 .rp-scale-key i.rp-lv3 {
-  background: rgba(217, 119, 87, 0.72);
+  background: var(--heat-3);
 }
 .rp-heat30 i.rp-lv4,
 .rp-week-row i.rp-lv4,
 .rp-scale-key i.rp-lv4 {
-  background: var(--accent-2);
+  background: var(--accent-2-fill);
 }
 /* 今日 24 小时柱 */
 .rp-hbars {
@@ -1436,15 +1578,15 @@
 .rp-hbars .rp-b {
   min-height: 2px;
   border-radius: 8px 8px 0 0;
-  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  background: linear-gradient(180deg, var(--accent-2-fill), var(--accent-fill));
   transform-origin: bottom center;
 }
 .rp-hbars .rp-b.is-zero {
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--track);
   height: 2px !important;
 }
 .rp-hbars .rp-b.is-peak {
-  background: linear-gradient(180deg, #fff, var(--accent-2));
+  background: linear-gradient(180deg, var(--peak-top), var(--accent-2-fill));
 }
 .rp-hticks {
   display: grid;
@@ -1520,14 +1662,14 @@
   flex: 1 1 auto;
   min-height: 2px;
   border-radius: 8px 8px 0 0;
-  background: rgba(217, 119, 87, 0.45);
+  background: var(--bar-dim);
   transform-origin: bottom center;
 }
 .rp-bars .rp-col.is-hot .rp-b {
-  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  background: linear-gradient(180deg, var(--accent-2-fill), var(--accent-fill));
 }
 .rp-bars .rp-col.is-peak .rp-b {
-  background: linear-gradient(180deg, #fff, var(--accent-2));
+  background: linear-gradient(180deg, var(--peak-top), var(--accent-2-fill));
 }
 .rp-bars .rp-col.is-hot .rp-v {
   color: var(--cream);
@@ -1573,7 +1715,7 @@
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -1px;
-  color: #fff;
+  color: var(--strong);
 }
 .rp-monthbox .rp-month-d {
   margin-top: 10px;
@@ -1615,10 +1757,10 @@
 .rp-banner {
   margin-top: 16px;
   padding: 14px 16px;
-  border: 1px solid rgba(217, 119, 87, 0.28);
+  border: 1px solid var(--note-line);
   border-left-width: 3px;
   border-radius: 8px;
-  background: rgba(217, 119, 87, 0.07);
+  background: var(--note-bg);
 }
 .rp-banner-title {
   font-size: 14px;
@@ -1640,7 +1782,7 @@
 .rp-skel {
   height: 14px;
   border-radius: 8px;
-  background: rgba(148, 163, 184, 0.1);
+  background: var(--skel);
 }
 .rp-skel + .rp-skel {
   margin-top: 10px;
@@ -1652,7 +1794,7 @@
   padding: 8px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--chip-bg);
   font-size: 14px;
   color: var(--text);
   transition:
@@ -1662,8 +1804,8 @@
 }
 .rp-btn:hover {
   color: var(--accent);
-  border-color: rgba(217, 119, 87, 0.45);
-  background: rgba(217, 119, 87, 0.08);
+  border-color: var(--accent-edge);
+  background: var(--accent-tint);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1696,7 +1838,7 @@
 .rp-cp {
   margin-top: 8px;
 }
-/* 版权行坐在 --bg #020617 上（与站点底色同值），用 --muted（7.9:1）。 */
+/* 版权行坐在 --bg 上（两套下都与站点 main 底同值），用 --muted：暗色 7.9:1，亮色 7.23:1。 */
 .rp-cp {
   font-size: 13px;
   color: var(--muted);
@@ -1871,14 +2013,6 @@
     padding: 7px 12px;
     font-size: 12.5px;
   }
-  .rp-win-meta {
-    font-size: 12px;
-  }
-  /* 标题栏右侧的状态小字按段收起，而不是整条打省略号（截出来的是半个单词）：
-     这一档先丢「· top 50」——「前 50 名」章名里已经写着。 */
-  .rp-win-meta-top {
-    display: none;
-  }
   .rp-heat30 i {
     height: 24px;
   }
@@ -1900,10 +2034,6 @@
 }
 
 @media (max-width: 560px) {
-  /* 再丢「· tokens」，只剩 window：指标在页头的分段上是高亮着的，这里不重复。 */
-  .rp-win-meta-metric {
-    display: none;
-  }
   .rp-lead-grid,
   .rp-sup {
     grid-template-columns: minmax(0, 1fr);
@@ -1988,12 +2118,7 @@
     padding: 0 10px 0 12px;
     gap: 7px;
   }
-  .rp-win-title {
-    margin-left: 6px;
-    font-size: 12.5px;
-  }
   .rp-ghost {
-    margin-left: 8px;
     padding: 5px 9px;
   }
   .rp-lb-row {
@@ -2039,12 +2164,8 @@
    `appStore.sidebarCollapsed` 在 `.rp` 上挂 `.is-shell-collapsed`，第二支排除掉它。 */
 @media (max-width: 810px) {
   .rp-lb {
-    -webkit-mask-image: linear-gradient(
-      90deg,
-      rgba(2, 6, 23, 1) calc(100% - 14px),
-      rgba(2, 6, 23, 0)
-    );
-    mask-image: linear-gradient(90deg, rgba(2, 6, 23, 1) calc(100% - 14px), rgba(2, 6, 23, 0));
+    -webkit-mask-image: linear-gradient(90deg, var(--mask-ink) calc(100% - 14px), transparent);
+    mask-image: linear-gradient(90deg, var(--mask-ink) calc(100% - 14px), transparent);
   }
   .rp-lb-row {
     padding-right: 30px;
@@ -2053,12 +2174,8 @@
 
 @media (min-width: 1024px) and (max-width: 1090px) {
   .rp:not(.is-shell-collapsed) .rp-lb {
-    -webkit-mask-image: linear-gradient(
-      90deg,
-      rgba(2, 6, 23, 1) calc(100% - 14px),
-      rgba(2, 6, 23, 0)
-    );
-    mask-image: linear-gradient(90deg, rgba(2, 6, 23, 1) calc(100% - 14px), rgba(2, 6, 23, 0));
+    -webkit-mask-image: linear-gradient(90deg, var(--mask-ink) calc(100% - 14px), transparent);
+    mask-image: linear-gradient(90deg, var(--mask-ink) calc(100% - 14px), transparent);
   }
   .rp:not(.is-shell-collapsed) .rp-lb-row {
     padding-right: 30px;

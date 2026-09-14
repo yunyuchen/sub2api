@@ -971,7 +971,7 @@ export default {
     },
     metrics: {
       label: '排名指标',
-      totalTokens: '总 tokens',
+      totalTokens: '总 Token',
       successfulRequests: '成功请求数',
       cost: '消费金额',
     },
@@ -982,10 +982,13 @@ export default {
     // `brand`、`backToDashboard` 与三个主题开关键都已删除（零引用）。
     masthead: {
       // 档位 chip 只在匿名档出现；实名档是常态，不挂任何档位 chip。
+      // 快照 chip 与页脚 colophon 共用的标签；快照还没生成时显示 snapshotPending。
+      snapshot: '快照',
+      snapshotPending: '待生成',
       modeAnonymous: '匿名档',
       // 「距下一次重建还剩几分钟」，按重建周期现算；快照未生成或已陈旧时整段不渲染。
-      rebuildIn: '（{minutes}m 后重建）',
-      metricTokens: 'tokens',
+      rebuildIn: '（{minutes} 分钟后重建）',
+      metricTokens: 'Token',
       metricRequests: '请求数',
       metricCost: '金额',
     },
@@ -1143,7 +1146,7 @@ export default {
       shareOfSite: '占全站 {percent}%',
       tiedWithSecond: '与第 2 名并列',
       siteRows: {
-        totalTokens: '总 tokens',
+        totalTokens: '总 Token',
         successfulRequests: '成功请求',
         participants: '活跃人数',
         peakHour: '峰值时段',
@@ -1165,7 +1168,7 @@ export default {
       rank: '名次',
       user: '用户',
       relativeToTop: '相对第一名',
-      totalTokens: '总 tokens',
+      totalTokens: '总 Token',
       // 表头与「你的位置」那两个小标签用短词，Metric 分段仍用完整的「成功请求数」。
       successfulRequestsShort: '成功请求',
       // 金额列：实名档与 Preview 下是绝对金额（USD），匿名档他人行是相对第一名的百分比。
@@ -1224,7 +1227,7 @@ export default {
       },
     },
     // 页脚是一行 colophon：`snapshot HH:MM · 每 5 分钟重建 · <站点时区> · 不展示邮箱地址`。
-    // `snapshot` 与时区名是字面量，不进 i18n（design D4）；`COLOPHON` 字样、
+    // `snapshot` 与时区名是字面量，不进 i18n（design D23）；`COLOPHON` 字样、
     // 「一周从周一起算」与 `successful_requests = actual_cost > 0` 已删。
     // 金额已是第三个 Metric（与 tokens 同一套档位规则），这一段因此只剩邮箱那一句；
     // 键名 `noMoney` 是 LbFooter.vue 引用的既有键，保持不变。

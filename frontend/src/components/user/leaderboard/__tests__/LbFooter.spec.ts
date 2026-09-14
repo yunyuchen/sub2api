@@ -4,6 +4,9 @@ import { mount } from '@vue/test-utils'
 import LbFooter from '../LbFooter.vue'
 
 const messages: Record<string, string> = {
+  // 快照标签首字母大写：组件若写死小写 `snapshot`，这里的断言会失败，证明它走的是 i18n。
+  'leaderboard.masthead.snapshot': 'Snapshot',
+  'leaderboard.masthead.snapshotPending': 'Pending',
   'leaderboard.footer.rebuild': 'rebuild every 5m',
   'leaderboard.footer.noMoney': 'no cost · no email',
   'leaderboard.footer.copyright': '© {year} {site}. All rights reserved.',
@@ -42,7 +45,7 @@ describe('LbFooter', () => {
     expect(wrapper.findAll('.rp-line')).toHaveLength(1)
     // 四段之间的空隙由 flex gap 给，文本节点之间没有空格
     expect(squash(wrapper.find('.rp-line').text())).toBe(
-      'snapshot 10:00·rebuild every 5m·Asia/Shanghai·no cost · no email',
+      'Snapshot 10:00·rebuild every 5m·Asia/Shanghai·no cost · no email',
     )
   })
 
@@ -77,14 +80,14 @@ describe('LbFooter', () => {
 
   // 时分按站点时区渲染：同一行里已经写着时区名，用浏览器本地时区会与它自相矛盾。
   it('formats the snapshot time in the site timezone, not the browser one', () => {
-    expect(mountFooter('2026-09-11T02:00:00Z', 'UTC').text()).toContain('snapshot 02:00')
+    expect(mountFooter('2026-09-11T02:00:00Z', 'UTC').text()).toContain('Snapshot 02:00')
     expect(mountFooter('2026-09-11T02:00:00Z', 'America/New_York').text()).toContain(
-      'snapshot 22:00',
+      'Snapshot 22:00',
     )
   })
 
-  // 快照尚未生成时没有时间可写，换成字面量 `pending` 而不是留空。
-  it('falls back to a pending literal when the snapshot has no timestamp', () => {
-    expect(mountFooter(null).text()).toContain('snapshot pending')
+  // 快照尚未生成时没有时间可写，换成 i18n 的「未生成」（snapshotPending）而不是留空。
+  it('falls back to the pending label when the snapshot has no timestamp', () => {
+    expect(mountFooter(null).text()).toContain('Snapshot Pending')
   })
 })

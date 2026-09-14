@@ -3,10 +3,11 @@
     <!-- 应用内页：套站点的 `AppLayout` 外壳，侧边栏与顶栏由外壳提供，页面本身 MUST NOT 再
          另起一条站点导航，也 MUST NOT 提供「返回仪表盘」这类页内跳转入口——侧边栏就是导航
          （2026-09-14 用户指令：「做成不用跳转的内页」）。
-         `.rp` 不再是视口根节点，而是浮在站点底色上的一块深色内容面板，视觉 token 的作用域
-         仍然是它这一层（design D15/D16/D23）。spool 内页皮肤是**深色专属**：`.rp` 上直接定义
-         深色变量，页面不提供主题切换，也没有 `.dark` 修饰类；站点自己的主题机制
-         （html.dark + localStorage['theme']）MUST NOT 被本页读写。 -->
+         `.rp` 不再是视口根节点，而是浮在站点底色上的一块内容面板，视觉 token 的作用域
+         仍然是它这一层（design D15/D16/D23）。明暗跟随站点：暗色变量定义在 `.rp` 上，亮色由
+         样式表里的 `html:not(.dark) .rp` 覆写，全部发生在样式层——这里 MUST NOT 有任何主题
+         状态（没有 isDark、没有主题修饰 class、没有页内主题开关，开关归侧边栏），站点自己的
+         主题机制（html.dark + localStorage['theme']）MUST NOT 被本页读写。 -->
     <!-- `.is-shell-collapsed` 只喂给榜单横滚渐隐那条媒体查询：外壳侧边栏折叠成 72px 后，
          ≥1024 的表格再也不会溢出，那条渐隐 MUST NOT 出现（推导见 leaderboard-tokens.css
          里该 @media 上方的注释）。CSS 读不到 store 状态，只能由这里挂个修饰类。 -->
@@ -42,25 +43,14 @@
           :title="t('leaderboard.chapters.01.name')"
         >
           <div class="rp-win">
+            <!-- 标题栏只有三个圆点 + 刷新按钮，MUST NOT 放任何文字：章名已在正上方的章头印过，
+                 当前窗口与指标在页头控制条上高亮着，「前 50 名」就在章名里。之前放过的 `usage.board`
+                 是自造的英文、`today · tokens · top 50` 状态小字与上面三处重复，都已按用户反馈删掉
+                 （2026-09-14「这里的国际化也有问题」「不够紧凑」）。 -->
             <div class="rp-win-head">
               <span class="rp-win-dot rp-win-d1" aria-hidden="true"></span>
               <span class="rp-win-dot rp-win-d2" aria-hidden="true"></span>
               <span class="rp-win-dot rp-win-d3" aria-hidden="true"></span>
-              <!-- 窗口标题栏左侧是一个静态 mono 标签，MUST NOT 再印一遍章名：
-                   「排行榜（前 50 名）」已经在上方 01 章的章头里印过一次，标题栏里重复第二遍
-                   是页顶最显眼的一处冗余。`usage.board` 与右侧状态小字分工——左边说「这是什么」
-                   （用量数据的榜单视图），右边说「是哪一片」（window · metric · top N）；
-                   两边都是技术字面量，不进 i18n（design D4）。 -->
-              <span class="rp-win-title">usage.board</span>
-              <!-- 状态小字三段都是技术字面量（window · metric · top N），不进 i18n（design D4）。
-                   窄屏按段收起而不是整条截断：先丢「· top 50」，再丢「· tokens」，最后只剩
-                   window（原型 final/build.py 的 .lb-wsx / .lb-wsx2 是同一套做法）。三段拼起来
-                   的文本不变，`leaderboard-board-meta` 的文本断言照旧成立。 -->
-              <span class="rp-win-meta" data-testid="leaderboard-board-meta"
-                >{{ activeWindow
-                }}<span class="rp-win-meta-metric"> · {{ metricLiteral }}</span
-                ><span class="rp-win-meta-top"> · top {{ BOARD_TOP_N }}</span></span
-              >
               <button
                 type="button"
                 class="rp-ghost"
@@ -242,17 +232,6 @@ const siteName = computed(() => appStore.siteName || 'spool')
 
 /** 外壳侧边栏的折叠态：唯一消费者是榜单横滚渐隐的宽度推导（见 `.rp` 的修饰类注释）。 */
 const shellCollapsed = computed(() => Boolean(appStore.sidebarCollapsed))
-
-/** 榜单只取前 50 名，与后端口径一致；窗口标题栏那句状态小字用它。 */
-const BOARD_TOP_N = 50
-/** 状态小字里的指标字面量：技术词，与分段上的短标签同源但不走 i18n（design D4）。 */
-const METRIC_LITERALS: Record<LeaderboardMetric, string> = {
-  total_tokens: 'tokens',
-  successful_requests: 'requests',
-  cost: 'cost',
-}
-/** `today · tokens · top 50` 的中间一段：技术字面量，不进 i18n。窄屏按段收起，见模板。 */
-const metricLiteral = computed(() => METRIC_LITERALS[activeMetric.value])
 
 /** 还没拿到响应时页头上的 tz 先留一个占位符，MUST NOT 猜一个时区名。 */
 const siteTimezoneFallback = '...'
