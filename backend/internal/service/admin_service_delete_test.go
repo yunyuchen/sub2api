@@ -160,6 +160,10 @@ func (s *userRepoStub) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []in
 	return result, nil
 }
 
+func (s *userRepoStub) GetUserAvatarThumbsByUserIDs(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
+}
+
 func (s *userRepoStub) UpsertUserAvatar(ctx context.Context, userID int64, input UpsertUserAvatarInput) (*UserAvatar, error) {
 	panic("unexpected UpsertUserAvatar call")
 }

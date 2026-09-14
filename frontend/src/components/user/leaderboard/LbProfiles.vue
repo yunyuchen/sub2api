@@ -12,7 +12,17 @@
         :style="{ '--i': Math.floor(index / CASCADE_ROWS_PER_STEP) }"
         data-testid="leaderboard-profiles-row"
       >
-        <span class="rp-u" :class="isSelf(row) ? 'is-self' : ''">{{ displayName(row) }}</span>
+        <!-- 头像与榜单本体同一套规则（design D25）：匿名行传空名 + 空地址 → 素色空圆。 -->
+        <span class="rp-u" :class="isSelf(row) ? 'is-self' : ''">
+          <UserAvatar
+            size="xs"
+            class="rp-lb-avatar"
+            :name="isAnonymousRow(row) ? '' : displayName(row)"
+            :avatar-url="avatarUrl(row)"
+            data-testid="leaderboard-avatar"
+          />
+          <span class="rp-lb-nametext">{{ displayName(row) }}</span>
+        </span>
         <span class="rp-cs">
           <span
             v-for="model in row.models"
@@ -30,6 +40,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import { useLeaderboardDisplayName } from './displayName'
 import type { LeaderboardProfile, LeaderboardProfileModel } from '@/api/leaderboard'
 
@@ -50,8 +61,8 @@ const rows = computed(() => (props.profiles ?? []).slice(0, PROFILE_ROWS_LIMIT))
  */
 const CASCADE_ROWS_PER_STEP = 4
 
-/** 展示名与榜单条目、Highlights、Extremes 完全同一套规则，收敛在 `displayName.ts`。 */
-const { displayName } = useLeaderboardDisplayName()
+/** 展示名与头像与榜单条目、Highlights、Extremes 完全同一套规则，收敛在 `displayName.ts`。 */
+const { displayName, avatarUrl } = useLeaderboardDisplayName()
 
 /**
  * 后端把占比向下取整成整数，不足 1% 会变成 0：这种模型确实被调过，
@@ -64,5 +75,10 @@ function shareLabel(model: LeaderboardProfileModel): string {
 /** 本人那一行用强调色，与榜单里的本人行是同一条线索。 */
 function isSelf(profile: LeaderboardProfile): boolean {
   return profile.identity.kind === 'self'
+}
+
+/** 匿名行：名字是「第 N 位」假名，头像圆圈里 MUST NOT 出现任何字符。 */
+function isAnonymousRow(profile: LeaderboardProfile): boolean {
+  return profile.identity.kind !== 'self' && profile.identity.kind !== 'named'
 }
 </script>

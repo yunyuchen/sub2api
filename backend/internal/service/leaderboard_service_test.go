@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -175,9 +176,16 @@ type fakeLeaderboardUserRepo struct {
 	users map[int64]User
 	err   error
 
-	calls    int
-	lastIDs  []int64
-	idsCount int
+	calls      int
+	lastIDs    []int64
+	idsCount   int
+	avatars    map[int64]*UserAvatar
+	avatarsErr error
+
+	// avatarCalls / lastAvatarIDs 钉住 design D25 的两条：anonymous 档整批不查头像，
+	// named 档也只查一次、且与 GetByIDs 同一批 id。
+	avatarCalls   int
+	lastAvatarIDs []int64
 }
 
 func (r *fakeLeaderboardUserRepo) GetByIDs(_ context.Context, ids []int64) ([]User, error) {
@@ -191,6 +199,22 @@ func (r *fakeLeaderboardUserRepo) GetByIDs(_ context.Context, ids []int64) ([]Us
 	for _, id := range ids {
 		if u, ok := r.users[id]; ok {
 			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeLeaderboardUserRepo) GetUserAvatarThumbsByUserIDs(_ context.Context, userIDs []int64) (map[int64]string, error) {
+	r.avatarCalls++
+	r.lastAvatarIDs = append([]int64(nil), userIDs...)
+	if r.avatarsErr != nil {
+		return nil, r.avatarsErr
+	}
+	out := make(map[int64]string, len(userIDs))
+	for _, id := range userIDs {
+		// 与真实仓储同口径：只有带小图的行才出现（remote_url / 未回填的行 ThumbURL 为空）。
+		if avatar, ok := r.avatars[id]; ok && avatar != nil && avatar.ThumbURL != "" {
+			out[id] = avatar.ThumbURL
 		}
 	}
 	return out, nil
@@ -1910,4 +1934,145 @@ func TestLeaderboardService_QueryViewerWithoutRepository(t *testing.T) {
 	require.NotNil(t, view.Viewer)
 	require.Empty(t, view.Viewer.RankHistory)
 	require.Empty(t, view.Viewer.Models)
+}
+
+// leaderboardAvatarUsers 是头像用例共用的五人（压在 anonymous 档的人数门槛之上，
+// 两档都不会被抑制）：1 实名且有小图、2 实名但只有外链头像（ThumbURL 为空）、
+// 3 未开启实名、4 是查看者自己且也有小图（本人行 MUST NOT 带头像）、5 没有头像。
+func leaderboardAvatarUsers() *fakeLeaderboardUserRepo {
+	named := activeLeaderboardUser(1, "alice")
+	named.LeaderboardNamedParticipation = true
+	remoteOnly := activeLeaderboardUser(2, "bob")
+	remoteOnly.LeaderboardNamedParticipation = true
+	notNamed := activeLeaderboardUser(3, "carol")
+	notNamed.LeaderboardNamedParticipation = true
+	viewer := activeLeaderboardUser(4, "dave")
+	viewer.LeaderboardNamedParticipation = true
+	plain := activeLeaderboardUser(5, "erin")
+	plain.LeaderboardNamedParticipation = true
+
+	repo := leaderboardUsers(named, remoteOnly, notNamed, viewer, plain)
+	repo.avatars = map[int64]*UserAvatar{
+		1: {StorageProvider: "inline", URL: "data:image/png;base64,AAA", ThumbURL: leaderboardTestThumb},
+		2: {StorageProvider: "remote_url", URL: "https://cdn.example.com/bob.png"},
+		4: {StorageProvider: "inline", URL: "data:image/png;base64,DDD", ThumbURL: "data:image/jpeg;base64,SELF"},
+	}
+	return repo
+}
+
+const leaderboardTestThumb = "data:image/jpeg;base64,QUxJQ0U="
+
+func leaderboardAvatarCache() *fakeLeaderboardSnapshotCache {
+	return &fakeLeaderboardSnapshotCache{entries: []LeaderboardUserMetrics{
+		metricsRow(1, 100, 10),
+		metricsRow(2, 90, 9),
+		metricsRow(3, 80, 8),
+		metricsRow(4, 70, 7),
+		metricsRow(5, 60, 6),
+	}}
+}
+
+// 12.1 named 档：只有 named 形态的他人行带 avatar_url，且头像查询与 users 同一批 id、只发一次。
+func TestLeaderboardService_QueryNamedAttachesAvatarThumb(t *testing.T) {
+	repo := leaderboardAvatarUsers()
+	// carol（user 3）开了实名但 username 合格，这里改成邮箱形态以外的另一条回退路径：
+	// 直接关掉实名参与，身份因此落回 anonymous。
+	user := repo.users[3]
+	user.LeaderboardNamedParticipation = false
+	repo.users[3] = user
+
+	view, err := newTestLeaderboardService(leaderboardAvatarCache(), repo).Query(
+		context.Background(), 4, LeaderboardWindowToday, LeaderboardMetricTotalTokens, LeaderboardModeNamed, false)
+	require.NoError(t, err)
+	require.Len(t, view.Entries, 5)
+
+	require.Equal(t, LeaderboardIdentityNamed, view.Entries[0].Identity.Kind)
+	require.Equal(t, leaderboardTestThumb, view.Entries[0].Identity.AvatarURL)
+
+	require.Equal(t, LeaderboardIdentityNamed, view.Entries[1].Identity.Kind)
+	require.Empty(t, view.Entries[1].Identity.AvatarURL, "只有外链头像（没有小图）的行 MUST NOT 带 avatar_url")
+
+	require.Equal(t, LeaderboardIdentityAnonymous, view.Entries[2].Identity.Kind)
+	require.Empty(t, view.Entries[2].Identity.AvatarURL, "anonymous 行带头像等于去匿名")
+
+	require.Equal(t, LeaderboardIdentitySelf, view.Entries[3].Identity.Kind)
+	require.Empty(t, view.Entries[3].Identity.AvatarURL, "本人头像由前端从个人资料取，后端 MUST NOT 下发")
+
+	require.Equal(t, LeaderboardIdentityNamed, view.Entries[4].Identity.Kind)
+	require.Empty(t, view.Entries[4].Identity.AvatarURL, "没有头像的 named 行不带这个字段，前端回退首字母")
+
+	require.Equal(t, 1, repo.avatarCalls, "头像只查一次")
+	require.Equal(t, repo.lastIDs, repo.lastAvatarIDs, "与 GetByIDs 同一批 id")
+
+	payload, err := json.Marshal(view)
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(string(payload), `"avatar_url"`), "omitempty：只有那一行带这个字段")
+	require.NotContains(t, string(payload), "data:image/jpeg;base64,SELF")
+}
+
+// 12.2 anonymous 档 MUST NOT 发起头像查询：他人行本来就不带头像，多查一次既无用又是去匿名的入口。
+func TestLeaderboardService_QueryAnonymousSkipsAvatarLookup(t *testing.T) {
+	repo := leaderboardAvatarUsers()
+
+	view, err := newTestLeaderboardService(leaderboardAvatarCache(), repo).Query(
+		context.Background(), 4, LeaderboardWindowToday, LeaderboardMetricTotalTokens, LeaderboardModeAnonymous, false)
+	require.NoError(t, err)
+	require.Len(t, view.Entries, 5)
+	require.Equal(t, 0, repo.avatarCalls, "anonymous 档整批不查头像")
+
+	for i := range view.Entries {
+		require.Emptyf(t, view.Entries[i].Identity.AvatarURL, "entries[%d]", i)
+	}
+	payload, err := json.Marshal(view)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "avatar_url")
+}
+
+// 12.3 头像查询失败只降级这一个字段：榜单照常下发。
+func TestLeaderboardService_QueryAvatarLookupErrorDegrades(t *testing.T) {
+	repo := leaderboardAvatarUsers()
+	repo.avatarsErr = errors.New("boom")
+
+	view, err := newTestLeaderboardService(leaderboardAvatarCache(), repo).Query(
+		context.Background(), 4, LeaderboardWindowToday, LeaderboardMetricTotalTokens, LeaderboardModeNamed, false)
+	require.NoError(t, err)
+	require.Len(t, view.Entries, 5)
+	require.Equal(t, LeaderboardIdentityNamed, view.Entries[0].Identity.Kind)
+	require.Equal(t, "alice", view.Entries[0].Identity.Username)
+	require.NotNil(t, view.Entries[0].TotalTokens)
+
+	for i := range view.Entries {
+		require.Emptyf(t, view.Entries[i].Identity.AvatarURL, "entries[%d]", i)
+	}
+}
+
+// 12.4 Highlights 与 Profiles 的身份从 slots 取，因此自动带上同一个 avatar_url，
+// 且 MUST NOT 再查一次头像。
+func TestLeaderboardService_QueryAvatarFlowsIntoHighlightsAndProfiles(t *testing.T) {
+	repo := leaderboardHighlightsUsers()
+	repo.avatars = map[int64]*UserAvatar{
+		1: {StorageProvider: "inline", URL: "data:image/png;base64,AAA", ThumbURL: leaderboardTestThumb},
+	}
+
+	view, err := newTestLeaderboardService(leaderboardHighlightsCache(), repo).Query(
+		context.Background(), 3, LeaderboardWindowToday, LeaderboardMetricTotalTokens, LeaderboardModeNamed, false)
+	require.NoError(t, err)
+	require.Equal(t, 1, repo.calls, "身份复用榜单那一次 users 查询")
+	require.Equal(t, 1, repo.avatarCalls, "头像同样只查一次")
+
+	require.Equal(t, leaderboardTestThumb, view.Entries[0].Identity.AvatarURL)
+
+	require.NotNil(t, view.Highlights)
+	require.NotNil(t, view.Highlights.TopTokens)
+	require.Equal(t, LeaderboardIdentityNamed, view.Highlights.TopTokens.Identity.Kind)
+	require.Equal(t, leaderboardTestThumb, view.Highlights.TopTokens.Identity.AvatarURL)
+
+	require.NotNil(t, view.Insights)
+	require.NotEmpty(t, view.Insights.Profiles)
+	require.Equal(t, LeaderboardIdentityNamed, view.Insights.Profiles[0].Identity.Kind)
+	require.Equal(t, leaderboardTestThumb, view.Insights.Profiles[0].Identity.AvatarURL)
+
+	// 榜外用户（Profiles[1] 是 user 88）没有 slot，身份仍是匿名、也没有头像。
+	require.Equal(t, LeaderboardIdentityAnonymous, view.Insights.Profiles[1].Identity.Kind)
+	require.Empty(t, view.Insights.Profiles[1].Identity.AvatarURL)
 }

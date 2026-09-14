@@ -37,7 +37,8 @@ var (
 	)
 )
 
-// Leaderboard Entry（榜单条目）的身份形态。后端只下发结构化的 kind + username，
+// Leaderboard Entry（榜单条目）的身份形态。后端只下发结构化的 kind + username
+// （named 行另带一个 avatar_url 小图，见 LeaderboardIdentity.AvatarURL / design D25），
 // 展示名的文案由前端 i18n 渲染（design D10）：self → 本人的 username（缺席时
 // 「当前用户」）、anonymous →「第 Ordinal 位」、named → username。
 // 响应里永远不会出现字面量 "Me"。
@@ -78,6 +79,10 @@ var leaderboardParticipantBuckets = []int64{5, 10, 20, 50, 100, 200, 500, 1000, 
 // 对 Top 50 加查看者共至多 51 个 id 做一次按 id 的批量查询，用于渲染展示名与参与资格。
 type LeaderboardUserRepository interface {
 	GetByIDs(ctx context.Context, ids []int64) ([]User, error)
+	// GetUserAvatarThumbsByUserIDs 与 GetByIDs 同一批 id、同一次请求，多查一次 user_avatars 只拿
+	// 小图列（design D25；原图列每行可达 20 KB，榜单 MUST NOT 为读小图搬原图）。
+	// 只在 named 档需要；失败时榜单照常下发、只是没有头像。
+	GetUserAvatarThumbsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]string, error)
 }
 
 // LeaderboardViewerRepository 只服务顶层 viewer（「你的统计」）这一个区块，两条都只查
@@ -97,6 +102,10 @@ type LeaderboardViewerRepository interface {
 type LeaderboardIdentity struct {
 	Kind     string `json:"kind"`
 	Username string `json:"username,omitempty"`
+	// AvatarURL 只在 named 形态下出现，值是 user_avatars.thumb_url（64px 小图的 data URL）；
+	// anonymous 形态 MUST 缺席（否则等于去匿名），self 形态也缺席——本人头像由前端从自己的
+	// 个人资料里取。remote_url 头像没有小图，同样缺席，前端回退首字母（design D25）。
+	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
 // LeaderboardEntry 是榜单的一行。
@@ -846,6 +855,8 @@ func (s *LeaderboardService) renderEntries(
 	if err != nil {
 		return nil, nil, err
 	}
+	// 头像小图与 users 同一批 id、同一次请求取回；anonymous 档整批不查（design D25）。
+	avatars := s.lookupAvatarThumbs(ctx, ids, renderNamed)
 
 	kept := make([]leaderboardKeptEntry, 0, len(top))
 	var maxTokens, maxRequests, maxCostMicros int64
@@ -867,6 +878,11 @@ func (s *LeaderboardService) renderEntries(
 		case renderNamed && isLeaderboardNamedEligible(user):
 			identity.Kind = LeaderboardIdentityNamed
 			identity.Username = strings.TrimSpace(user.Username)
+			// 头像与展示名走同一套身份规则：只有 named 行带（design D25）。
+			// remote_url 头像没有小图（ThumbURL 为空），此处缺席，前端回退首字母。
+			if thumb := avatars[userID]; thumb != "" {
+				identity.AvatarURL = thumb
+			}
 		}
 
 		if metrics.TotalTokens > maxTokens {
@@ -916,6 +932,26 @@ func (s *LeaderboardService) renderEntries(
 		entries = append(entries, entry)
 	}
 	return entries, slots, nil
+}
+
+// lookupAvatarThumbs 取这批 id 的头像小图（design D25）。
+//
+// 三条边界写在这里：
+//   - anonymous 档 MUST NOT 发起查询——他人行本来就不带头像，多查一次既无用又是去匿名的入口；
+//   - 与 lookupUsers 同一批 id，请求路径上因此至多多一次按 id 的批量查询；
+//   - 失败只记日志并返回 nil：榜单照常下发，只是这一轮没有头像。读 nil map 取到零值，
+//     调用方无需再判一次。
+func (s *LeaderboardService) lookupAvatarThumbs(ctx context.Context, ids []int64, renderNamed bool) map[int64]string {
+	if !renderNamed || s.userRepo == nil || len(ids) == 0 {
+		return nil
+	}
+	avatars, err := s.userRepo.GetUserAvatarThumbsByUserIDs(ctx, ids)
+	if err != nil {
+		logger.LegacyPrintf("service.leaderboard",
+			"[Leaderboard] 头像小图批量读取失败，本次榜单不带头像 (count=%d): %v", len(ids), err)
+		return nil
+	}
+	return avatars
 }
 
 // lookupUsers 做请求路径上唯一的那次数据库访问：按 id 批量取用户。

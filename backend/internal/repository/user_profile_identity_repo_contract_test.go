@@ -502,16 +502,19 @@ func (s *UserProfileIdentityRepoSuite) TestUserAvatarCRUDAndUserLookup() {
 		ContentType:     "image/png",
 		ByteSize:        3,
 		SHA256:          "902fbdd2b1df0c4f70b4a5d23525e932",
+		ThumbURL:        "data:image/jpeg;base64,VEhVTUI=",
 	})
 	s.Require().NoError(err)
 	s.Require().Equal("inline", inlineAvatar.StorageProvider)
 	s.Require().Equal("data:image/png;base64,QUJD", inlineAvatar.URL)
+	s.Require().Equal("data:image/jpeg;base64,VEhVTUI=", inlineAvatar.ThumbURL)
 
 	loadedAvatar, err := s.repo.GetUserAvatar(s.ctx, user.ID)
 	s.Require().NoError(err)
 	s.Require().NotNil(loadedAvatar)
 	s.Require().Equal("image/png", loadedAvatar.ContentType)
 	s.Require().Equal(3, loadedAvatar.ByteSize)
+	s.Require().Equal("data:image/jpeg;base64,VEhVTUI=", loadedAvatar.ThumbURL)
 
 	_, err = s.repo.UpsertUserAvatar(s.ctx, user.ID, service.UpsertUserAvatarInput{
 		StorageProvider: "remote_url",
@@ -525,6 +528,8 @@ func (s *UserProfileIdentityRepoSuite) TestUserAvatarCRUDAndUserLookup() {
 	s.Require().Equal("remote_url", loadedAvatar.StorageProvider)
 	s.Require().Equal("https://cdn.example.com/avatar.png", loadedAvatar.URL)
 	s.Require().Zero(loadedAvatar.ByteSize)
+	// 换成外链头像后旧的小图 MUST 被覆盖掉，否则榜单会挂着上一张图。
+	s.Require().Empty(loadedAvatar.ThumbURL)
 
 	s.Require().NoError(s.repo.DeleteUserAvatar(s.ctx, user.ID))
 	loadedAvatar, err = s.repo.GetUserAvatar(s.ctx, user.ID)
@@ -543,6 +548,7 @@ func (s *UserProfileIdentityRepoSuite) TestGetUserAvatarsByUserIDs_OnlyReturnsUs
 		ContentType:     "image/png",
 		ByteSize:        3,
 		SHA256:          "902fbdd2b1df0c4f70b4a5d23525e932",
+		ThumbURL:        "data:image/jpeg;base64,VEhVTUI=",
 	})
 	s.Require().NoError(err)
 
@@ -565,16 +571,96 @@ func (s *UserProfileIdentityRepoSuite) TestGetUserAvatarsByUserIDs_OnlyReturnsUs
 	s.Require().Equal("data:image/png;base64,QUJD", avatars[withInlineAvatar.ID].URL)
 	s.Require().Equal("image/png", avatars[withInlineAvatar.ID].ContentType)
 	s.Require().Equal(3, avatars[withInlineAvatar.ID].ByteSize)
+	s.Require().Equal("data:image/jpeg;base64,VEhVTUI=", avatars[withInlineAvatar.ID].ThumbURL)
 
 	s.Require().NotNil(avatars[withRemoteAvatar.ID])
 	s.Require().Equal("remote_url", avatars[withRemoteAvatar.ID].StorageProvider)
 	s.Require().Equal("https://cdn.example.com/avatar.png", avatars[withRemoteAvatar.ID].URL)
+	// 外链头像没有小图：榜单据此回退首字母，而不是去请求用户自填的地址。
+	s.Require().Empty(avatars[withRemoteAvatar.ID].ThumbURL)
 
 	s.Require().NotContains(avatars, withoutAvatar.ID)
 
 	empty, err := s.repo.GetUserAvatarsByUserIDs(s.ctx, nil)
 	s.Require().NoError(err)
 	s.Require().Empty(empty)
+}
+
+func (s *UserProfileIdentityRepoSuite) TestListUserAvatarsMissingThumb_OnlyInlineRowsWithoutThumb() {
+	missingThumb := s.mustCreateUser("thumb-missing")
+	withThumb := s.mustCreateUser("thumb-present")
+	remoteAvatar := s.mustCreateUser("thumb-remote")
+
+	_, err := s.repo.UpsertUserAvatar(s.ctx, missingThumb.ID, service.UpsertUserAvatarInput{
+		StorageProvider: "inline",
+		URL:             "data:image/png;base64,QUJD",
+		ContentType:     "image/png",
+		ByteSize:        3,
+		SHA256:          "902fbdd2b1df0c4f70b4a5d23525e932",
+	})
+	s.Require().NoError(err)
+
+	_, err = s.repo.UpsertUserAvatar(s.ctx, withThumb.ID, service.UpsertUserAvatarInput{
+		StorageProvider: "inline",
+		URL:             "data:image/png;base64,QUJD",
+		ContentType:     "image/png",
+		ByteSize:        3,
+		SHA256:          "902fbdd2b1df0c4f70b4a5d23525e932",
+		ThumbURL:        "data:image/jpeg;base64,VEhVTUI=",
+	})
+	s.Require().NoError(err)
+
+	// 外链头像永远没有小图，但也 MUST NOT 出现在待回填列表里——服务端不抓外链。
+	_, err = s.repo.UpsertUserAvatar(s.ctx, remoteAvatar.ID, service.UpsertUserAvatarInput{
+		StorageProvider: "remote_url",
+		URL:             "https://cdn.example.com/avatar.png",
+	})
+	s.Require().NoError(err)
+
+	pending, err := s.repo.ListUserAvatarsMissingThumb(s.ctx, 0, 100)
+	s.Require().NoError(err)
+	s.Require().Len(pending, 1)
+	s.Require().Equal(missingThumb.ID, pending[0].UserID)
+	s.Require().Equal("data:image/png;base64,QUJD", pending[0].URL)
+
+	// 键集分页：游标落在这一行之后就取不到它了。
+	after, err := s.repo.ListUserAvatarsMissingThumb(s.ctx, missingThumb.ID, 100)
+	s.Require().NoError(err)
+	s.Require().Empty(after)
+
+	// 已有小图的行 MUST NOT 被回填覆盖（WHERE 带着 thumb_url = ''）。
+	s.Require().NoError(s.repo.UpdateUserAvatarThumb(s.ctx, withThumb.ID, "data:image/jpeg;base64,T1ZFUldSSVRF"))
+	kept, err := s.repo.GetUserAvatar(s.ctx, withThumb.ID)
+	s.Require().NoError(err)
+	s.Require().Equal("data:image/jpeg;base64,VEhVTUI=", kept.ThumbURL)
+
+	s.Require().NoError(s.repo.UpdateUserAvatarThumb(s.ctx, missingThumb.ID, "data:image/jpeg;base64,QkFDS0ZJTEw="))
+
+	// 写回之后这一行 MUST 从待回填列表里消失，否则回填会原地空转。
+	pending, err = s.repo.ListUserAvatarsMissingThumb(s.ctx, 0, 100)
+	s.Require().NoError(err)
+	s.Require().Empty(pending)
+
+	// 榜单专用的小图批量读：只有带小图的行出现，值就是 thumb_url。
+	thumbs, err := s.repo.GetUserAvatarThumbsByUserIDs(s.ctx, []int64{missingThumb.ID, withThumb.ID, remoteAvatar.ID})
+	s.Require().NoError(err)
+	s.Require().Equal(map[int64]string{
+		missingThumb.ID: "data:image/jpeg;base64,QkFDS0ZJTEw=",
+		withThumb.ID:    "data:image/jpeg;base64,VEhVTUI=",
+	}, thumbs)
+
+	backfilled, err := s.repo.GetUserAvatar(s.ctx, missingThumb.ID)
+	s.Require().NoError(err)
+	s.Require().NotNil(backfilled)
+	s.Require().Equal("data:image/jpeg;base64,QkFDS0ZJTEw=", backfilled.ThumbURL)
+	// 回填只动 thumb_url，原图与元信息保持不变。
+	s.Require().Equal("data:image/png;base64,QUJD", backfilled.URL)
+	s.Require().Equal("image/png", backfilled.ContentType)
+	s.Require().Equal(3, backfilled.ByteSize)
+
+	none, err := s.repo.ListUserAvatarsMissingThumb(s.ctx, 0, 0)
+	s.Require().NoError(err)
+	s.Require().Empty(none)
 }
 
 func (s *UserProfileIdentityRepoSuite) TestUpdateUserLastLoginAndActiveAt_UsesDedicatedColumns() {

@@ -396,6 +396,47 @@ func ProvideLeaderboardSnapshotService(
 	return svc
 }
 
+// ProvideUserService 创建用户服务，并在进程启动时顺带跑一次头像小图回填。
+//
+// 回填挂在这里而不是 cmd/server：LeaderboardSnapshotService.Start() 也是在本文件的 provider 里
+// 起的，两者同属「wire 装配即启动」的启动路径，放一起最省接线。榜单要用 user_avatars.thumb_url，
+// 而 242 之前存下的 inline 头像还没有小图，需要补一次。
+//
+// goroutine 里跑、5 分钟超时、失败只记日志：回填 MUST NOT 阻塞启动，也 MUST NOT 让服务起不来。
+func ProvideUserService(
+	userRepo UserRepository,
+	settingRepo SettingRepository,
+	authCacheInvalidator APIKeyAuthCacheInvalidator,
+	billingCache BillingCache,
+) *UserService {
+	svc := NewUserService(userRepo, settingRepo, authCacheInvalidator, billingCache)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.LegacyPrintf("service.user", "avatar thumb backfill panicked: %v", r)
+			}
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), avatarThumbBackfillTimeout)
+		defer cancel()
+
+		startedAt := time.Now()
+		updated, err := svc.BackfillAvatarThumbs(ctx)
+		if err != nil {
+			logger.LegacyPrintf("service.user",
+				"avatar thumb backfill stopped early: updated=%d elapsed=%s err=%v",
+				updated, time.Since(startedAt), err)
+			return
+		}
+		logger.LegacyPrintf("service.user",
+			"avatar thumb backfill done: updated=%d elapsed=%s",
+			updated, time.Since(startedAt))
+	}()
+
+	return svc
+}
+
 // ProvideLeaderboardService 创建用户侧榜单查询服务。
 // UserRepository 天然满足窄接口 LeaderboardUserRepository（请求路径上唯一的按 id 批量查询），
 // UsageLogRepository 天然满足 LeaderboardViewerRepository（只服务顶层 viewer 那一块）。
@@ -846,7 +887,7 @@ var ProviderSet = wire.NewSet(
 	// Core services
 	ProvideAuthService,
 	NewPasskeyService,
-	NewUserService,
+	ProvideUserService,
 	ProvideAPIKeyService,
 	ProvideAPIKeyAuthCacheInvalidator,
 	ProvideAuthCacheInvalidationWorker,

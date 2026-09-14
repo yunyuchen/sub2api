@@ -55,6 +55,10 @@ func (s *userRepoStubForGroupUpdate) GetUserAvatar(context.Context, int64) (*Use
 func (s *userRepoStubForGroupUpdate) GetUserAvatarsByUserIDs(context.Context, []int64) (map[int64]*UserAvatar, error) {
 	panic("unexpected")
 }
+
+func (s *userRepoStubForGroupUpdate) GetUserAvatarThumbsByUserIDs(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
+}
 func (s *userRepoStubForGroupUpdate) UpsertUserAvatar(context.Context, int64, UpsertUserAvatarInput) (*UserAvatar, error) {
 	panic("unexpected")
 }

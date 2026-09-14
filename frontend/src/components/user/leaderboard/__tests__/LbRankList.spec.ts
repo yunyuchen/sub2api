@@ -42,7 +42,9 @@ vi.mock('vue-i18n', async () => {
  * 展示名 helper（`displayName.ts`）会读 auth store 里的 username：本人行优先显示自己的
  * 昵称，没有昵称时才回退「当前用户」。默认置空以覆盖回退分支，需要昵称的用例自己赋值。
  */
-const authState = vi.hoisted(() => ({ user: null as { username: string } | null }))
+const authState = vi.hoisted(() => ({
+  user: null as { username?: string; avatar_url?: string } | null,
+}))
 
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => authState }))
 
@@ -602,6 +604,79 @@ describe('LbRankList', () => {
       }),
     ])
     expect(leading.find('[data-testid="leaderboard-row-self"]').find('.rp-pc').text()).toBe('100%')
+  })
+
+  /**
+   * 头像（design D25）。后端只给 named 行下发 64px 小图，且只有内嵌头像才有小图；
+   * 本人那张从自己的个人资料取，匿名行一张都不给——否则等于把匿名档拆穿。
+   */
+  it('renders the backend thumbnail for a named peer', () => {
+    const thumb = 'data:image/jpeg;base64,AAAA'
+    const row = mountList([
+      entry({ identity: { kind: 'named', username: 'alice', avatar_url: thumb } }),
+    ]).find('[data-testid="leaderboard-row"]')
+
+    const avatar = row.find('[data-testid="leaderboard-avatar"]')
+    expect(avatar.exists()).toBe(true)
+    expect(avatar.get('[data-test="user-avatar-image"]').attributes('src')).toBe(thumb)
+    expect(avatar.find('[data-test="user-avatar-initial"]').exists()).toBe(false)
+  })
+
+  // 外链头像（remote_url）没有小图，后端不下发：回退首字母，MUST NOT 去请求用户自填的地址。
+  it('falls back to the display-name initial when a named peer has no thumbnail', () => {
+    const row = mountList([entry({ identity: { kind: 'named', username: 'alice' } })]).find(
+      '[data-testid="leaderboard-row"]',
+    )
+
+    const avatar = row.find('[data-testid="leaderboard-avatar"]')
+    expect(avatar.find('[data-test="user-avatar-image"]').exists()).toBe(false)
+    expect(avatar.get('[data-test="user-avatar-initial"]').text()).toBe('A')
+  })
+
+  // 匿名行：一张素色空圆。有图或有首字母都等于去匿名。
+  it('renders a blank circle for anonymous peers', () => {
+    const row = mountList([
+      entry({ ordinal: 3, identity: { kind: 'anonymous' }, total_tokens: undefined }),
+    ]).find('[data-testid="leaderboard-row"]')
+
+    const avatar = row.find('[data-testid="leaderboard-avatar"]')
+    expect(avatar.exists()).toBe(true)
+    expect(avatar.find('[data-test="user-avatar-image"]').exists()).toBe(false)
+    expect(avatar.get('[data-test="user-avatar-initial"]').text()).toBe('')
+  })
+
+  // 本人那张头像由前端从 auth store 取：后端 MUST NOT 为 self 下发。
+  it('takes the viewer avatar from the auth store profile', () => {
+    authState.user = { username: 'zoe', avatar_url: 'data:image/webp;base64,BBBB' }
+    const selfRow = mountList([entry({ identity: { kind: 'self' }, is_self: true })]).find(
+      '[data-testid="leaderboard-row-self"]',
+    )
+
+    const avatar = selfRow.find('[data-testid="leaderboard-avatar"]')
+    expect(avatar.get('[data-test="user-avatar-image"]').attributes('src')).toBe(
+      'data:image/webp;base64,BBBB',
+    )
+  })
+
+  it('falls back to the viewer initial when the profile has no avatar', () => {
+    authState.user = { username: 'zoe' }
+    const selfRow = mountList([entry({ identity: { kind: 'self' }, is_self: true })]).find(
+      '[data-testid="leaderboard-row-self"]',
+    )
+
+    const avatar = selfRow.find('[data-testid="leaderboard-avatar"]')
+    expect(avatar.find('[data-test="user-avatar-image"]').exists()).toBe(false)
+    expect(avatar.get('[data-test="user-avatar-initial"]').text()).toBe('Z')
+  })
+
+  // 名字被压缩时只省略名字本身，头像与「你」标记 MUST NOT 被裁掉。
+  it('keeps the avatar out of the ellipsised name span', () => {
+    const row = mountList([entry({ identity: { kind: 'named', username: 'alice' } })]).find(
+      '[data-testid="leaderboard-row"]',
+    )
+
+    expect(row.get('.rp-lb-name .rp-lb-nametext').text()).toBe('alice')
+    expect(row.get('.rp-lb-name .rp-lb-avatar').exists()).toBe(true)
   })
 
   // 榜单最长 50 行：级联下标按 4 行一档，MUST NOT 用未分档的渲染下标。

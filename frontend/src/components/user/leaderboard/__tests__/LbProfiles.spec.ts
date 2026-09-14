@@ -26,7 +26,9 @@ vi.mock('vue-i18n', async () => {
  * 展示名 helper（`displayName.ts`）会读 auth store 里的 username：本人行优先显示自己的
  * 昵称，没有昵称时才回退「当前用户」。默认置空以覆盖回退分支，需要昵称的用例自己赋值。
  */
-const authState = vi.hoisted(() => ({ user: null as { username: string } | null }))
+const authState = vi.hoisted(() => ({
+  user: null as { username?: string; avatar_url?: string } | null,
+}))
 
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => authState }))
 
@@ -122,7 +124,7 @@ describe('LbProfiles', () => {
 
     const rows = wrapper.findAll('[data-testid="leaderboard-profiles-row"]')
     expect(rows).toHaveLength(2)
-    expect(rows[0].find('.rp-u').text()).toBe('alice')
+    expect(rows[0].find('.rp-u .rp-lb-nametext').text()).toBe('alice')
     expect(rows[0].find('.rp-u').classes()).not.toContain('is-self')
 
     // chip 的左边界对齐成一条轴：每行的 chip 都在同一个 `.rp-cs` 容器里
@@ -137,8 +139,8 @@ describe('LbProfiles', () => {
     const wrapper = mountProfiles(anonymousProfiles())
     const rows = wrapper.findAll('[data-testid="leaderboard-profiles-row"]')
 
-    expect(rows[0].find('.rp-u').text()).toBe('Row 1')
-    expect(rows[1].find('.rp-u').text()).toBe('Row 2')
+    expect(rows[0].find('.rp-u .rp-lb-nametext').text()).toBe('Row 1')
+    expect(rows[1].find('.rp-u .rp-lb-nametext').text()).toBe('Row 2')
     expect(wrapper.text()).not.toContain('alice')
     // 占比两档都下发
     expect(wrapper.text()).toContain('62%')
@@ -159,10 +161,10 @@ describe('LbProfiles', () => {
     ])
 
     const rows = wrapper.findAll('[data-testid="leaderboard-profiles-row"]')
-    expect(rows[0].find('.rp-u').text()).toBe('Outside top 50')
+    expect(rows[0].find('.rp-u .rp-lb-nametext').text()).toBe('Outside top 50')
     expect(rows[0].find('.rp-u').classes()).not.toContain('is-self')
     // 本人那一行用强调色，与榜单里的本人行是同一条线索
-    expect(rows[1].find('.rp-u').text()).toBe('Current user')
+    expect(rows[1].find('.rp-u .rp-lb-nametext').text()).toBe('Current user')
     expect(rows[1].find('.rp-u').classes()).toContain('is-self')
   })
 
@@ -178,8 +180,50 @@ describe('LbProfiles', () => {
     ])
 
     const row = wrapper.find('[data-testid="leaderboard-profiles-row"]')
-    expect(row.find('.rp-u').text()).toBe('zoe')
+    expect(row.find('.rp-u .rp-lb-nametext').text()).toBe('zoe')
     expect(row.find('.rp-u').classes()).toContain('is-self')
+  })
+
+  /**
+   * 头像（design D25）与榜单本体同一套规则：named 用后端下发的 64px 小图，
+   * 没有小图回退首字母，匿名行是一张不带任何字符的素色空圆，本人那张从个人资料取。
+   */
+  it('renders avatars with the same identity rules as the rank list', () => {
+    const thumb = 'data:image/jpeg;base64,AAAA'
+    authState.user = { username: 'zoe', avatar_url: 'data:image/webp;base64,BBBB' }
+    const rows = mountProfiles([
+      {
+        identity: { kind: 'named', username: 'alice', avatar_url: thumb },
+        ordinal: 1,
+        models: [{ model: 'claude-opus-5', share_percent: 90 }],
+      },
+      {
+        identity: { kind: 'named', username: 'bob' },
+        ordinal: 2,
+        models: [{ model: 'gpt-5.1', share_percent: 80 }],
+      },
+      {
+        identity: { kind: 'anonymous' },
+        ordinal: 3,
+        models: [{ model: 'grok-4', share_percent: 70 }],
+      },
+      {
+        identity: { kind: 'self' },
+        ordinal: 4,
+        models: [{ model: 'kimi-k2', share_percent: 60 }],
+      },
+    ]).findAll('[data-testid="leaderboard-profiles-row"]')
+
+    const avatar = (index: number) => rows[index].get('[data-testid="leaderboard-avatar"]')
+
+    expect(avatar(0).get('[data-test="user-avatar-image"]').attributes('src')).toBe(thumb)
+    expect(avatar(1).find('[data-test="user-avatar-image"]').exists()).toBe(false)
+    expect(avatar(1).get('[data-test="user-avatar-initial"]').text()).toBe('B')
+    expect(avatar(2).find('[data-test="user-avatar-image"]').exists()).toBe(false)
+    expect(avatar(2).get('[data-test="user-avatar-initial"]').text()).toBe('')
+    expect(avatar(3).get('[data-test="user-avatar-image"]').attributes('src')).toBe(
+      'data:image/webp;base64,BBBB',
+    )
   })
 
   // 画像与榜单本体同为 Top 50：后端已按 Total Tokens 取前 50 名，这里只兜一层底。

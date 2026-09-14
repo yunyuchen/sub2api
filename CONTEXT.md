@@ -7,7 +7,7 @@ sub2api 的领域词汇表。目前只覆盖「用量排行」相关概念，随
 ### 用量排行
 
 **Leaderboard（排行榜）**:
-面向登录用户的、按固定窗口聚合的用户用量名次表，只暴露受限字段（展示名、tokens、请求数、消费金额），不暴露邮箱和用户 id。模式开启后，管理员与普通用户看到相同数据。与渠道监控里的用户排行是两个不同的功能：监控是诊断视图，Leaderboard 是社交视图。
+面向登录用户的、按固定窗口聚合的用户用量名次表，只暴露受限字段（展示名、头像、tokens、请求数、消费金额），不暴露邮箱和用户 id。模式开启后，管理员与普通用户看到相同数据。与渠道监控里的用户排行是两个不同的功能：监控是诊断视图，Leaderboard 是社交视图。
 _Avoid_: 用户排行、token ranking、top users
 
 **User Breakdown（用户用量明细）**:
@@ -47,11 +47,15 @@ _Avoid_: 排名、position、序号
 _Avoid_: 名次、index、下标
 
 **Display Name（展示名）**:
-Leaderboard 上向查看者展示的身份。实名形态：username。匿名形态：「第 Ordinal 位」。本人行不受档位约束——有 username 就显示本人的 username（另带「你」标记），username 缺席或全空白时才显示「当前用户」；匿名档只约束他人的展示形态。他人只有在 Leaderboard Mode 为 named、该用户的 Named Participation 为开、且 username 合格（非空、非邮箱形态、通过校验）时才是实名形态，否则一律匿名形态。他人的展示名永远不是邮箱，也永远不是用户 id；本人行是前端拿自己的资料渲染的，不走这条校验，所以自己的 username 是什么就显示什么。
+Leaderboard 上向查看者展示的身份。实名形态：username。匿名形态：「第 Ordinal 位」。本人行不受档位约束——有 username 就显示本人的 username（另带「你」标记），username 缺席或全空白时才显示「当前用户」；匿名档只约束他人的展示形态。他人只有在 Leaderboard Mode 为 named、该用户的 Named Participation 为开、且 username 合格（非空、非邮箱形态、通过校验）时才是实名形态，否则一律匿名形态。他人的展示名永远不是邮箱，也永远不是用户 id；本人行是前端拿自己的资料渲染的，不走这条校验，所以自己的 username 是什么就显示什么。头像（Avatar）与展示名同进同出：实名形态才可能有，匿名形态一律没有。
 _Avoid_: 用户名、昵称、email、User #id、用户 #N、Me
 
+**Avatar（头像）**:
+Leaderboard 上跟在名次之后、展示名之前的 24px 圆形图像。只有实名形态才可能有：匿名形态是一个不带字符的素色圆圈，本人行显示本人个人资料里的头像（前端自己取，不经榜单响应下发）。榜单上走的是头像的小图（64px 正方形），不是原图；用户自填的外链头像没有小图，榜单不显示它，回退成首字母圆圈。它没有独立开关——关掉 Named Participation，名字和头像一起消失。
+_Avoid_: 头像图、avatar url、profile picture、用户图片
+
 **Named Participation（昵称展示）**:
-用户在个人资料中的开关，**默认开启**（迁移 240 把既有用户一并回填为开）。开启表示 Leaderboard 以该用户的 username 显示他；关闭时该用户仍参与排名，只是以匿名形态出现。个人资料上的文案是「在排行榜显示我的昵称」——代码标识符与设计文档里出现的旧中文名「实名参与」指的是同一个开关，只是默认值与措辞已改。
+用户在个人资料中的开关，**默认开启**（迁移 240 把既有用户一并回填为开）。开启表示 Leaderboard 以该用户的 username 与头像显示他；关闭时该用户仍参与排名，只是以匿名形态出现（名字与头像一起消失）。个人资料上的文案是「在排行榜显示我的昵称」——代码标识符与设计文档里出现的旧中文名「实名参与」指的是同一个开关，只是默认值与措辞已改。
 _Avoid_: 上榜、退出排行、opt-in
 
 **My Rank（我的名次）**:
@@ -71,7 +75,7 @@ Leaderboard Mode 为 off 时管理员看到的 Leaderboard 视图，带明确的
 _Avoid_: 管理员视图、admin view
 
 **Snapshot（榜单快照）**:
-一个 Window 内所有有用量的合格用户的 Total Tokens、Successful Requests 与 Cost 集合，由后台周期性重建。榜单条目、Participant Count、My Rank 都从同一份 Snapshot 导出，因此彼此一致；Snapshot 只记录用户与数值，不记录身份，身份与参与资格以展示时的当前状态为准。页面展示 Snapshot 的更新时间。
+一个 Window 内所有有用量的合格用户的 Total Tokens、Successful Requests 与 Cost 集合，由后台周期性重建。榜单条目、Participant Count、My Rank 都从同一份 Snapshot 导出，因此彼此一致；Snapshot 只记录用户与数值，不记录身份（用户名、邮箱、展示名、头像都不进去），身份与参与资格以展示时的当前状态为准。页面展示 Snapshot 的更新时间。
 _Avoid_: 缓存、cache、聚合结果
 
 **Highlights（趣味卡）**:

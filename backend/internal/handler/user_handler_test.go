@@ -73,6 +73,10 @@ func (s *userHandlerRepoStub) GetUserAvatarsByUserIDs(ctx context.Context, userI
 	return result, nil
 }
 
+func (s *userHandlerRepoStub) GetUserAvatarThumbsByUserIDs(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
+}
+
 func (s *userHandlerRepoStub) UpsertUserAvatar(_ context.Context, _ int64, input service.UpsertUserAvatarInput) (*service.UserAvatar, error) {
 	s.user.AvatarURL = input.URL
 	s.user.AvatarSource = input.StorageProvider

@@ -735,7 +735,7 @@ func (r *userRepository) GetUserAvatar(ctx context.Context, userID int64) (*serv
 	}
 
 	rows, err := exec.QueryContext(ctx, `
-SELECT storage_provider, storage_key, url, content_type, byte_size, sha256
+SELECT storage_provider, storage_key, url, content_type, byte_size, sha256, thumb_url
 FROM user_avatars
 WHERE user_id = $1`, userID)
 	if err != nil {
@@ -755,6 +755,7 @@ WHERE user_id = $1`, userID)
 		&avatar.ContentType,
 		&avatar.ByteSize,
 		&avatar.SHA256,
+		&avatar.ThumbURL,
 	); err != nil {
 		return nil, err
 	}
@@ -778,7 +779,7 @@ func (r *userRepository) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []
 	}
 
 	rows, err := exec.QueryContext(ctx, `
-SELECT user_id, storage_provider, storage_key, url, content_type, byte_size, sha256
+SELECT user_id, storage_provider, storage_key, url, content_type, byte_size, sha256, thumb_url
 FROM user_avatars
 WHERE user_id = ANY($1)`, pq.Array(userIDs))
 	if err != nil {
@@ -799,6 +800,7 @@ WHERE user_id = ANY($1)`, pq.Array(userIDs))
 			&avatar.ContentType,
 			&avatar.ByteSize,
 			&avatar.SHA256,
+			&avatar.ThumbURL,
 		); scanErr != nil {
 			return nil, scanErr
 		}
@@ -818,8 +820,8 @@ func (r *userRepository) UpsertUserAvatar(ctx context.Context, userID int64, inp
 	}
 
 	_, err = exec.ExecContext(ctx, `
-INSERT INTO user_avatars (user_id, storage_provider, storage_key, url, content_type, byte_size, sha256, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+INSERT INTO user_avatars (user_id, storage_provider, storage_key, url, content_type, byte_size, sha256, thumb_url, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
 ON CONFLICT (user_id) DO UPDATE SET
 	storage_provider = EXCLUDED.storage_provider,
 	storage_key = EXCLUDED.storage_key,
@@ -827,6 +829,7 @@ ON CONFLICT (user_id) DO UPDATE SET
 	content_type = EXCLUDED.content_type,
 	byte_size = EXCLUDED.byte_size,
 	sha256 = EXCLUDED.sha256,
+	thumb_url = EXCLUDED.thumb_url,
 	updated_at = NOW()`,
 		userID,
 		strings.TrimSpace(input.StorageProvider),
@@ -835,6 +838,7 @@ ON CONFLICT (user_id) DO UPDATE SET
 		strings.TrimSpace(input.ContentType),
 		input.ByteSize,
 		strings.TrimSpace(input.SHA256),
+		strings.TrimSpace(input.ThumbURL),
 	)
 	if err != nil {
 		return nil, err
@@ -847,7 +851,103 @@ ON CONFLICT (user_id) DO UPDATE SET
 		ContentType:     strings.TrimSpace(input.ContentType),
 		ByteSize:        input.ByteSize,
 		SHA256:          strings.TrimSpace(input.SHA256),
+		ThumbURL:        strings.TrimSpace(input.ThumbURL),
 	}, nil
+}
+
+// 回填窄接口由真实仓储实现；UserService 靠类型断言取到它，这里把断言钉成编译期错误。
+var _ service.UserAvatarThumbBackfillRepository = (*userRepository)(nil)
+
+// ListUserAvatarsMissingThumb 取还没有榜单小图的 inline 头像。
+// remote_url 头像不在其中：服务端不抓外链，它们永远没有小图。
+func (r *userRepository) ListUserAvatarsMissingThumb(ctx context.Context, afterUserID int64, limit int) ([]service.UserAvatarBackfillRow, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+
+	exec, err := r.userProfileIdentitySQL(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := exec.QueryContext(ctx, `
+SELECT user_id, url
+FROM user_avatars
+WHERE storage_provider = 'inline' AND thumb_url = '' AND user_id > $1
+ORDER BY user_id
+LIMIT $2`, afterUserID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]service.UserAvatarBackfillRow, 0, limit)
+	for rows.Next() {
+		var row service.UserAvatarBackfillRow
+		if scanErr := rows.Scan(&row.UserID, &row.URL); scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// UpdateUserAvatarThumb 只写 thumb_url。updated_at 故意不动：小图是从已存在的原图派生的，
+// 不是用户换了头像，不应该让「最后一次修改」跟着跳。
+// WHERE 上带着「仍是 inline 且仍缺小图」：回填是先读后写，中间用户可能换了头像
+// （换成外链、或换成另一张已自带小图的图），那时这次写回 MUST 落空，而不是把旧图的小图盖上去。
+func (r *userRepository) UpdateUserAvatarThumb(ctx context.Context, userID int64, thumbURL string) error {
+	exec, err := r.userProfileIdentitySQL(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = exec.ExecContext(ctx, `
+UPDATE user_avatars
+SET thumb_url = $2
+WHERE user_id = $1 AND storage_provider = 'inline' AND thumb_url = ''`, userID, strings.TrimSpace(thumbURL))
+	return err
+}
+
+// GetUserAvatarThumbsByUserIDs 只取小图列，给榜单用（design D25）：榜单一次要 50 个人，
+// 原图列 url 每行可达 20 KB，走 GetUserAvatarsByUserIDs 会为读 2 KB 的小图搬 1 MB 的原图。
+// 没有小图的 user_id（没头像、remote_url、尚未回填）不出现在结果里。
+func (r *userRepository) GetUserAvatarThumbsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]string, error) {
+	result := make(map[int64]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+
+	exec, err := r.userProfileIdentitySQL(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := exec.QueryContext(ctx, `
+SELECT user_id, thumb_url
+FROM user_avatars
+WHERE user_id = ANY($1) AND thumb_url <> ''`, pq.Array(userIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var (
+			userID   int64
+			thumbURL string
+		)
+		if scanErr := rows.Scan(&userID, &thumbURL); scanErr != nil {
+			return nil, scanErr
+		}
+		result[userID] = thumbURL
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *userRepository) DeleteUserAvatar(ctx context.Context, userID int64) error {

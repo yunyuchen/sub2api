@@ -7,10 +7,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"hash/crc32"
 	"image"
+	"image/color"
+	_ "image/jpeg"
 	"image/png"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -137,6 +142,10 @@ func (m *mockUserRepo) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []in
 		}
 	}
 	return result, nil
+}
+
+func (m *mockUserRepo) GetUserAvatarThumbsByUserIDs(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
 }
 
 func (m *mockUserRepo) UpsertUserAvatar(ctx context.Context, userID int64, input UpsertUserAvatarInput) (*UserAvatar, error) {
@@ -737,8 +746,30 @@ func TestNewUserService_FieldsAssignment(t *testing.T) {
 	require.Equal(t, cache, svc.billingCache)
 }
 
+// mustEncodePNG 现生成一张可解码的 PNG。inline 头像现在必须解得开（要从中派生榜单小图），
+// 所以测试里不能再拿任意字节冒充图片。
+func mustEncodePNG(t *testing.T, width, height int) []byte {
+	t.Helper()
+
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{
+				R: uint8((x*7 + 13) % 256),
+				G: uint8((y*11 + 29) % 256),
+				B: uint8((x*y + 5) % 256),
+				A: 0xff,
+			})
+		}
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	return buf.Bytes()
+}
+
 func TestUpdateProfile_StoresInlineAvatarWithinLimit(t *testing.T) {
-	raw := []byte("small-avatar")
+	raw := mustEncodePNG(t, 16, 16)
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(raw)
 	expectedSum := sha256.Sum256(raw)
 	repo := &mockUserRepo{
@@ -759,6 +790,7 @@ func TestUpdateProfile_StoresInlineAvatarWithinLimit(t *testing.T) {
 	require.Equal(t, "image/png", repo.upsertAvatarArgs[0].ContentType)
 	require.Equal(t, len(raw), repo.upsertAvatarArgs[0].ByteSize)
 	require.Equal(t, hex.EncodeToString(expectedSum[:]), repo.upsertAvatarArgs[0].SHA256)
+	require.True(t, strings.HasPrefix(repo.upsertAvatarArgs[0].ThumbURL, "data:image/jpeg;base64,"))
 	require.Equal(t, dataURL, updated.AvatarURL)
 	require.Equal(t, "inline", updated.AvatarSource)
 	require.Equal(t, "image/png", updated.AvatarMIME)
@@ -859,6 +891,8 @@ func TestUpdateProfile_StoresRemoteAvatarURL(t *testing.T) {
 	require.Equal(t, remoteURL, updated.AvatarURL)
 	require.Equal(t, "remote_url", updated.AvatarSource)
 	require.Zero(t, updated.AvatarByteSize)
+	// 外链头像不派生小图：服务端不去抓用户自填的地址，榜单据此回退首字母。
+	require.Empty(t, repo.upsertAvatarArgs[0].ThumbURL)
 }
 
 func TestUpdateProfile_DeletesAvatarOnEmptyString(t *testing.T) {
@@ -931,4 +965,188 @@ func TestGetProfile_HydratesAvatarFromRepository(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://cdn.example.com/profile.png", user.AvatarURL)
 	require.Equal(t, "remote_url", user.AvatarSource)
+}
+
+func TestNormalizeInlineUserAvatarInput_DerivesSquareJPEGThumb(t *testing.T) {
+	raw := mustEncodePNG(t, 200, 120)
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(raw)
+
+	input, err := normalizeUserAvatarInput(dataURL)
+	require.NoError(t, err)
+	require.Equal(t, "inline", input.StorageProvider)
+	require.NotEmpty(t, input.ThumbURL)
+	require.True(t, strings.HasPrefix(input.ThumbURL, "data:image/jpeg;base64,"))
+	// 1–3 KB 是设计给榜单的预算；8 KB 是留了余量的上限，越过说明规格被改坏了。
+	require.Less(t, len(input.ThumbURL), 8*1024)
+
+	encoded := strings.TrimPrefix(input.ThumbURL, "data:image/jpeg;base64,")
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	require.NoError(t, err)
+
+	thumb, format, err := image.Decode(bytes.NewReader(decoded))
+	require.NoError(t, err)
+	require.Equal(t, "jpeg", format)
+	require.Equal(t, avatarThumbSize, thumb.Bounds().Dx())
+	require.Equal(t, avatarThumbSize, thumb.Bounds().Dy())
+}
+
+func TestNormalizeInlineUserAvatarInput_RejectsUndecodableImage(t *testing.T) {
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("not-an-image"))
+
+	_, err := normalizeUserAvatarInput(dataURL)
+	require.ErrorIs(t, err, ErrAvatarInvalid)
+}
+
+// mockAvatarThumbBackfillRepo 在 mockUserRepo 之上补出回填窄接口，
+// 用来验证 BackfillAvatarThumbs 的跳过与计数行为。
+type mockAvatarThumbBackfillRepo struct {
+	*mockUserRepo
+
+	pending   []UserAvatarBackfillRow
+	listErr   error
+	listCalls int
+	written   map[int64]string
+}
+
+func (m *mockAvatarThumbBackfillRepo) ListUserAvatarsMissingThumb(_ context.Context, afterUserID int64, limit int) ([]UserAvatarBackfillRow, error) {
+	m.listCalls++
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+
+	remaining := make([]UserAvatarBackfillRow, 0, len(m.pending))
+	for _, row := range m.pending {
+		// 与真实仓储同口径：键集分页 + 只返回仍缺小图的行。
+		if row.UserID <= afterUserID {
+			continue
+		}
+		if _, done := m.written[row.UserID]; done {
+			continue
+		}
+		remaining = append(remaining, row)
+		if len(remaining) == limit {
+			break
+		}
+	}
+	return remaining, nil
+}
+
+func (m *mockAvatarThumbBackfillRepo) UpdateUserAvatarThumb(_ context.Context, userID int64, thumbURL string) error {
+	if m.written == nil {
+		m.written = map[int64]string{}
+	}
+	m.written[userID] = thumbURL
+	return nil
+}
+
+func TestBackfillAvatarThumbs_SkipsUndecodableRowAndCountsWrites(t *testing.T) {
+	good := mustEncodePNG(t, 90, 40)
+	repo := &mockAvatarThumbBackfillRepo{
+		mockUserRepo: &mockUserRepo{},
+		pending: []UserAvatarBackfillRow{
+			{UserID: 11, URL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(good)},
+			{UserID: 22, URL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("broken"))},
+		},
+	}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	updated, err := svc.BackfillAvatarThumbs(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, updated)
+	require.Len(t, repo.written, 1)
+	require.Contains(t, repo.written, int64(11))
+	require.NotContains(t, repo.written, int64(22))
+	require.True(t, strings.HasPrefix(repo.written[11], "data:image/jpeg;base64,"))
+	// 坏图不该让回填反复重查同一批。
+	require.Equal(t, 1, repo.listCalls)
+}
+
+// mustPNGHeader 只拼 PNG 签名 + IHDR：image.DecodeConfig 读到尺寸就够了，
+// 用来验证尺寸上限在真正解码之前就把炸弹挡下（不需要生成上亿像素的真图）。
+func mustPNGHeader(t *testing.T, width, height uint32) []byte {
+	t.Helper()
+	ihdr := make([]byte, 13)
+	binary.BigEndian.PutUint32(ihdr[0:4], width)
+	binary.BigEndian.PutUint32(ihdr[4:8], height)
+	ihdr[8] = 1 // bit depth
+	ihdr[9] = 0 // color type: grayscale
+	chunk := append([]byte("IHDR"), ihdr...)
+	var buf bytes.Buffer
+	buf.Write([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'})
+	_ = binary.Write(&buf, binary.BigEndian, uint32(len(ihdr)))
+	buf.Write(chunk)
+	_ = binary.Write(&buf, binary.BigEndian, crc32.ChecksumIEEE(chunk))
+	return buf.Bytes()
+}
+
+func TestDecodeAvatarImage_RejectsOversizedDimensionsBeforeDecoding(t *testing.T) {
+	// 12000×12000 的 1-bit PNG 只有十几 KB，却要解出上亿像素——MUST 在 DecodeConfig 阶段就拒绝。
+	_, err := decodeAvatarImage(mustPNGHeader(t, 12000, 12000))
+	require.ErrorIs(t, err, ErrAvatarInvalid)
+	// 单边超限也拒绝。
+	_, err = decodeAvatarImage(mustPNGHeader(t, 9000, 10))
+	require.ErrorIs(t, err, ErrAvatarInvalid)
+	// 上限以内的真图照常解码。
+	src, err := decodeAvatarImage(mustEncodePNG(t, 300, 200))
+	require.NoError(t, err)
+	require.Equal(t, 300, src.Bounds().Dx())
+}
+
+func TestNormalizeInlineUserAvatarInput_RejectsDecodeBomb(t *testing.T) {
+	bomb := mustPNGHeader(t, 12000, 12000)
+	_, err := normalizeInlineUserAvatarInput("data:image/png;base64," + base64.StdEncoding.EncodeToString(bomb))
+	require.ErrorIs(t, err, ErrAvatarInvalid)
+}
+
+func TestBuildInlineAvatarThumb_PrescalesLargeImages(t *testing.T) {
+	// 超过 avatarThumbPrescaleSide 的图走粗缩再精缩的两段路，结果仍是 64×64 的 JPEG。
+	thumb, err := buildInlineAvatarThumb(mustEncodePNG(t, 1200, 900))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(thumb, "data:image/jpeg;base64,"))
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(thumb, "data:image/jpeg;base64,"))
+	require.NoError(t, err)
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(decoded))
+	require.NoError(t, err)
+	require.Equal(t, "jpeg", format)
+	require.Equal(t, avatarThumbSize, cfg.Width)
+	require.Equal(t, avatarThumbSize, cfg.Height)
+}
+
+func TestBackfillAvatarThumbs_CursorSkipsLeadingBadRow(t *testing.T) {
+	// 坏图排在最前面：游标 MUST 越过它，后面的好图照样得到小图（而不是整轮在坏图上空转后放弃）。
+	good := mustEncodePNG(t, 60, 60)
+	repo := &mockAvatarThumbBackfillRepo{
+		mockUserRepo: &mockUserRepo{},
+		pending: []UserAvatarBackfillRow{
+			{UserID: 5, URL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("broken"))},
+			{UserID: 9, URL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(good)},
+		},
+	}
+	svc := &UserService{userRepo: repo}
+
+	updated, err := svc.BackfillAvatarThumbs(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, updated)
+	require.NotContains(t, repo.written, int64(5))
+	require.Contains(t, repo.written, int64(9))
+}
+
+func TestBackfillAvatarThumbs_ReturnsListError(t *testing.T) {
+	repo := &mockAvatarThumbBackfillRepo{
+		mockUserRepo: &mockUserRepo{},
+		listErr:      errors.New("boom"),
+	}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	updated, err := svc.BackfillAvatarThumbs(context.Background())
+	require.Error(t, err)
+	require.Zero(t, updated)
+}
+
+func TestBackfillAvatarThumbs_NoopWhenRepositoryLacksNarrowInterface(t *testing.T) {
+	svc := NewUserService(&mockUserRepo{}, nil, nil, nil)
+
+	updated, err := svc.BackfillAvatarThumbs(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, updated)
 }

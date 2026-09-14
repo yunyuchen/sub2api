@@ -210,6 +210,10 @@ func (r *contentModerationTestUserRepo) GetUserAvatarsByUserIDs(ctx context.Cont
 	panic("unexpected GetUserAvatarsByUserIDs call")
 }
 
+func (r *contentModerationTestUserRepo) GetUserAvatarThumbsByUserIDs(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
+}
+
 func (r *contentModerationTestUserRepo) UpsertUserAvatar(ctx context.Context, userID int64, input UpsertUserAvatarInput) (*UserAvatar, error) {
 	panic("unexpected UpsertUserAvatar call")
 }

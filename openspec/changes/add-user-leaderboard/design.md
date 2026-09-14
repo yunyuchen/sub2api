@@ -155,9 +155,9 @@
 
 ### D10：身份以结构化形式下发，文案由前端 i18n 渲染
 
-- 每个条目的身份是 `identity{kind: self|anonymous|named, username?}`，后端不拼展示名字符串。`self` 由前端渲染成查看者本人的 `username`（缺席或全空白时才回退「当前用户」），`anonymous` 渲染成「第 Ordinal 位」，`named` 直接用 `username`；这四条分支只在 `frontend/src/components/user/leaderboard/displayName.ts` 里实现一次。
+- 每个条目的身份是 `identity{kind: self|anonymous|named, username?}`，后端不拼展示名字符串。`self` 由前端渲染成查看者本人的 `username`（缺席或全空白时才回退「当前用户」），`anonymous` 渲染成「第 Ordinal 位」，`named` 直接用 `username`；这四条分支只在 `frontend/src/components/user/leaderboard/displayName.ts` 里实现一次。（D25 起身份多一个可选的 `avatar_url`，受与 `username` 完全相同的规则约束：只有 `named` 形态可能带，`self` 的头像同样由前端从查看者自己的资料里取，后端不下发。）
 - 术语沿用 `channelMonitorV2.currentUser`（「当前用户」/「Current user」），不再出现字面量 `"Me"`。
-- 响应不下发 `user_id` 与邮箱；金额只有 Cost 这一个口径，按与 tokens 相同的档位规则下发（见 D24），其它金额口径（`total_cost` 之类）一律不出现。
+- 响应不下发 `user_id` 与邮箱；金额只有 Cost 这一个口径，按与 tokens 相同的档位规则下发（见 D24），其它金额口径（`total_cost` 之类）一律不出现。身份字段从 D25 起是 `{kind, username?, avatar_url?}`：`avatar_url` 只在 `named` 形态下可能出现，`self` 与 `anonymous` 一律不下发，其余不变。
 - 备选：后端直接拼 `display_name` 字符串。否决：与 zh / en 双语互斥；渠道监控页面已经因此出现过 `"Me"` 与「当前用户」混排。
 
 ### D11：设置接入按 channel_monitor_mode 逐点对齐，前端用枚举读取器派生布尔 flag
@@ -228,7 +228,7 @@
 - 口径差异写明：预聚合表的 `total_requests` 是裸 `COUNT(*)`，不带 `usageLogSuccessFilterUL`，因此 `daily_30` 与 `hourly_today` 的计数是**全部请求**，字段名就叫 `requests`，与榜单和 `models_today` 的 `successful_requests` 不是同一个口径。页面在这两个区块下注明，footer 的口径说明也带上这一句。备选是给这两块也做成功落账口径。否决：那要绕开预聚合表回去扫 `usage_logs`，请求路径只读 Redis 的前提虽然还在，但后台每轮多两次范围扫描，代价与收益不成比例。
 - 预聚合缺行（`cfg.DashboardAgg.Enabled` 关着，或保留期没覆盖到那段日期）时，对应区块整块返回 null，前端隐藏该区块；MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败。`models_today` 不依赖预聚合表，因此不受这条影响。
 - 两张预聚合表**读取出错**与缺行同等对待：重建时把对应区块降级为 null 并记一条日志，本轮照常写入三个窗口的快照。它们是仪表盘的派生物，读不动不说明榜单数据有问题，没有理由让整轮重建被连坐——页面上少一块洞察，好过全站在下一轮之前只能看一份越来越旧的榜。硬失败因此只剩两条：`AggregateLeaderboardWindows`（榜单本体）与 `LeaderboardTopModelsToday`（与榜单同源、直接扫 `usage_logs`），它们出错时整轮不切换，正式 key 保持上一轮的完整内容。
-- 响应扩展两个顶层字段：`highlights{top_tokens, top_requests, cache_king, site}` 与 `insights{models_today[], daily_30[], hourly_today[], cache_today, month}`；`status` 为 `computing` 时 `highlights` 一并为 null。`identity` 仍是结构化的 `{kind, username?}`，绝对量字段仍用指针 + `omitempty` 表达「字段是否存在」，与 D14 的 `entries` 同一套写法。
+- 响应扩展两个顶层字段：`highlights{top_tokens, top_requests, cache_king, site}` 与 `insights{models_today[], daily_30[], hourly_today[], cache_today, month}`；`status` 为 `computing` 时 `highlights` 一并为 null。`identity` 仍是结构化的 `{kind, username?}`（D25 起读作 `{kind, username?, avatar_url?}`，多出来的 `avatar_url` 只在 `named` 形态下可能出现，Highlights 的身份从 `slots` 继承，不另查一次），绝对量字段仍用指针 + `omitempty` 表达「字段是否存在」，与 D14 的 `entries` 同一套写法。
 - 备选：highlights 与 insights 在请求路径上现算。否决：`cache_king` 要遍历全窗口用户、`models_today` 要扫今日 `usage_logs`，两条都是 D8「请求路径只读」明令禁止的。
 - 备选：把 insights 也按 Window 分三份。否决：模型热度、时段分布与缓存命中都是「今日」语义，近 30 天与本月累计本来就跨窗口；分三份只是把同一份数据存三遍。
 
@@ -397,6 +397,24 @@
 - 备选：响应直接下发 micros，由前端换算。否决：micros 是存储层的定点技巧，不是接口口径；下发 micros 等于把这个技巧漏给每一个客户端，且前端还要再定一次「1e6」这个常量。
 - 备选：给 Cost 也出一张趣味卡（`highlights.top_cost`「花得最多」）。否决：四张 Highlights 讲的是「谁最多」，卷王那张已经是同一个人的概率极高，多一张只是把同一件事说两遍；站点合计里给 `site.cost` 足够支撑解读句。
 
+
+### D25：榜单头像（2026-09-14）
+
+**取代关系**：本条只扩写身份的形态，不改任何档位语义。D10 的「身份以结构化形式下发、后端不拼展示名」与 D17 的「`identity` 仍是结构化的 `{kind, username?}`」在本条之后一律读作 `{kind, username?, avatar_url?}`——多出来的 `avatar_url` 与 `username` 受同一条规则约束（只有 `named` 形态可能有）。D1 的三档语义、D5 的 Rank / Ordinal 规则、D8 的「请求路径只读」与 D24 的金额档位一个字不改。
+
+- 头像与展示名走同一套身份规则，不另加开关：`named` 形态才可能有 `avatar_url`；用户在个人资料里关掉「在排行榜显示我的昵称」之后，名字与头像一起消失。给头像单独做一个开关等于让「匿名但有脸」这种状态成立，而一张自拍比一个昵称更能指认到人。
+- `anonymous` 档下他人的行 MUST NOT 带头像。匿名档的全部意义是「看不出是谁」，下发头像等于当场去匿名，比下发 `username` 还直接；匿名行渲染成一个不带字符的素色圆圈，占位与实名行一致，避免整列对不齐。
+- 本人行始终显示自己的头像，但它 MUST NOT 由后端下发：前端从 auth store 里的 `user.avatar_url` 取（那是查看者自己的个人资料，本来就在内存里）。理由与 D10 让 `self` 的展示名由前端渲染同源——本人行只有本人看得见，没有必要让它经过一遍「把身份推给第三方看」的校验，也省掉后端为 `self` 多分一个岔路。
+- 榜单 JSON 里放的是小图而不是原图：`user_avatars` 新增 `thumb_url` 列（迁移 242），存 64px 正方形 JPEG 的 data URL（约 1–3 KB），在上传 inline 头像时由 `normalizeInlineUserAvatarInput` 顺手派生（中心正方形裁切 → `xdraw.CatmullRom` 缩到 64 → 白底 → `jpeg.Encode` quality 80）；榜单只下发它。原图是 20 KB 量级，50 行乘上去就是一个兆级的响应，而页面上它只占 24px。存量的 inline 头像（线上 4 张）由进程启动时跑一次的 `UserService.BackfillAvatarThumbs` 回填，单行失败只记日志跳过，不让一张坏图卡住整轮。
+- `remote_url`（外链）头像没有小图，榜单 MUST NOT 显示，前端回退首字母圆圈。外链地址是用户自填的，把它放进一个全站所有人都会打开的页面，等于让每个查看者的浏览器去请求一个任意第三方地址——那是一次由我们发起的分发，会把查看者的 IP 与 UA 交给地址的持有者，也给了填地址的人一个统计「谁看了榜单」的通道。
+- 展示位置只有三处，都是名字前 24px：榜单表每行（`.rp-lb-name`）、模型偏好画像 profiles 的 50 行、Highlights 里「tokens 领先者」那张卡的 `.rp-who`（同一张卡的对比条 `.rp-cmp-t` 不加，那里是数值不是身份）。「你的位置」区块不加——它根本不渲染名字；Extremes 六张卡不加——它们的 who 是纯文本列表；报头不加。
+- 数据形态：`service.UserAvatar.ThumbURL` 与 `service.UpsertUserAvatarInput.ThumbURL`（存储层，inline 必填、`remote_url` 留空）、`service.LeaderboardIdentity.AvatarURL string` 带 `json:"avatar_url,omitempty"`（下发层，只在 `kind == named` 且该用户有非空 `thumb_url` 时出现）、前端 `LeaderboardIdentity.avatar_url?: string`。榜单构建时只在 `named` 档（`renderNamed` 为真）调一次 `GetUserAvatarThumbsByUserIDs`（只取 `thumb_url` 一列：原图列每行可达 20 KB，榜单 MUST NOT 为读 2 KB 的小图搬 1 MB 原图），与 `GetByIDs` 同一批 id；`anonymous` 档一次都不查。该查询失败只记一条日志、榜单照常下发——头像是装饰，不是数据，没有理由让它把整个响应拖失败。Highlights / Extremes / profiles 的身份都经 `leaderboardHighlightIdentity` 从 `slots` 取，自然继承同一个 identity。
+- 解码加固（审查后补，2026-09-14）：头像字节数上限（100 KB）挡不住「几 KB 的文件、上亿像素」的解码炸弹（1-bit 调色板 PNG、无损 webp），而小图派生让 ≤20 KB 的头像也要解码了。所有头像解码统一走 `decodeAvatarImage`：先 `image.DecodeConfig` 读文件头，单边 > 8192 或像素数 > 16M 直接按无效头像拒绝，>20 KB 的压缩路径同样受此保护；大图先用 `ApproxBiLinear` 粗缩到 256px 再 `CatmullRom` 到 64px。回填按 `user_id` 键集分页（游标越过解不开的坏图，后面的行不会被卡住），写回的 UPDATE 带 `storage_provider='inline' AND thumb_url=''`（读写之间用户换了头像就落空，不把旧图的小图盖上去）。
+- 备选：榜单直接下发原图的 data URL，或给每行一个 `/api/v1/user/avatar/{id}` 之类的取图地址。否决：前者把响应撑到兆级；后者等于给一次榜单渲染追加 50 个并发请求，还要为「谁能看谁的头像」再实现一遍档位判定——而档位判定已经在响应组装层做过一次了，第二份实现迟早与第一份走散。
+- 备选：给头像单独一个「在排行榜显示我的头像」开关。否决：两个开关四种组合，其中「显示头像但不显示昵称」比两个都关更糟（脸比名字更能指认人），产品上没人想要，设置页上也解释不清；一个开关同时管住名字与脸，语义才是闭合的。
+- 备选：`anonymous` 档下把头像模糊或马赛克后再下发。否决：像素化之后仍然留着主色与轮廓，熟人一眼能认；而且它让页面看起来像「这里有东西被藏起来了」，比一个干净的素色圆圈更招人去猜。
+- 备选：外链头像也上榜，由后端先抓回来转成小图。否决：那是让服务端按用户自填的地址发出站请求（SSRF 面），为一张 24px 的图开这个口子不划算；回退首字母圆圈在视觉上已经足够，而且榜单上本来就有一半是匿名的空圆。
+
 ## Risks / Trade-offs
 
 - [`named` 档下关掉了昵称展示的用户仍是假名 + 精确数值，熟人可对着仪表盘数值反查身份] → 见 ADR-0002 的 Consequences：这是管理员选择最开放档时接受的残余风险，设置项旁写明；想要更严就用 `anonymous` 档。
@@ -418,6 +436,8 @@
 - [`named` 档下 Cost 是绝对金额，等于把每个显示着昵称的用户的消费规模对全站公开] → 这是 D24 明确接受的代价：金额与 tokens 走同一套档位规则，不接受的运营者用 `anonymous` 档（他人只剩 `cost_relative_percent`）或 `off`。风险与「`named` 档 + 今日窗口构成活动时间线」同源，退出通道仍是个人资料里的昵称展示开关。
 - [Hash 从 12 段扩到 13 段、ZSET 从 2 个增到 3 个，旧快照与新代码并存] → 沿用 D20 已经验证过的「缺段按 0」：12 段式旧值解出 `CostMicros = 0`，表现为该窗口的金额列全 0 而不是解码失败，最长 5 分钟后被下一轮重建补齐；第三个 ZSET 在旧快照上不存在，读到缺失即按「正在计算」处理。回滚同理，旧代码只读前 12 段、忽略第三个 ZSET。
 - [`viewer.models` 在 D8「请求路径只读」上开了一个口子，一旦被扩用就会把整条链拖回实时聚合] → 例外的边界写死在三处并各有测试：SQL 必须带 `user_id = 查看者`、只服务 `viewer.models` 这一个字段、结果在 Redis 上按 `(user_id, window, 窗口起点)` 缓存 60 秒。最坏情况是每个活跃用户每分钟一条只扫自己数据的聚合，走 `(user_id, created_at)` 索引；配合 `panelRateLimiter.Heavy()`，它的量级与「用户自己的用量页」同级。Redis 不可用时这一块降级为空数组，MUST NOT 让整个响应失败。
+- [`named` 档下头像把「用了多少」与一张脸绑在一起，比 `username` 更能指认到具体的人] → 头像与昵称受同一个开关约束（D25），用户关掉「在排行榜显示我的昵称」之后两者一起消失；`anonymous` 档下他人一律没有头像，本人的头像不经后端下发。残余风险与「`named` 档下显示昵称」同源，退出通道也是同一个，不额外增加一条。
+- [`thumb_url` 是 data URL，跟着榜单响应一起走，50 行就是几十到一百多 KB 的额外体积] → 小图定死在 64px / JPEG quality 80，实测单张 1–3 KB；只有 `named` 档且实名的行才带，`anonymous` 档一张都不带；`remote_url` 头像没有小图因此也不占体积。真正的上限是 50 行，与条目数同阶，不随站点规模增长。再嫌大就把 thumb 换成独立的缓存端点，但那要先付「第二份档位判定」的代价（见 D25 的否决项）。
 
 ## Migration Plan
 
@@ -431,3 +451,4 @@
 8. Redis 上的旧快照与新代码兼容，不需要为这一轮单独做 Redis 迁移：Hash value 从 `"tokens,requests"` 扩成 `"tokens,requests,input,cache_read"` 后，解码按逗号切分再逐段取值，段数不足时缺的两个数一律按 0 处理，因此上一版写入的两段式 value 仍能读（表现为该窗口「无缓存命中率」而不是 0%），下一轮作业最长 5 分钟后重建即补齐。新增的 `:highlights` 与 `leaderboard:v1:insights:*` 两类 key 在旧快照上根本不存在，读到缺失即按 null 处理，页面隐藏对应区块。回滚同理：旧代码只读前两段，多出来的两段会被忽略，`:highlights` 与 `insights:*` 随 TTL 自然过期。v2 把 Hash value 再从 4 段扩到 12 段（顺序见 D20），走的是同一条规则：缺的段一律按 0，因此 2 段式与 4 段式的旧 value 都仍能读，表现为对应的之最卡缺席而不是 0；回滚时多出来的八段同样被忽略。
 9. Cost 这一轮（D24）新增一个迁移，编号取现有最大加一：当前最大为 `240_leaderboard_named_participation_default_true.sql`，因此用 `241_leaderboard_rank_history_cost.sql`。内容是 `ALTER TABLE leaderboard_rank_history ADD COLUMN IF NOT EXISTS rank_cost INT NOT NULL DEFAULT 0;` 外加一条 `COMMENT ON COLUMN`，幂等，普通事务迁移即可，不用 `_notx.sql` 后缀——新增带默认值的 INT 列在 PostgreSQL 11+ 不重写表。与 238 / 239 / 240 同理，正文与注释里都 MUST NOT 出现并发建索引的那个关键字（`migrations_runner.go` 对非 `_notx.sql` 文件是整文件裸匹配）。回滚时该列保留无副作用（默认 `0`，旧代码不读它），确需彻底清理时手工 `ALTER TABLE leaderboard_rank_history DROP COLUMN rank_cost`。
 10. Redis 上 D24 的兼容同样不需要单独迁移：Hash value 从 12 段扩到 13 段（第 13 段是 Cost micros），解码仍按逗号切分逐段取值、缺段按 0，因此 2 / 4 / 12 段式的历史 value 全都仍能读出榜单本体，表现为金额列为 0 而不是解码失败，下一轮作业最长 5 分钟后补齐；每个 Window 新增的第三个 ZSET（key 后缀 `cost`）在旧快照上不存在，读到缺失即按「正在计算」处理。回滚同理：旧代码只读前 12 段并忽略 `cost` 这个 ZSET，多出来的一段与一个 key 随 TTL 自然过期。
+11. 头像小图这一轮（D25）新增一个迁移，编号取现有最大加一：当前最大为 `241_leaderboard_rank_history_cost.sql`，因此用 `242_user_avatars_thumb.sql`。内容是 `ALTER TABLE user_avatars ADD COLUMN IF NOT EXISTS thumb_url TEXT NOT NULL DEFAULT '';` 外加一条 `COMMENT ON COLUMN`（写明空串的含义是「没有小图」，`remote_url` 头像永远是空串），幂等，普通事务迁移即可，不用 `_notx.sql` 后缀——带常量默认值的 `ADD COLUMN` 在 PostgreSQL 11+ 不重写表。与 238 / 239 / 240 / 241 同理，正文与注释里都 MUST NOT 出现并发建索引的那个关键字（`migrations_runner.go` 对非 `_notx.sql` 文件是整文件裸匹配）。存量的 inline 头像不由迁移回填，而是在进程启动时由 `UserService.BackfillAvatarThumbs` 分批补齐（原图在列里，派生小图要解码与缩放，不是 SQL 能做的事）；回填失败的单行只记日志，下次启动再试，既不阻塞启动也不影响榜单——缺小图的行就是不显示头像。回滚时该列保留无副作用（默认空串，旧代码不读它），确需彻底清理时手工 `ALTER TABLE user_avatars DROP COLUMN thumb_url`。

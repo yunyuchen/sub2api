@@ -38,7 +38,7 @@
 - **THEN** 响应 MUST NOT 透露该路由存在
 
 ### Requirement: Leaderboard 响应的字段集合与结构化身份
-响应体 MUST 包含 `window`、`metric`、`mode`、`preview`、`timezone`、`status`、`stale`、`snapshot_updated_at`、`participant_count`、`entries`、`entries_suppressed`、`my_rank` 这些字段。`status` 的取值 MUST 只有 `ready` 与 `computing`：`computing` 表示 Snapshot（榜单快照）缺失，此时 `snapshot_updated_at` MUST 为 `null`、`entries` MUST 是空数组。`stale` MUST 是布尔值，`snapshot_updated_at` 距当前时刻超过 15 分钟时 MUST 为 `true`。`entries_suppressed` MUST 是布尔值，仅在 `anonymous` 档因参与人数过少而不下发条目时为 `true`（见 `leaderboard-mode`）。每个 Leaderboard Entry MUST 包含 `rank`、`ordinal`、`identity`、`is_self` 以及当前档位允许的数值字段。`identity` MUST 是结构化对象 `{kind: self | anonymous | named, username?}`；后端 MUST NOT 拼接 Display Name（展示名）字符串下发。Display Name 的文案 MUST 由前端 i18n 渲染：`self` 渲染为查看者本人的 `username`（去空白后为空时才回退「当前用户」，沿用 `channelMonitorV2.currentUser` 的术语）、`anonymous` 渲染为「第 Ordinal 位」、`named` 直接使用 `username`；响应与页面 MUST NOT 出现字面量 `Me`。这四条分支 MUST 只有一处实现（`frontend/src/components/user/leaderboard/displayName.ts`），榜单条目、Highlights、Extremes 与模型画像 MUST 复用它。`self` 取的是查看者自己的资料，MUST NOT 对它套用 Named Participation 的 `username` 校验——那条校验挡的是「把别人的名字推给第三方看」，而本人行只有本人看得见。
+响应体 MUST 包含 `window`、`metric`、`mode`、`preview`、`timezone`、`status`、`stale`、`snapshot_updated_at`、`participant_count`、`entries`、`entries_suppressed`、`my_rank` 这些字段。`status` 的取值 MUST 只有 `ready` 与 `computing`：`computing` 表示 Snapshot（榜单快照）缺失，此时 `snapshot_updated_at` MUST 为 `null`、`entries` MUST 是空数组。`stale` MUST 是布尔值，`snapshot_updated_at` 距当前时刻超过 15 分钟时 MUST 为 `true`。`entries_suppressed` MUST 是布尔值，仅在 `anonymous` 档因参与人数过少而不下发条目时为 `true`（见 `leaderboard-mode`）。每个 Leaderboard Entry MUST 包含 `rank`、`ordinal`、`identity`、`is_self` 以及当前档位允许的数值字段。`identity` MUST 是结构化对象 `{kind: self | anonymous | named, username?, avatar_url?}`；后端 MUST NOT 拼接 Display Name（展示名）字符串下发。`avatar_url` 是可选的头像小图（见「榜单身份的头像字段」），MUST 只在 `kind` 为 `named` 时可能出现，`self` 与 `anonymous` 的身份里 MUST NOT 包含它。Display Name 的文案 MUST 由前端 i18n 渲染：`self` 渲染为查看者本人的 `username`（去空白后为空时才回退「当前用户」，沿用 `channelMonitorV2.currentUser` 的术语）、`anonymous` 渲染为「第 Ordinal 位」、`named` 直接使用 `username`；响应与页面 MUST NOT 出现字面量 `Me`。这四条分支 MUST 只有一处实现（`frontend/src/components/user/leaderboard/displayName.ts`），榜单条目、Highlights、Extremes 与模型画像 MUST 复用它。`self` 取的是查看者自己的资料，MUST NOT 对它套用 Named Participation 的 `username` 校验——那条校验挡的是「把别人的名字推给第三方看」，而本人行只有本人看得见。
 
 #### Scenario: 查看者本人的条目
 - **WHEN** 查看者本人进入前 50 并出现在 `entries` 中
@@ -284,7 +284,7 @@ Ordinal（行序号）MUST 是当前 Window + Metric 下 `entries` 的连续序�
 - **THEN** 系统 MUST NOT 另外暴露一个管理端专用的 Leaderboard 路由
 
 ### Requirement: 响应包含 Highlights 与 Insights 两个顶层字段
-响应体 MUST 在既有字段之外包含 `highlights` 与 `insights` 两个顶层字段。`highlights` MUST 是该 Window（榜单窗口）的四块 Highlights（趣味卡）数据 `{top_tokens, top_requests, cache_king, site}`；`top_tokens`、`top_requests`、`cache_king` 在无人满足条件时 MUST 为 `null`，MUST NOT 用零值对象顶替。`insights` MUST 是与 Window 无关的站点级 Insights（洞察）`{models_today, daily_30, hourly_today, cache_today, month}`；任一区块的数据源缺失时该区块 MUST 为 `null`，MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败。`status` 为 `computing` 时 `highlights` MUST 为 `null`。Highlights 里的身份 MUST 与 Leaderboard Entry（榜单条目）用同一个结构化形态 `{kind, username?}`，并额外带一个 `ordinal`：该用户不在当前 Window + Metric（排名指标）的前 50 内时 `ordinal` MUST 为 `null`。Highlights 与 Insights MUST NOT 使响应出现 `user_id` 或邮箱；其中唯一允许出现的金额 MUST 是 `highlights.site.cost`（该 Window 的 `actual_cost` 之和，`named` 档与 Preview 才给），MUST NOT 出现其它金额口径，也 MUST NOT 为 Cost（消费金额）新增一张 Highlights 卡。Cache Hit Rate（缓存命中率）MUST 以 `cache_hit_rate` 表达，取值范围是 0 到 1；对应窗口的 `input_tokens + cache_read_tokens` 为 0 时该字段 MUST 缺席，MUST NOT 记成 0。
+响应体 MUST 在既有字段之外包含 `highlights` 与 `insights` 两个顶层字段。`highlights` MUST 是该 Window（榜单窗口）的四块 Highlights（趣味卡）数据 `{top_tokens, top_requests, cache_king, site}`；`top_tokens`、`top_requests`、`cache_king` 在无人满足条件时 MUST 为 `null`，MUST NOT 用零值对象顶替。`insights` MUST 是与 Window 无关的站点级 Insights（洞察）`{models_today, daily_30, hourly_today, cache_today, month}`；任一区块的数据源缺失时该区块 MUST 为 `null`，MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败。`status` 为 `computing` 时 `highlights` MUST 为 `null`。Highlights 里的身份 MUST 与 Leaderboard Entry（榜单条目）用同一个结构化形态 `{kind, username?, avatar_url?}`（`avatar_url` 的下发条件与榜单条目完全一致，MUST NOT 另立一套判定），并额外带一个 `ordinal`：该用户不在当前 Window + Metric（排名指标）的前 50 内时 `ordinal` MUST 为 `null`。Highlights 与 Insights MUST NOT 使响应出现 `user_id` 或邮箱；其中唯一允许出现的金额 MUST 是 `highlights.site.cost`（该 Window 的 `actual_cost` 之和，`named` 档与 Preview 才给），MUST NOT 出现其它金额口径，也 MUST NOT 为 Cost（消费金额）新增一张 Highlights 卡。Cache Hit Rate（缓存命中率）MUST 以 `cache_hit_rate` 表达，取值范围是 0 到 1；对应窗口的 `input_tokens + cache_read_tokens` 为 0 时该字段 MUST 缺席，MUST NOT 记成 0。
 
 #### Scenario: Highlights 的领先者不在前 50
 - **WHEN** 某个 Window 的效率之星在当前 Metric 的榜单上排在第 51 名之后
@@ -401,7 +401,7 @@ Leaderboard（排行榜）页面的视觉 MUST 由一套页面私有的皮肤渲
 - **THEN** 页面内容 MUST 照常完整渲染
 
 ### Requirement: 响应包含 Extremes、Viewer Stats 与五块新增 Insights
-响应体 MUST 在既有字段之外满足三件事。其一，`highlights` MUST 增加 `extremes`，包含 `night_owl`、`rising`、`omnivore`、`talker`、`max_single`、`streak` 六项，每一项在无人满足条件时 MUST 为 `null`，MUST NOT 用零值对象顶替；`rising` MUST 只在 `window=today` 时可能有值，其余两个 Window（榜单窗口）下 MUST 为 `null`。每一项 MUST 与 Leaderboard Entry（榜单条目）用同一个结构化身份 `{kind, username?}` 并额外带 `ordinal`，该用户不在下发的 `entries` 内时 `ordinal` MUST 为 `null`。其二，`insights` MUST 增加 `profiles`、`platforms_today`、`weekly_rhythm`、`composition_today`、`cache_trend_14` 五块，任一块的数据源缺失时该块 MUST 为 `null`，MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败；`highlights.site` MUST 增加 `avg_tokens_per_request`（全站该 Window 的 Total Tokens（总 tokens）除以 Successful Requests（成功请求数）），全站成功请求数为 0 时该字段 MUST 缺席、MUST NOT 记成 0。其三，响应 MUST 增加顶层字段 `viewer`，包含 `rank_history`、`models`、`cache_hit_rate` 与 `avg_tokens_per_request`，全部是查看者**本人**的真实数据。`viewer` MUST NOT 为 `null`，也 MUST NOT 随 `status` 变化——它不出自 Snapshot（榜单快照）；查看者没有名次历史时 `rank_history` MUST 是空数组，本窗口零用量时 `models` MUST 是空数组且两个比率字段 MUST 缺席。`extremes`、新增的 Insights（洞察）与 `viewer` MUST NOT 使响应出现 `user_id`、邮箱或任何金额字段——Cost（消费金额）只出现在 Leaderboard Entry、`my_rank` 与 `highlights.site` 三处。
+响应体 MUST 在既有字段之外满足三件事。其一，`highlights` MUST 增加 `extremes`，包含 `night_owl`、`rising`、`omnivore`、`talker`、`max_single`、`streak` 六项，每一项在无人满足条件时 MUST 为 `null`，MUST NOT 用零值对象顶替；`rising` MUST 只在 `window=today` 时可能有值，其余两个 Window（榜单窗口）下 MUST 为 `null`。每一项 MUST 与 Leaderboard Entry（榜单条目）用同一个结构化身份 `{kind, username?, avatar_url?}` 并额外带 `ordinal`，该用户不在下发的 `entries` 内时 `ordinal` MUST 为 `null`。其二，`insights` MUST 增加 `profiles`、`platforms_today`、`weekly_rhythm`、`composition_today`、`cache_trend_14` 五块，任一块的数据源缺失时该块 MUST 为 `null`，MUST NOT 用 0 填充，也 MUST NOT 让整个响应失败；`highlights.site` MUST 增加 `avg_tokens_per_request`（全站该 Window 的 Total Tokens（总 tokens）除以 Successful Requests（成功请求数）），全站成功请求数为 0 时该字段 MUST 缺席、MUST NOT 记成 0。其三，响应 MUST 增加顶层字段 `viewer`，包含 `rank_history`、`models`、`cache_hit_rate` 与 `avg_tokens_per_request`，全部是查看者**本人**的真实数据。`viewer` MUST NOT 为 `null`，也 MUST NOT 随 `status` 变化——它不出自 Snapshot（榜单快照）；查看者没有名次历史时 `rank_history` MUST 是空数组，本窗口零用量时 `models` MUST 是空数组且两个比率字段 MUST 缺席。`extremes`、新增的 Insights（洞察）与 `viewer` MUST NOT 使响应出现 `user_id`、邮箱或任何金额字段——Cost（消费金额）只出现在 Leaderboard Entry、`my_rank` 与 `highlights.site` 三处。
 
 #### Scenario: rising 只在今日窗口存在
 - **WHEN** 客户端请求 `window=week`
@@ -460,3 +460,36 @@ Cost（消费金额）MUST 以 USD 的浮点数下发，字段名在 Leaderboard
 - **WHEN** 检查任意档位下的完整响应体
 - **THEN** `highlights` MUST NOT 包含 `top_cost` 或任何以金额为主角的新卡
 - **THEN** `named` 档与 Preview 下 `highlights.site.cost` MUST 照常给出，供页面算「前三名占全站百分之多少」
+
+### Requirement: 榜单身份的头像字段
+Leaderboard 的结构化身份 MUST 增加一个可选字段 `avatar_url`，它与 `username` 受同一条规则约束：MUST 只在 `identity.kind` 为 `named` 时可能出现；`kind` 为 `anonymous` 或 `self` 的身份里 MUST NOT 出现 `avatar_url`。`avatar_url` 的值 MUST 是该用户头像的 64px 正方形小图（`user_avatars.thumb_url`，JPEG 的 data URL），系统 MUST NOT 在榜单响应里下发原图，也 MUST NOT 下发任何指向用户自填外链（`remote_url` 形态的头像）的地址——该类头像没有小图，其条目 MUST 直接省略 `avatar_url`，由前端回退成首字母圆圈。查看者本人的头像 MUST 由前端从本人的个人资料取，后端 MUST NOT 为 `self` 条目下发 `avatar_url`。头像 MUST NOT 有独立的用户开关：用户关闭 Named Participation（昵称展示）后，其 `username` 与 `avatar_url` MUST 一起消失。头像的下发 MUST NOT 影响响应的其它部分——取头像失败时系统 MUST 照常返回榜单，只是该批条目没有 `avatar_url`，MUST NOT 因此让请求失败。榜单条目、Highlights（趣味卡）、Extremes（之最）与模型偏好画像 MUST 复用同一个身份对象，MUST NOT 各自再判定一次。
+
+#### Scenario: 实名条目带头像
+- **WHEN** `named` 档下某实名用户上传过 inline 头像，其小图已就绪
+- **THEN** 其条目的 `identity.avatar_url` MUST 是该头像的 64px 小图
+- **THEN** 页面 MUST 在该行的 Display Name（展示名）前渲染这张头像
+
+#### Scenario: 外链头像不上榜
+- **WHEN** `named` 档下某实名用户的头像是自填的外链地址（没有小图）
+- **THEN** 其条目 MUST NOT 包含 `avatar_url`
+- **THEN** 页面 MUST 回退成首字母圆圈，MUST NOT 向该外链地址发起请求
+
+#### Scenario: 本人行的头像不由后端下发
+- **WHEN** 查看者本人出现在 `entries` 中
+- **THEN** 该条目的 `identity` MUST NOT 包含 `avatar_url`
+- **THEN** 页面 MUST 用查看者自己个人资料里的头像渲染该行
+
+#### Scenario: 关掉昵称展示后头像一并消失
+- **WHEN** 某用户把 Named Participation 关掉了
+- **THEN** 其条目 MUST 是匿名形态，既 MUST NOT 包含 `username`，也 MUST NOT 包含 `avatar_url`
+- **THEN** 系统 MUST NOT 为头像提供另一个独立开关
+
+#### Scenario: 取头像失败不影响榜单
+- **WHEN** 组装响应时批量读取头像小图出错
+- **THEN** 响应 MUST 照常返回完整的 `entries`、`my_rank` 与 `participant_count`
+- **THEN** 这一批条目 MUST 只是没有 `avatar_url`，系统 MUST NOT 因此返回错误
+
+#### Scenario: Highlights 与模型画像复用同一个身份
+- **WHEN** 某实名用户同时是 `highlights.top_tokens` 的领先者并出现在模型偏好画像里
+- **THEN** 两处的 `identity.avatar_url` MUST 与其榜单条目上的值一致
+- **THEN** 系统 MUST NOT 为这两处额外查询一次头像

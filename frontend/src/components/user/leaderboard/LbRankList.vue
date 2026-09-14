@@ -51,8 +51,19 @@
         {{ paddedRank(row.entry.rank) }}
       </span>
 
+      <!-- 头像（design D25）跟着展示名走：named 才可能有一张，self 取自己个人资料里的那张，
+           匿名行传空名 + 空地址，画出来是一个素色空圆——占住位置但不泄露任何可辨识的字符。 -->
       <span class="rp-lb-name" role="cell">
-        <span :class="isAnonymous(row.entry) ? 'rp-anon' : ''">{{ displayName(row.entry) }}</span>
+        <UserAvatar
+          size="xs"
+          class="rp-lb-avatar"
+          :name="isAnonymous(row.entry) ? '' : displayName(row.entry)"
+          :avatar-url="avatarUrl(row.entry)"
+          data-testid="leaderboard-avatar"
+        />
+        <span class="rp-lb-nametext" :class="isAnonymous(row.entry) ? 'rp-anon' : ''">{{
+          displayName(row.entry)
+        }}</span>
         <span v-if="row.entry.is_self" class="rp-you">{{ t('leaderboard.table.selfBadge') }}</span>
       </span>
 
@@ -118,6 +129,7 @@ import {
   formatCurrency,
   formatNumberLocaleString,
 } from '@/utils/format'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import { useLeaderboardDisplayName } from './displayName'
 import type {
   LeaderboardEntry,
@@ -201,8 +213,9 @@ function isAnonymous(entry: LeaderboardEntry): boolean {
 /**
  * 展示名一律由前端渲染：规则收敛在 `displayName.ts`（本人优先自己的昵称，
  * named 用后端给的 username，其余是「第 N 位」假名），用户 id 永不出现在这里。
+ * 头像同理：named 用后端下发的小图，self 取自己个人资料里的那张，匿名行恒无。
  */
-const { displayName } = useLeaderboardDisplayName()
+const { displayName, avatarUrl } = useLeaderboardDisplayName()
 
 /**
  * 「档位决定字段是否存在」：anonymous 档他人条目没有绝对值，只有相对百分比。

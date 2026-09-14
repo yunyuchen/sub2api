@@ -3289,6 +3289,10 @@ func (r *oauthPendingFlowUserRepo) GetUserAvatarsByUserIDs(ctx context.Context, 
 	return result, nil
 }
 
+func (r *oauthPendingFlowUserRepo) GetUserAvatarThumbsByUserIDs(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
+}
+
 func (r *oauthPendingFlowUserRepo) UpsertUserAvatar(ctx context.Context, userID int64, input service.UpsertUserAvatarInput) (*service.UserAvatar, error) {
 	driver := r.client.Driver()
 	if tx := dbent.TxFromContext(ctx); tx != nil {

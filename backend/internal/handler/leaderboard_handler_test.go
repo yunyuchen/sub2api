@@ -140,9 +140,49 @@ func (leaderboardUserRepoStub) GetByIDs(_ context.Context, ids []int64) ([]servi
 	return out, nil
 }
 
+func (leaderboardUserRepoStub) GetUserAvatarThumbsByUserIDs(_ context.Context, _ []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
+}
+
+// leaderboardAvatarUserRepoStub 让每个上榜用户都开着实名参与且都有一张头像小图，
+// 用来在 HTTP 这一层确认 avatar_url 的下发形态（design D25）。
+type leaderboardAvatarUserRepoStub struct{}
+
+const leaderboardHandlerTestThumb = "data:image/jpeg;base64,VEhVTUI="
+
+func (leaderboardAvatarUserRepoStub) GetByIDs(_ context.Context, ids []int64) ([]service.User, error) {
+	out := make([]service.User, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, service.User{
+			ID:                            id,
+			Username:                      fmt.Sprintf("member-%d", id),
+			Status:                        service.StatusActive,
+			LeaderboardNamedParticipation: true,
+		})
+	}
+	return out, nil
+}
+
+func (leaderboardAvatarUserRepoStub) GetUserAvatarThumbsByUserIDs(_ context.Context, ids []int64) (map[int64]string, error) {
+	out := make(map[int64]string, len(ids))
+	for _, id := range ids {
+		out[id] = leaderboardHandlerTestThumb
+	}
+	return out, nil
+}
+
 func newLeaderboardTestRouter(cache service.LeaderboardCache, mode string, role string) *gin.Engine {
+	return newLeaderboardTestRouterWithUsers(cache, mode, role, leaderboardUserRepoStub{})
+}
+
+func newLeaderboardTestRouterWithUsers(
+	cache service.LeaderboardCache,
+	mode string,
+	role string,
+	userRepo service.LeaderboardUserRepository,
+) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := NewLeaderboardHandler(service.NewLeaderboardService(cache, leaderboardUserRepoStub{}, leaderboardViewerRepoStub{}))
+	h := NewLeaderboardHandler(service.NewLeaderboardService(cache, userRepo, leaderboardViewerRepoStub{}))
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -725,4 +765,57 @@ func TestLeaderboardHandlerNewBlocksSerializeAsNull(t *testing.T) {
 	data := leaderboardResponseData(t, rec.Body.Bytes())
 	require.NotEmpty(t, data["entries"], "榜单本体照常")
 	require.NotNil(t, data["viewer"])
+}
+
+// leaderboardGetRaw 与 leaderboardGet 同一条路径，只是额外把原始响应体交出来，
+// 用来断言某个 JSON 字段名整段缺席。
+func leaderboardGetRaw(t *testing.T, cache service.LeaderboardCache, mode, role string, userRepo service.LeaderboardUserRepository) (map[string]any, string) {
+	t.Helper()
+	router := newLeaderboardTestRouterWithUsers(cache, mode, role, userRepo)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/leaderboard", nil)
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	return leaderboardResponseData(t, rec.Body.Bytes()), rec.Body.String()
+}
+
+// 12.5 named 档：他人行的 identity 带 avatar_url，本人行 MUST NOT 带（本人头像由前端
+// 从个人资料取）；Highlights 的领先者身份继承同一个值（design D25）。
+func TestLeaderboardHandlerNamedResponseCarriesAvatarURL(t *testing.T) {
+	data, _ := leaderboardGetRaw(t, leaderboardFullSnapshotStub(), service.LeaderboardModeNamed, service.RoleUser, leaderboardAvatarUserRepoStub{})
+
+	entries, ok := data["entries"].([]any)
+	require.True(t, ok)
+	selfSeen, namedSeen := false, false
+	for _, item := range entries {
+		entry := item.(map[string]any)
+		identity := entry["identity"].(map[string]any)
+		if isSelf, _ := entry["is_self"].(bool); isSelf {
+			selfSeen = true
+			require.Equal(t, service.LeaderboardIdentitySelf, identity["kind"])
+			require.NotContains(t, identity, "avatar_url", "本人行 MUST NOT 带后端下发的头像")
+			continue
+		}
+		namedSeen = true
+		require.Equal(t, service.LeaderboardIdentityNamed, identity["kind"])
+		require.Equal(t, leaderboardHandlerTestThumb, identity["avatar_url"])
+	}
+	require.True(t, selfSeen)
+	require.True(t, namedSeen)
+
+	topTokens := data["highlights"].(map[string]any)["top_tokens"].(map[string]any)
+	require.Equal(t, leaderboardHandlerTestThumb, topTokens["identity"].(map[string]any)["avatar_url"])
+
+	profiles := data["insights"].(map[string]any)["profiles"].([]any)
+	require.NotEmpty(t, profiles)
+	require.Equal(t, leaderboardHandlerTestThumb, profiles[0].(map[string]any)["identity"].(map[string]any)["avatar_url"])
+}
+
+// 12.5 anonymous 档：整段响应体里 MUST NOT 出现 avatar_url——带头像等于去匿名。
+func TestLeaderboardHandlerAnonymousResponseHasNoAvatarURL(t *testing.T) {
+	data, raw := leaderboardGetRaw(t, leaderboardFullSnapshotStub(), service.LeaderboardModeAnonymous, service.RoleUser, leaderboardAvatarUserRepoStub{})
+
+	require.Equal(t, false, data["entries_suppressed"])
+	require.NotContains(t, raw, "avatar_url")
+	require.NotContains(t, raw, leaderboardHandlerTestThumb)
 }

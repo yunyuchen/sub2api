@@ -22,8 +22,18 @@
           })
         }}
       </span>
-      <div class="rp-who">
-        {{ displayName(highlights.top_tokens) }}
+      <!-- tokens 领先者是本章唯一带头像的人（design D25）：下面对比条里的 `.rp-cmp-t` 是同一个
+           名字的第二次出现，MUST NOT 也挂一张——同一张脸在同一块里出现两次只会更吵。
+           匿名档传空名 + 空地址，画出来是素色空圆。 -->
+      <div class="rp-who has-avatar">
+        <UserAvatar
+          size="xs"
+          class="rp-lb-avatar"
+          :name="isAnonymousHolder(highlights.top_tokens) ? '' : displayName(highlights.top_tokens)"
+          :avatar-url="avatarUrl(highlights.top_tokens)"
+          data-testid="leaderboard-avatar"
+        />
+        <span class="rp-lb-nametext">{{ displayName(highlights.top_tokens) }}</span>
         <span v-if="isSelf(highlights.top_tokens)" class="rp-you">
           {{ t('leaderboard.table.selfBadge') }}
         </span>
@@ -138,6 +148,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCountUp } from '@/composables/useCountUp'
 import { formatCompactNumberTrimmed, formatNumberLocaleString } from '@/utils/format'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import { useLeaderboardDisplayName } from './displayName'
 import type {
   LeaderboardCacheKing,
@@ -154,11 +165,16 @@ const props = defineProps<{
   activeWindow: LeaderboardWindow
 }>()
 
-/** 展示名与榜单条目、Extremes、Profiles 完全同一套规则，收敛在 `displayName.ts`。 */
-const { displayName } = useLeaderboardDisplayName()
+/** 展示名与头像与榜单条目、Extremes、Profiles 完全同一套规则，收敛在 `displayName.ts`。 */
+const { displayName, avatarUrl } = useLeaderboardDisplayName()
 
 function isSelf(holder: LeaderboardHighlightUser | LeaderboardCacheKing): boolean {
   return holder.identity.kind === 'self'
+}
+
+/** 匿名档的领先者：名字是「第 N 位」假名，头像圆圈里 MUST NOT 出现任何字符。 */
+function isAnonymousHolder(holder: LeaderboardHighlightUser | LeaderboardCacheKing): boolean {
+  return holder.identity.kind !== 'self' && holder.identity.kind !== 'named'
 }
 
 /** 「档位决定字段是否存在」：绝对量在则实名档口径，缺席则只能给占比。 */

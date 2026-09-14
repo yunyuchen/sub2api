@@ -77,7 +77,7 @@ Leaderboard Mode 为 `off` 时，普通用户请求 `GET /api/v1/leaderboard` MU
 - **THEN** 页面 MUST NOT 显示预览横幅
 
 ### Requirement: anonymous 档所有人匿名，他人只给相对百分比
-Leaderboard Mode 为 `anonymous` 时，所有 Leaderboard Entry（榜单条目）MUST 是匿名形态：查看者本人的 `identity.kind` 为 `self`，其余为 `anonymous`，MUST NOT 下发任何 `username`。他人条目的三个绝对数值字段 MUST 缺席，各自由 `total_tokens_relative_percent`、`successful_requests_relative_percent` 与 `cost_relative_percent` 代替：三者 MUST 是 0 到 100 的整数，表示相对该 Metric 第一名的百分比，该 Metric 第一名的值 MUST 是 `100`——档位决定字段是否存在，而不是把字段清零，客户端 MUST NOT 有机会把缺席误读成 0。查看者本人的条目与 `my_rank` MUST 始终是真实的绝对数值。`participant_count` MUST 只给分档字符串，MUST NOT 给精确值；分档规则 MUST 是：取下界序列 5、10、20、50、100、200、500、1000、2000、5000、10000 中不超过实际人数的最大值，表达为「N+」（如 137 → 「100+」），少于 5 时为「<5」。
+Leaderboard Mode 为 `anonymous` 时，所有 Leaderboard Entry（榜单条目）MUST 是匿名形态：查看者本人的 `identity.kind` 为 `self`，其余为 `anonymous`，MUST NOT 下发任何 `username`，也 MUST NOT 下发任何 `avatar_url`——头像比昵称更能指认到具体的人，在匿名档下发它等于当场去匿名。他人条目的三个绝对数值字段 MUST 缺席，各自由 `total_tokens_relative_percent`、`successful_requests_relative_percent` 与 `cost_relative_percent` 代替：三者 MUST 是 0 到 100 的整数，表示相对该 Metric 第一名的百分比，该 Metric 第一名的值 MUST 是 `100`——档位决定字段是否存在，而不是把字段清零，客户端 MUST NOT 有机会把缺席误读成 0。查看者本人的条目与 `my_rank` MUST 始终是真实的绝对数值。`participant_count` MUST 只给分档字符串，MUST NOT 给精确值；分档规则 MUST 是：取下界序列 5、10、20、50、100、200、500、1000、2000、5000、10000 中不超过实际人数的最大值，表达为「N+」（如 137 → 「100+」），少于 5 时为「<5」。
 
 #### Scenario: 他人条目没有绝对数值
 - **WHEN** 查看者在 `anonymous` 档下查看榜单
@@ -98,6 +98,11 @@ Leaderboard Mode 为 `anonymous` 时，所有 Leaderboard Entry（榜单条目�
 - **WHEN** 某用户已开启 Named Participation 且 `username` 合格，而 Leaderboard Mode 是 `anonymous`
 - **THEN** 该用户的条目 MUST 仍是匿名形态
 - **THEN** 响应 MUST NOT 包含其 `username`
+
+#### Scenario: anonymous 档下没有任何头像
+- **WHEN** 查看者在 `anonymous` 档下查看榜单，其中若干用户有头像小图
+- **THEN** 任何条目、Highlights（趣味卡）、Extremes（之最）与模型偏好画像的身份 MUST NOT 包含 `avatar_url`
+- **THEN** 系统在该档下 MUST NOT 为取头像发起任何查询
 
 ### Requirement: anonymous 档参与人数少于 5 时只显示本人行
 Leaderboard Mode 为 `anonymous` 且该 Window 的 Participant Count 少于 5 时，系统 MUST NOT 下发任何 Leaderboard Entry，只返回查看者自己的 My Rank（我的名次）相关信息；页面 MUST 只显示本人行并说明人数太少暂不展示榜单。理由是人数很少时「假名 + 相对百分比」也接近可辨认。该门槛值是设计阶段的假设，实现时可调整，但 MUST 在 `anonymous` 档生效、MUST NOT 在 `named` 档套用。被抑制时响应 MUST 带明确标记 `entries_suppressed: true`，页面 MUST 据此把抑制态与「窗口内无人有用量」的空态区分开（两者的 `entries` 都是空数组，见 `user-leaderboard`）。
@@ -128,10 +133,11 @@ Leaderboard Mode 为 `named` 时，某个条目以实名形态展示的充分必
 #### Scenario: 昵称展示为开且 username 合格
 - **WHEN** 某用户的 Named Participation 为开且 `username` 合格
 - **THEN** 其条目的 `identity.kind` MUST 为 `named`，`identity.username` MUST 是该 `username`
+- **THEN** 该用户有头像小图时 `identity.avatar_url` MUST 是该小图，没有小图时该字段 MUST 缺席
 
 #### Scenario: 用户自己关掉了昵称展示
 - **WHEN** 某用户把 Named Participation 关掉了
-- **THEN** 其条目 MUST 是匿名形态（Display Name（展示名）为「第 Ordinal 位」）
+- **THEN** 其条目 MUST 是匿名形态（Display Name（展示名）为「第 Ordinal 位」），`username` 与 `avatar_url` MUST 一起缺席
 - **THEN** 其 Total Tokens 与 Successful Requests MUST 仍是精确值
 
 #### Scenario: 参与人数精确
@@ -183,16 +189,16 @@ Leaderboard Mode 为 `named` 时，某个条目以实名形态展示的充分必
 - **THEN** 其条目 MUST 以实名形态展示
 
 ### Requirement: 响应永不下发 user_id 与邮箱，金额只有 Cost 一个口径
-Leaderboard 的任何响应，在任何档位、对任何角色，MUST NOT 包含 `user_id` 或邮箱。金额 MUST 只有 Cost（消费金额，该 Window（榜单窗口）的 `actual_cost` 之和）这一个口径，且 MUST 只出现在 Leaderboard Entry（榜单条目）、`my_rank` 与 `highlights.site` 三处、按与 Total Tokens（总 tokens）相同的档位规则裁剪；`total_cost` 之类的其它金额口径 MUST NOT 出现。身份 MUST 只以结构化的 `identity{kind, username?}` 表达。
+Leaderboard 的任何响应，在任何档位、对任何角色，MUST NOT 包含 `user_id` 或邮箱。金额 MUST 只有 Cost（消费金额，该 Window（榜单窗口）的 `actual_cost` 之和）这一个口径，且 MUST 只出现在 Leaderboard Entry（榜单条目）、`my_rank` 与 `highlights.site` 三处、按与 Total Tokens（总 tokens）相同的档位规则裁剪；`total_cost` 之类的其它金额口径 MUST NOT 出现。身份 MUST 只以结构化的 `identity{kind, username?, avatar_url?}` 表达，其中 `avatar_url` MUST 只在 `named` 形态下可能出现，且 MUST 只是头像小图本身（data URL），MUST NOT 是任何能反查用户的地址。
 
 #### Scenario: named 档下的响应体
 - **WHEN** `named` 档下管理员请求 Leaderboard
 - **THEN** 响应体 MUST NOT 出现 `user_id`、`email` 或 Cost 之外的任何金额字段
-- **THEN** 条目里唯一可能出现的身份信息 MUST 只有 `username`
+- **THEN** 条目里唯一可能出现的身份信息 MUST 只有 `username` 与 `avatar_url`
 
 #### Scenario: 匿名形态的条目
 - **WHEN** 某条目以匿名形态展示
-- **THEN** 该条目 MUST 既不含 `username`，也不含 `user_id` 或邮箱
+- **THEN** 该条目 MUST 既不含 `username` 与 `avatar_url`，也不含 `user_id` 或邮箱
 
 ### Requirement: 公开设置暴露 leaderboard_mode 并派生前端布尔 flag
 `GET /api/v1/settings/public` 与注入到页面的公开设置负载 MUST 包含 `leaderboard_mode`。前端 MUST NOT 把该枚举直接登记进 `featureFlags.ts` 的注册表（注册表只认布尔值，枚举会恒为 `false`）；MUST 新增枚举读取器 `getLeaderboardMode()`，再由它派生一个「mode 不为 `off`」的布尔函数供侧边栏与路由守卫使用。公开设置读不到该键时，前端 MUST 按 `off` 处理。
@@ -211,7 +217,7 @@ Leaderboard 的任何响应，在任何档位、对任何角色，MUST NOT 包�
 - **THEN** 前端 MUST 按 `off` 处理并隐藏入口
 
 ### Requirement: anonymous 档下 Highlights 与 Insights 的数值裁剪
-Leaderboard Mode（排行榜模式）为 `anonymous` 时，`highlights` 与 `insights` 里任何**他人的**或**站点级的**绝对量字段 MUST 缺席，MUST NOT 被清零后下发。可以下发的只有相对量与比率：`share_percent`（占全站该 Metric（排名指标）的百分比，0 到 100 的整数）、`lead_percent`（比第 2 名多出的整数百分比）、`relative_percent`（相对最高一天或峰值小时的 0 到 100 整数百分比）、`cache_hit_rate`（0 到 1 的比率）、`change_percent`（较上月的整数百分比，可为负）与 `peak_hour`。站点合计的 Cost（消费金额）`highlights.site.cost` 与 tokens 同办：`anonymous` 档 MUST 缺席，`named` 档与 Preview MUST 下发——这些字段在 `named` 档下 MUST 同样下发，页面的条宽与色阶都靠它们。Highlights（趣味卡）领先者的身份 MUST 用榜单 Ordinal（行序号）假名表达，MUST NOT 用 Rank（名次）代替 Ordinal，MUST NOT 出现用户 id。查看者本人恰好是某张 Highlights 卡的领先者时，该卡的 `identity.kind` MUST 是 `self`，但其数值 MUST 仍按当前档位裁剪——该卡是给所有人看的同一份数据，不是「我的数据」。本人条目、`my_rank` 与「你的位置」的数值 MUST 不受本条影响，始终是真实值。
+Leaderboard Mode（排行榜模式）为 `anonymous` 时，`highlights` 与 `insights` 里任何**他人的**或**站点级的**绝对量字段 MUST 缺席，MUST NOT 被清零后下发。可以下发的只有相对量与比率：`share_percent`（占全站该 Metric（排名指标）的百分比，0 到 100 的整数）、`lead_percent`（比第 2 名多出的整数百分比）、`relative_percent`（相对最高一天或峰值小时的 0 到 100 整数百分比）、`cache_hit_rate`（0 到 1 的比率）、`change_percent`（较上月的整数百分比，可为负）与 `peak_hour`。站点合计的 Cost（消费金额）`highlights.site.cost` 与 tokens 同办：`anonymous` 档 MUST 缺席，`named` 档与 Preview MUST 下发——这些字段在 `named` 档下 MUST 同样下发，页面的条宽与色阶都靠它们。Highlights（趣味卡）领先者的身份 MUST 用榜单 Ordinal（行序号）假名表达，MUST NOT 用 Rank（名次）代替 Ordinal，MUST NOT 出现用户 id，也 MUST NOT 出现 `avatar_url`。查看者本人恰好是某张 Highlights 卡的领先者时，该卡的 `identity.kind` MUST 是 `self`，但其数值 MUST 仍按当前档位裁剪——该卡是给所有人看的同一份数据，不是「我的数据」。本人条目、`my_rank` 与「你的位置」的数值 MUST 不受本条影响，始终是真实值。
 
 #### Scenario: 领先者用 Ordinal 假名
 - **WHEN** `anonymous` 档下今日卷王在当前 Window（榜单窗口）+ Metric 榜单上的 Ordinal 是 3

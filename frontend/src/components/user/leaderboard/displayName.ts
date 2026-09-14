@@ -15,6 +15,10 @@
  *
  * 「本人看自己的名字」不受站点档位影响：匿名档只约束**他人**的展示形态，本人这一行
  * 本来就只有自己能看见，所以两档同规则，组件不需要再看 mode。
+ *
+ * 头像（design D25）与展示名走同一套身份规则，因此 `avatarUrl` 也收敛在这里：
+ * named 才可能有（后端下发的 64px 小图），self 从自己的个人资料取，anonymous 恒无。
+ * 用户关掉「实名参与」后名字与头像一起消失，不另设开关。
  */
 import { computed, type ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -36,6 +40,8 @@ export interface LeaderboardDisplayName {
   selfDisplayName: ComputedRef<string>
   /** 按 identity 与 ordinal 渲染任意一行的展示名。 */
   displayName: (holder: LeaderboardIdentityHolder) => string
+  /** 按 identity 取任意一行的头像地址；没有头像时返回空串（组件回退首字母或空圆）。 */
+  avatarUrl: (holder: LeaderboardIdentityHolder) => string
 }
 
 export function useLeaderboardDisplayName(): LeaderboardDisplayName {
@@ -58,5 +64,21 @@ export function useLeaderboardDisplayName(): LeaderboardDisplayName {
     return t('leaderboard.identity.outOfRank')
   }
 
-  return { selfDisplayName, displayName }
+  /**
+   * 头像地址（design D25）。与展示名同一套身份规则，所以同住这里：
+   *
+   *   - `self`：从**自己的个人资料**取（auth store 的 `user.avatar_url`）。后端 MUST NOT 为
+   *     本人行下发头像——本人行只有自己看得见，没必要为此把原图搬进榜单响应。
+   *   - `named`：用后端给的 `identity.avatar_url`，那是 64px 小图的 data URL。
+   *     只有内嵌头像才有小图；外链头像（remote_url）不上榜，缺席时回退首字母。
+   *   - `anonymous`：恒为空串。给匿名行配头像等于把匿名档拆穿。
+   */
+  function avatarUrl(holder: LeaderboardIdentityHolder): string {
+    const identity = holder.identity
+    if (identity.kind === 'self') return authStore.user?.avatar_url?.trim() || ''
+    if (identity.kind === 'named') return identity.avatar_url?.trim() || ''
+    return ''
+  }
+
+  return { selfDisplayName, displayName, avatarUrl }
 }

@@ -166,6 +166,10 @@ func (s *stubUserRepo) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []in
 	return map[int64]*service.UserAvatar{}, nil
 }
 
+func (s *stubUserRepo) GetUserAvatarThumbsByUserIDs(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
+}
+
 func (s *stubUserRepo) UpsertUserAvatar(ctx context.Context, userID int64, input service.UpsertUserAvatarInput) (*service.UserAvatar, error) {
 	panic("unexpected UpsertUserAvatar call")
 }

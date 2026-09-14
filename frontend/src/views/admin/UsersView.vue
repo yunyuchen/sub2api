@@ -292,7 +292,7 @@
         >
           <template #cell-email="{ value, row }">
             <div class="flex items-center gap-2">
-              <UserAvatar :email="value" :avatar-url="row.avatar_url" size="sm" />
+              <UserAvatar :name="value" :avatar-url="row.avatar_url" size="sm" />
               <span class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
             </div>
           </template>
@@ -815,7 +815,7 @@ import UserConcurrencyCell from '@/components/user/UserConcurrencyCell.vue'
 import PlatformUsageBreakdown from '@/components/user/PlatformUsageBreakdown.vue'
 import PlatformCostCell from '@/components/user/PlatformCostCell.vue'
 import UserPlatformQuotaCell from '@/components/user/UserPlatformQuotaCell.vue'
-import UserAvatar from '@/components/admin/user/UserAvatar.vue'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import UserCreateModal from '@/components/admin/user/UserCreateModal.vue'
 import UserEditModal from '@/components/admin/user/UserEditModal.vue'
 import BulkEditUserModal from '@/components/admin/user/BulkEditUserModal.vue'

@@ -83,6 +83,10 @@ func (s *userRepoStubForListUsers) GetUserAvatarsByUserIDs(_ context.Context, us
 	return result, nil
 }
 
+func (s *userRepoStubForListUsers) GetUserAvatarThumbsByUserIDs(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{}, nil
+}
+
 type userGroupRateRepoStubForListUsers struct {
 	batchCalls int
 	singleCall []int64

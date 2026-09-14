@@ -56,7 +56,9 @@ vi.mock('vue-i18n', async () => {
  * 展示名 helper（`displayName.ts`）会读 auth store 里的 username：本人行优先显示自己的
  * 昵称，没有昵称时才回退「当前用户」。默认置空以覆盖回退分支，需要昵称的用例自己赋值。
  */
-const authState = vi.hoisted(() => ({ user: null as { username: string } | null }))
+const authState = vi.hoisted(() => ({
+  user: null as { username?: string; avatar_url?: string } | null,
+}))
 
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => authState }))
 
@@ -284,5 +286,61 @@ describe('LbHighlights', () => {
     expect(topTokens.text()).toContain('zoe')
     expect(topTokens.text()).not.toContain('Current user')
     expect(topTokens.find('.rp-you').text()).toBe('You')
+  })
+
+  /**
+   * 头像（design D25）只挂在 tokens 领先者的 `.rp-who` 上：对比条里的 `.rp-cmp-t` 是同一个
+   * 名字的第二次出现，MUST NOT 也挂一张；效率之星与最勤快那两块整块不带头像。
+   */
+  it('renders the top-tokens avatar once, on the who line only', () => {
+    const thumb = 'data:image/jpeg;base64,AAAA'
+    const highlights = namedHighlights()
+    highlights.top_tokens = {
+      ...highlights.top_tokens!,
+      identity: { kind: 'named', username: 'alice', avatar_url: thumb },
+    }
+    const wrapper = mountHighlights(highlights)
+
+    const avatars = wrapper.findAll('[data-testid="leaderboard-avatar"]')
+    expect(avatars).toHaveLength(1)
+    expect(avatars[0].get('[data-test="user-avatar-image"]').attributes('src')).toBe(thumb)
+
+    const topTokens = wrapper.find('[data-testid="leaderboard-highlight-top-tokens"]')
+    expect(topTokens.get('.rp-who [data-testid="leaderboard-avatar"]').exists()).toBe(true)
+    expect(topTokens.find('.rp-cmp-t [data-testid="leaderboard-avatar"]').exists()).toBe(false)
+    expect(
+      wrapper.find('[data-testid="leaderboard-highlight-cache-king"]').find('[data-testid="leaderboard-avatar"]').exists(),
+    ).toBe(false)
+  })
+
+  // 外链头像没有小图，后端不下发：回退展示名首字母。
+  it('falls back to the leader initial when no thumbnail is sent', () => {
+    const wrapper = mountHighlights(namedHighlights())
+
+    const avatar = wrapper.get('[data-testid="leaderboard-avatar"]')
+    expect(avatar.find('[data-test="user-avatar-image"]').exists()).toBe(false)
+    expect(avatar.get('[data-test="user-avatar-initial"]').text()).toBe('A')
+  })
+
+  // 匿名档：领先者也是假名，圆圈里 MUST NOT 出现任何字符。
+  it('renders a blank circle for an anonymous leader', () => {
+    const wrapper = mountHighlights(anonymousHighlights())
+
+    const avatar = wrapper.get('[data-testid="leaderboard-avatar"]')
+    expect(avatar.find('[data-test="user-avatar-image"]').exists()).toBe(false)
+    expect(avatar.get('[data-test="user-avatar-initial"]').text()).toBe('')
+  })
+
+  // 本人就是领先者时那张头像从 auth store 取，后端 MUST NOT 为 self 下发。
+  it('takes the viewer avatar from the auth store profile', () => {
+    authState.user = { username: 'zoe', avatar_url: 'data:image/webp;base64,BBBB' }
+    const highlights = namedHighlights()
+    highlights.top_tokens = { ...highlights.top_tokens!, identity: { kind: 'self' } }
+    const wrapper = mountHighlights(highlights)
+
+    const avatar = wrapper.get('[data-testid="leaderboard-avatar"]')
+    expect(avatar.get('[data-test="user-avatar-image"]').attributes('src')).toBe(
+      'data:image/webp;base64,BBBB',
+    )
   })
 })

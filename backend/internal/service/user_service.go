@@ -25,6 +25,9 @@ import (
 	"time"
 
 	xdraw "golang.org/x/image/draw"
+	// webp 是浏览器端压缩头像后最常见的格式之一；标准库不带解码器，少了这个
+	// blank import，image.Decode 认不出 webp，派生不出榜单小图。
+	_ "golang.org/x/image/webp"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -49,6 +52,25 @@ const (
 	maxNotifyEmails      = 3 // Maximum number of notification emails per user
 	maxInlineAvatarBytes = 100 * 1024
 	targetAvatarBytes    = 20 * 1024
+
+	// avatarThumbSize / avatarThumbQuality 决定 UserAvatar.ThumbURL 的小图规格：
+	// 64px 正方形、quality 80 的 JPEG 落在 1–3 KB，几十张一起下发也只有几十 KB。
+	avatarThumbSize    = 64
+	avatarThumbQuality = 80
+
+	// avatarThumbBackfillBatchSize 是启动回填每轮取的行数；
+	// avatarThumbBackfillTimeout 是整轮回填的上限，超时即放弃，下次启动继续。
+	avatarThumbBackfillBatchSize = 100
+	// avatarMaxSide / avatarMaxPixels 是解码前的尺寸上限：头像的字节数上限（100 KB）挡不住
+	// 「几 KB 的文件、上亿像素」的解码炸弹（1-bit 调色板 PNG、无损 webp 都能做到），
+	// 解码 + 缩放会吃掉几百 MB 内存和数秒 CPU，而这段代码跑在请求路径上。
+	// 先用 image.DecodeConfig 只读文件头判尺寸，超限直接按无效头像拒绝。
+	avatarMaxSide   = 8192
+	avatarMaxPixels = 16 << 20
+	// avatarThumbPrescaleSide：原图边长超过它时先用廉价的 ApproxBiLinear 缩到这个尺寸，
+	// 再做 CatmullRom——CatmullRom 的核宽随「原图/目标」比例增长，直接从几千像素缩到 64 会很慢。
+	avatarThumbPrescaleSide    = 256
+	avatarThumbBackfillTimeout = 5 * time.Minute
 
 	// User-level rate limiting for notify email verification codes
 	notifyCodeUserRateLimit  = 5
@@ -154,6 +176,9 @@ type UserRepository interface {
 	// 避免逐行调用 GetUserAvatar 造成 N+1 查询。返回的 map 只含确实有头像的用户，
 	// 没有头像的 id 不会出现在结果里；userIDs 为空时返回空 map 且不查库。
 	GetUserAvatarsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*UserAvatar, error)
+	// GetUserAvatarThumbsByUserIDs 只取小图列（user_avatars.thumb_url），给榜单用（design D25）；
+	// 没有小图的 id 不出现在结果里。
+	GetUserAvatarThumbsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]string, error)
 	UpsertUserAvatar(ctx context.Context, userID int64, input UpsertUserAvatarInput) (*UserAvatar, error)
 	DeleteUserAvatar(ctx context.Context, userID int64) error
 
@@ -285,6 +310,9 @@ type UserAvatar struct {
 	ContentType     string
 	ByteSize        int
 	SHA256          string
+	// ThumbURL 是给榜单等「一页几十张」场景用的小图（64px 正方形 JPEG 的 data URL，约 1–3 KB），
+	// 上传 inline 头像时由 URL 派生；remote_url 头像没有（服务端不抓外链），为空串。
+	ThumbURL string
 }
 
 type UpsertUserAvatarInput struct {
@@ -294,6 +322,30 @@ type UpsertUserAvatarInput struct {
 	ContentType     string
 	ByteSize        int
 	SHA256          string
+	// ThumbURL 见 UserAvatar.ThumbURL；inline 头像必填，remote_url 留空。
+	ThumbURL string
+}
+
+// UserAvatarBackfillRow 是一行待回填小图的 inline 头像：回填只需要 user_id 与原图 data URL，
+// 其余列（content_type / sha256 / byte_size）不变，因此不取。
+type UserAvatarBackfillRow struct {
+	UserID int64
+	URL    string
+}
+
+// UserAvatarThumbBackfillRepository 是启动时一次性回填头像小图用的窄接口。
+//
+// 故意不并进 UserRepository：那个大接口有十来个测试桩，为一次性回填让它们全部跟着长两个
+// 方法不划算。真实仓储 userRepository 实现了它，UserService 在回填时用类型断言取；
+// 断言不成立（测试桩）时回填直接返回 0, nil。
+type UserAvatarThumbBackfillRepository interface {
+	// ListUserAvatarsMissingThumb 取至多 limit 行「storage_provider='inline' 且 thumb_url=''」
+	// 的头像。remote_url 头像永远没有小图，MUST NOT 出现在结果里。
+	// ListUserAvatarsMissingThumb 按 user_id 升序取 user_id > afterUserID 的前 limit 行（键集分页）：
+	// 解不开的坏图会一直缺小图，靠游标越过它们，而不是靠「写成功的行从结果里消失」来推进。
+	ListUserAvatarsMissingThumb(ctx context.Context, afterUserID int64, limit int) ([]UserAvatarBackfillRow, error)
+	// UpdateUserAvatarThumb 只写 thumb_url 一列，其余列保持原值。
+	UpdateUserAvatarThumb(ctx context.Context, userID int64, thumbURL string) error
 }
 
 type userProfileIdentityTxRunner interface {
@@ -610,6 +662,64 @@ func (s *UserService) SetAvatar(ctx context.Context, userID int64, raw string) (
 	return avatar, nil
 }
 
+// BackfillAvatarThumbs 给 242 之前存下的 inline 头像补出榜单小图，返回成功写回的行数。
+//
+// 按 user_id 键集分页取「缺小图的 inline 行」，逐行从原图派生 thumb 再写回。单行失败（图解不开、
+// 写库出错）只记日志跳过：一张坏图 MUST NOT 卡住整轮，也 MUST NOT 让服务启动失败；游标照样
+// 越过它，后面的行不会因为前面有坏图而永远得不到小图。
+//
+// 仓储没实现窄接口（测试桩）时直接返回 0, nil。
+func (s *UserService) BackfillAvatarThumbs(ctx context.Context) (int, error) {
+	repo, ok := s.userRepo.(UserAvatarThumbBackfillRepository)
+	if !ok {
+		return 0, nil
+	}
+
+	updated := 0
+	var afterUserID int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return updated, err
+		}
+
+		rows, err := repo.ListUserAvatarsMissingThumb(ctx, afterUserID, avatarThumbBackfillBatchSize)
+		if err != nil {
+			return updated, fmt.Errorf("list avatars missing thumb: %w", err)
+		}
+		if len(rows) == 0 {
+			return updated, nil
+		}
+		afterUserID = rows[len(rows)-1].UserID
+
+		for _, row := range rows {
+			if err := ctx.Err(); err != nil {
+				return updated, err
+			}
+
+			_, decoded, err := decodeInlineAvatarDataURL(row.URL)
+			if err != nil {
+				slog.Warn("skip avatar thumb backfill: avatar is not an inline data URL", "user_id", row.UserID, "error", err)
+				continue
+			}
+			thumbURL, err := buildInlineAvatarThumb(decoded)
+			if err != nil {
+				slog.Warn("skip avatar thumb backfill: avatar image could not be decoded", "user_id", row.UserID, "error", err)
+				continue
+			}
+			if err := repo.UpdateUserAvatarThumb(ctx, row.UserID, thumbURL); err != nil {
+				slog.Warn("skip avatar thumb backfill: write failed", "user_id", row.UserID, "error", err)
+				continue
+			}
+			updated++
+		}
+
+		// 不足一批说明已经取到尾巴。
+		if len(rows) < avatarThumbBackfillBatchSize {
+			return updated, nil
+		}
+	}
+}
+
 func applyUserAvatar(user *User, avatar *UserAvatar) {
 	if user == nil {
 		return
@@ -661,26 +771,97 @@ func ValidateUserAvatar(raw string) error {
 	return err
 }
 
-func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
+// decodeInlineAvatarDataURL 拆开 `data:<content-type>;base64,<payload>`，返回内容类型与原始字节。
+// 错误口径与调用方一致：形状不对或 base64 解不开是 ErrAvatarInvalid，内容类型不是 image/* 是 ErrAvatarNotImage。
+func decodeInlineAvatarDataURL(raw string) (string, []byte, error) {
+	raw = strings.TrimSpace(raw)
+	if !strings.HasPrefix(raw, "data:") {
+		return "", nil, ErrAvatarInvalid
+	}
+
 	body := strings.TrimPrefix(raw, "data:")
 	meta, encoded, ok := strings.Cut(body, ",")
 	if !ok {
-		return UpsertUserAvatarInput{}, ErrAvatarInvalid
+		return "", nil, ErrAvatarInvalid
 	}
 	meta = strings.TrimSpace(meta)
 	encoded = strings.TrimSpace(encoded)
 	if !strings.HasSuffix(strings.ToLower(meta), ";base64") {
-		return UpsertUserAvatarInput{}, ErrAvatarInvalid
+		return "", nil, ErrAvatarInvalid
 	}
 
 	contentType := strings.TrimSpace(meta[:len(meta)-len(";base64")])
 	if contentType == "" || !strings.HasPrefix(strings.ToLower(contentType), "image/") {
-		return UpsertUserAvatarInput{}, ErrAvatarNotImage
+		return "", nil, ErrAvatarNotImage
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return UpsertUserAvatarInput{}, ErrAvatarInvalid
+		return "", nil, ErrAvatarInvalid
+	}
+	return contentType, decoded, nil
+}
+
+// buildInlineAvatarThumb 从 inline 头像的原图字节派生榜单用的小图：取中心正方形裁切，
+// 缩到 avatarThumbSize，铺白底（透明 PNG 转 JPEG 后底色才不会是黑的），按
+// avatarThumbQuality 编码成 JPEG，返回 data URL。解不开的图按 ErrAvatarInvalid 回。
+// decodeAvatarImage 是头像的唯一解码入口：先读文件头校验尺寸（见 avatarMaxSide / avatarMaxPixels），
+// 再真正解码。小图派生、>20 KB 的压缩、启动回填都走这里，解码炸弹在任何一条路上都进不来。
+func decodeAvatarImage(decoded []byte) (image.Image, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(decoded))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+		return nil, ErrAvatarInvalid
+	}
+	if cfg.Width > avatarMaxSide || cfg.Height > avatarMaxSide || cfg.Width*cfg.Height > avatarMaxPixels {
+		return nil, ErrAvatarInvalid
+	}
+	src, _, err := image.Decode(bytes.NewReader(decoded))
+	if err != nil {
+		return nil, ErrAvatarInvalid
+	}
+	return src, nil
+}
+
+func buildInlineAvatarThumb(decoded []byte) (string, error) {
+	src, err := decodeAvatarImage(decoded)
+	if err != nil {
+		return "", err
+	}
+
+	srcBounds := src.Bounds()
+	if srcBounds.Empty() {
+		return "", ErrAvatarInvalid
+	}
+
+	// 中心正方形裁切：长边两侧各切掉一半差值，短边整条保留。
+	side := min(srcBounds.Dx(), srcBounds.Dy())
+	originX := srcBounds.Min.X + (srcBounds.Dx()-side)/2
+	originY := srcBounds.Min.Y + (srcBounds.Dy()-side)/2
+	square := image.Rect(originX, originY, originX+side, originY+side)
+
+	// 大图先粗缩到 avatarThumbPrescaleSide，把 CatmullRom 的核宽压到常数级。
+	if side > avatarThumbPrescaleSide {
+		coarse := image.NewRGBA(image.Rect(0, 0, avatarThumbPrescaleSide, avatarThumbPrescaleSide))
+		xdraw.ApproxBiLinear.Scale(coarse, coarse.Bounds(), src, square, stddraw.Src, nil)
+		src = coarse
+		square = coarse.Bounds()
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, avatarThumbSize, avatarThumbSize))
+	stddraw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, stddraw.Src)
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, square, stddraw.Over, nil)
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: avatarThumbQuality}); err != nil {
+		return "", ErrAvatarInvalid
+	}
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
+	contentType, decoded, err := decodeInlineAvatarDataURL(raw)
+	if err != nil {
+		return UpsertUserAvatarInput{}, err
 	}
 	if len(decoded) > maxInlineAvatarBytes {
 		return UpsertUserAvatarInput{}, ErrAvatarTooLarge
@@ -694,6 +875,13 @@ func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
 		raw = "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(decoded)
 	}
 
+	// 小图与 sha256 一起从最终落库的字节派生：榜单下发的是 ThumbURL，个人资料页用的是 URL，
+	// 两者必须来自同一张图。
+	thumbURL, err := buildInlineAvatarThumb(decoded)
+	if err != nil {
+		return UpsertUserAvatarInput{}, err
+	}
+
 	sum := sha256.Sum256(decoded)
 	return UpsertUserAvatarInput{
 		StorageProvider: "inline",
@@ -701,13 +889,14 @@ func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
 		ContentType:     contentType,
 		ByteSize:        len(decoded),
 		SHA256:          hex.EncodeToString(sum[:]),
+		ThumbURL:        thumbURL,
 	}, nil
 }
 
 func compressInlineAvatar(decoded []byte) ([]byte, string, error) {
-	src, _, err := image.Decode(bytes.NewReader(decoded))
+	src, err := decodeAvatarImage(decoded)
 	if err != nil {
-		return nil, "", ErrAvatarInvalid
+		return nil, "", err
 	}
 
 	srcBounds := src.Bounds()

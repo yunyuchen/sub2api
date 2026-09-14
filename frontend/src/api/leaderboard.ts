@@ -42,6 +42,11 @@ export interface LeaderboardIdentity {
   kind: LeaderboardIdentityKind
   /** 仅 `named` 形态携带。 */
   username?: string
+  /**
+   * 仅 `named` 形态、且该用户有内嵌头像时携带：64px 小图的 data URL（design D25）。
+   * `self` 不带（本人头像从自己的个人资料取），`anonymous` 永远不带。
+   */
+  avatar_url?: string
 }
 
 export interface LeaderboardEntry {

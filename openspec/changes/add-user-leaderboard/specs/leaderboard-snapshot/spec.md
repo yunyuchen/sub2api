@@ -5,7 +5,7 @@
 ## ADDED Requirements
 
 ### Requirement: Snapshot 是榜单三处数字的唯一来源
-Snapshot MUST 是一个 Window 内所有有用量的合格用户的 Total Tokens（总 tokens）、Successful Requests（成功请求数）与 Cost（消费金额）集合，由后台周期性重建。Leaderboard Entry（榜单条目）、Participant Count（参与人数）与 My Rank（我的名次）MUST 全部从同一份 Snapshot 导出，任何时刻 MUST 互相自洽。Snapshot MUST 只记录 `user_id` 与数值（数值集合见「每用户 Hash 存十三段数值」），MUST NOT 记录身份（`username`、邮箱、Display Name（展示名））。金额只有 Cost 这一个口径，以定点 micros 存放，MUST NOT 出现 `total_cost` 之类的其它金额。
+Snapshot MUST 是一个 Window 内所有有用量的合格用户的 Total Tokens（总 tokens）、Successful Requests（成功请求数）与 Cost（消费金额）集合，由后台周期性重建。Leaderboard Entry（榜单条目）、Participant Count（参与人数）与 My Rank（我的名次）MUST 全部从同一份 Snapshot 导出，任何时刻 MUST 互相自洽。Snapshot MUST 只记录 `user_id` 与数值（数值集合见「每用户 Hash 存十三段数值」），MUST NOT 记录身份（`username`、邮箱、Display Name（展示名）、头像或头像小图）。金额只有 Cost 这一个口径，以定点 micros 存放，MUST NOT 出现 `total_cost` 之类的其它金额。
 
 #### Scenario: 三处数字同源
 - **WHEN** 查看者在同一次请求里拿到 `entries`、`participant_count` 与 `my_rank`
@@ -15,7 +15,7 @@ Snapshot MUST 是一个 Window 内所有有用量的合格用户的 Total Tokens
 #### Scenario: Snapshot 不含身份
 - **WHEN** 检查某个 Window 的 Snapshot 内容
 - **THEN** 其中 MUST 只有 `user_id` 与数值字段
-- **THEN** 其中 MUST NOT 出现 `username` 或邮箱，金额 MUST 只有 Cost 的定点 micros 这一段
+- **THEN** 其中 MUST NOT 出现 `username`、邮箱或头像小图，金额 MUST 只有 Cost 的定点 micros 这一段
 
 ### Requirement: 后台周期作业每 5 分钟重建，leader lock 保证只跑一份
 Snapshot 的重建 MUST 由一个经 `TimingWheelService.ScheduleRecurring` 注册的后台作业承担，周期为 5 分钟。每一轮 MUST 先通过 `tryAcquireSingletonLeaderLock` 取锁，保证多实例部署下同一轮只有一个实例真正执行聚合；Redis 不可用时 MUST 回落到 Postgres advisory lock。未取到锁的实例 MUST 跳过本轮，MUST NOT 自行聚合。
@@ -162,7 +162,7 @@ HTTP 请求路径 MUST 只读 Redis 上的 Snapshot，MUST NOT 触发聚合、MU
 - **THEN** 页面 MUST 显示陈旧警告
 
 ### Requirement: 展示名与参与资格在响应时按当前状态渲染
-数值与名次 MUST 随 Snapshot 冻结；Display Name 与参与资格 MUST 在响应时按 `users` 表的当前状态渲染，MUST NOT 冻结进 Snapshot。Snapshot 里仍存在但当前已不合格（`status = disabled` 或 `deleted_at` 非空）的用户，其条目 MUST 在渲染时被剔除，且 MUST NOT 下发其任何身份信息；被剔除后其余条目的 Rank MUST NOT 重算；Ordinal（行序号）MUST 在剔除完成后按剩余条目重新从 1 连续分配，以维持 `user-leaderboard` 对 Ordinal「唯一、不跳号」的定义。剔除后 MUST NOT 从第 51 名起回填，`entries` 的条数因此可以少于 50。`participant_count` MUST 取 Snapshot 的 `ZCARD`，渲染时剔除 MUST NOT 扣减它；偏差在下一轮周期重建后修正。
+数值与名次 MUST 随 Snapshot 冻结；Display Name、头像与参与资格 MUST 在响应时按 `users` / `user_avatars` 的当前状态渲染，MUST NOT 冻结进 Snapshot。Snapshot 里仍存在但当前已不合格（`status = disabled` 或 `deleted_at` 非空）的用户，其条目 MUST 在渲染时被剔除，且 MUST NOT 下发其任何身份信息；被剔除后其余条目的 Rank MUST NOT 重算；Ordinal（行序号）MUST 在剔除完成后按剩余条目重新从 1 连续分配，以维持 `user-leaderboard` 对 Ordinal「唯一、不跳号」的定义。剔除后 MUST NOT 从第 51 名起回填，`entries` 的条数因此可以少于 50。`participant_count` MUST 取 Snapshot 的 `ZCARD`，渲染时剔除 MUST NOT 扣减它；偏差在下一轮周期重建后修正。
 
 #### Scenario: 用户被禁用后快照未刷新
 - **WHEN** 某用户在上一轮 Snapshot 中位列第 3，随后被禁用，Snapshot 中仍有其条目
@@ -177,6 +177,11 @@ HTTP 请求路径 MUST 只读 Redis 上的 Snapshot，MUST NOT 触发聚合、MU
 #### Scenario: 用户改了 username
 - **WHEN** 某已实名展示的用户修改了 `username`
 - **THEN** 下一次响应 MUST 使用新的 `username`
+- **THEN** 系统 MUST NOT 等到下一轮 Snapshot 才生效
+
+#### Scenario: 用户换了头像
+- **WHEN** 某已实名展示的用户上传了新头像，其小图随上传一并派生
+- **THEN** 下一次响应的 `identity.avatar_url` MUST 是新头像的小图
 - **THEN** 系统 MUST NOT 等到下一轮 Snapshot 才生效
 
 #### Scenario: 数值不随当前状态变化

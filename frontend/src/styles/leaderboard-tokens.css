@@ -399,6 +399,14 @@ html.dark .rp {
   font-weight: 500;
   letter-spacing: -0.015em;
 }
+/* 只有 tokens 领先者那一行在名字前挂头像（design D25），flex 只给它：
+   `.rp-mini .rp-who` 没有头像，保持原来的行内文本形态。 */
+.rp-who.has-avatar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .rp-big {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
@@ -781,7 +789,9 @@ html.dark .rp {
    改这里的列数时，1180 与 767 两个断点处的覆写要一起改，否则窄屏会少一格。 */
 .rp-lb-row {
   display: grid;
-  grid-template-columns: 48px minmax(112px, 1.2fr) minmax(0, 2.2fr) 96px 74px 104px;
+  /* 用户列的最小宽度含头像那一份（24px + 8px gap）：D25 之前是 112px，加头像后补到 144px，
+     名字自己能用的宽度不变。1180 断点处的 96px 同理补到 128px。 */
+  grid-template-columns: 48px minmax(144px, 1.2fr) minmax(0, 2.2fr) 96px 74px 104px;
   align-items: center;
   column-gap: 16px;
   padding: 5.5px 10px 5.5px 0;
@@ -805,6 +815,10 @@ html.dark .rp {
 .rp-lb-head .rp-right {
   text-align: right;
 }
+/* 数据行的名字前有 24px 头像 + 8px 间距（design D25），表头「用户」补同样的前导，字才对得齐。 */
+.rp-lb-head > [role='columnheader']:nth-child(2) {
+  padding-left: 32px;
+}
 .rp-lb-rank {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
@@ -814,15 +828,46 @@ html.dark .rp {
 .rp-lb-row.is-top .rp-lb-rank {
   color: var(--accent-deep);
 }
+/* 名字前挂一个 24px 头像（design D25），所以这一格是 flex 而不是单行文本：
+   省略号随之搬到 `.rp-lb-nametext` 上——overflow 留在容器上会把头像一起裁掉。 */
 .rp-lb-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-size: 12.5px;
   color: var(--ink);
   letter-spacing: -0.01em;
+}
+/* 榜单 / 画像 / 领先者三处的名字共用这一条：只有名字被压缩并省略，头像与「你」标记不动。 */
+.rp-lb-nametext {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rp-lb-name .rp-anon {
+  color: var(--ink-2);
+}
+/* flex 容器里 gap 已经给足间距，徽标自己那份 `margin-left` 会叠成 15px。 */
+.rp-lb-name .rp-you,
+.rp-who.has-avatar .rp-you {
+  margin-left: 0;
+}
+.rp-lb-avatar {
+  flex: none;
+}
+/* 头像圆圈在报表皮肤里用中性底色（与 `.rp-anon` 同色系），不引入新颜色：
+   匿名行就是一个不带任何字符的素色空圆。选择器写到三层是为了盖掉组件自带的
+   Tailwind `bg-primary-*` / `text-primary-*`——本文件由 LeaderboardView 懒加载引入，
+   与 utilities 的先后顺序不保证，只能靠权重赢。 */
+.rp .rp-lb-name .rp-lb-avatar,
+.rp .rp-u .rp-lb-avatar,
+.rp .rp-who .rp-lb-avatar {
+  /* 不能用 --bg-sunk：那正是 .rp-lb-row:hover 的底色，悬停时空圆会整个消失。 */
+  background: var(--line-soft);
+}
+.rp .rp-lb-avatar > span {
   color: var(--ink-2);
 }
 .rp-lb-row.is-self {
@@ -951,22 +996,30 @@ html.dark .rp {
 }
 .rp-prof li {
   display: grid;
-  grid-template-columns: 94px minmax(0, 1fr);
+  /* 名字列含头像那一份（24px + 8px gap）：D25 之前是 94px，加头像后补到 126px。 */
+  grid-template-columns: 126px minmax(0, 1fr);
   column-gap: 14px;
-  align-items: baseline;
+  /* 名字这一格自从挂上头像（design D25）就不能再按基线对齐：flex 容器的基线取自首个
+     子项，而首个子项在「有小图」的行是 img（基线 = 底边），在「回退首字母」的行是文字
+     （基线 = 字的基线）——同一张表里两种行会错开半个头像的高度。
+     也不能整行居中：模型 chip 折成多行时名字会浮到中间。顶对齐，`.rp-u` 自己内部居中。 */
+  align-items: start;
   padding: 3.5px 0;
   border-top: 1px solid var(--line-soft);
 }
 .rp-prof li:first-child {
   border-top: 0;
 }
+/* 名字前挂头像（design D25）：整格右对齐时整组（头像 + 名字）一起贴右边界，
+   chip 的左边界那条轴不动。省略号搬到 `.rp-lb-nametext`。 */
 .rp-prof .rp-u {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
   font-size: 11px;
   color: var(--ink-3);
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .rp-prof .rp-u.is-self {
   color: var(--accent-deep);
@@ -1532,11 +1585,12 @@ html.dark .rp {
     grid-template-columns: minmax(0, 1fr);
     row-gap: 4px;
   }
+  /* 单列堆叠后名字改贴左边界：flex 化之后靠 justify-content 而不是 text-align。 */
   .rp-prof .rp-u {
-    text-align: left;
+    justify-content: flex-start;
   }
   .rp-lb-row {
-    grid-template-columns: 44px minmax(96px, 1.1fr) minmax(0, 1.7fr) 88px 66px 96px;
+    grid-template-columns: 44px minmax(128px, 1.1fr) minmax(0, 1.7fr) 88px 66px 96px;
     column-gap: 12px;
   }
   /* 断轴之上通常有两根柱各带一个读数，而列宽在 768px 处已经收到约 21px
