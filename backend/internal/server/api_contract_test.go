@@ -1622,6 +1622,10 @@ func (r *stubUserRepo) GetUserAvatar(ctx context.Context, userID int64) (*servic
 	return nil, nil
 }
 
+func (r *stubUserRepo) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*service.UserAvatar, error) {
+	return map[int64]*service.UserAvatar{}, nil
+}
+
 func (r *stubUserRepo) UpsertUserAvatar(ctx context.Context, userID int64, input service.UpsertUserAvatarInput) (*service.UserAvatar, error) {
 	return nil, errors.New("not implemented")
 }

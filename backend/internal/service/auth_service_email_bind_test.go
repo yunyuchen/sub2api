@@ -1062,6 +1062,10 @@ func (s *emailBindUserRepoStub) GetUserAvatar(context.Context, int64) (*service.
 	return nil, nil
 }
 
+func (s *emailBindUserRepoStub) GetUserAvatarsByUserIDs(context.Context, []int64) (map[int64]*service.UserAvatar, error) {
+	return map[int64]*service.UserAvatar{}, nil
+}
+
 func (s *emailBindUserRepoStub) UpsertUserAvatar(context.Context, int64, service.UpsertUserAvatarInput) (*service.UserAvatar, error) {
 	panic("unexpected UpsertUserAvatar call")
 }

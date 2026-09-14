@@ -3275,6 +3275,20 @@ func (r *oauthPendingFlowUserRepo) GetUserAvatar(ctx context.Context, userID int
 	return &avatar, nil
 }
 
+func (r *oauthPendingFlowUserRepo) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*service.UserAvatar, error) {
+	result := make(map[int64]*service.UserAvatar, len(userIDs))
+	for _, userID := range userIDs {
+		avatar, err := r.GetUserAvatar(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if avatar != nil {
+			result[userID] = avatar
+		}
+	}
+	return result, nil
+}
+
 func (r *oauthPendingFlowUserRepo) UpsertUserAvatar(ctx context.Context, userID int64, input service.UpsertUserAvatarInput) (*service.UserAvatar, error) {
 	driver := r.client.Driver()
 	if tx := dbent.TxFromContext(ctx); tx != nil {

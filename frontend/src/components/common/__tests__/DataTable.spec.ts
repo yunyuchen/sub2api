@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils'
+import { h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import DataTable from '../DataTable.vue'
@@ -100,6 +101,40 @@ describe('DataTable', () => {
     expect(wrapper.findAll('tbody tr[data-index]')).toHaveLength(data.length)
     // …and there are no aria-hidden virtual padding spacer rows.
     expect(wrapper.findAll('tbody tr[aria-hidden="true"]')).toHaveLength(0)
+  })
+
+  it('passes the full row object to cell slots in both plain and windowed rendering', async () => {
+    // UsersView's email cell reads row.avatar_url off the slot scope; pin that the slot
+    // exposes `row` (not just `value`) on both render paths so a DataTable refactor cannot
+    // silently drop avatars only for large (virtualized) pages.
+    const data = Array.from({ length: 12 }, (_, i) => ({
+      id: i + 1,
+      email: `u${i + 1}@example.com`,
+      avatar_url: i % 2 === 0 ? `data:image/webp;base64,${i}` : null
+    }))
+    const slots = {
+      'cell-email': ({ row, value }: { row: (typeof data)[number]; value: string }) =>
+        h('span', { 'data-test': 'email-cell' }, `${value}|${row.avatar_url ?? 'none'}`)
+    }
+
+    const plain = mount(DataTable, { props: { columns: [{ key: 'email', label: 'Email' }], data }, slots })
+    await plain.vm.$nextTick()
+    expect((plain.vm as any).shouldVirtualize).toBe(false)
+    const plainCells = plain.findAll('[data-test="email-cell"]').map((c) => c.text())
+    expect(plainCells).toHaveLength(data.length)
+    expect(plainCells[0]).toBe('u1@example.com|data:image/webp;base64,0')
+    expect(plainCells[1]).toBe('u2@example.com|none')
+
+    const windowed = mount(DataTable, {
+      props: { columns: [{ key: 'email', label: 'Email' }], data, virtualizeThreshold: 3 },
+      slots
+    })
+    await windowed.vm.$nextTick()
+    expect((windowed.vm as any).shouldVirtualize).toBe(true)
+    const windowedCells = windowed.findAll('[data-test="email-cell"]').map((c) => c.text())
+    expect(windowedCells.length).toBeGreaterThan(0)
+    expect(windowedCells[0]).toBe('u1@example.com|data:image/webp;base64,0')
+    expect(windowedCells[1]).toBe('u2@example.com|none')
   })
 
   it('switches to windowed rendering once row count exceeds virtualizeThreshold', async () => {

@@ -82,6 +82,10 @@ type UserListFilters struct {
 	// IncludeDeleted 为 true 时绕过软删除过滤，返回含已删除（deleted_at 非空）的用户。
 	// 仅供 /admin/usage 的 SearchUsers 端点使用，其他列表调用方不要设置。
 	IncludeDeleted bool
+	// IncludeAvatars 为 true 时 AdminService.ListUsers 会按页批量加载头像（inline 头像是
+	// 约 20 KB 的 data URL）。只有后台用户列表页需要展示头像，才在那一个调用方打开；
+	// 用户搜索联想、批量操作里"对全部用户"逐页取 ID 的循环等调用方保持默认 false，不查也不下发。
+	IncludeAvatars bool
 }
 
 // UserUpdateFields 声明 UserRepository.Update 允许写回的列。
@@ -146,6 +150,10 @@ type UserRepository interface {
 	Update(ctx context.Context, user *User, fields UserUpdateFields) error
 	Delete(ctx context.Context, id int64) error
 	GetUserAvatar(ctx context.Context, userID int64) (*UserAvatar, error)
+	// GetUserAvatarsByUserIDs 按 user_id 批量取头像，供管理员用户列表整页一次性加载，
+	// 避免逐行调用 GetUserAvatar 造成 N+1 查询。返回的 map 只含确实有头像的用户，
+	// 没有头像的 id 不会出现在结果里；userIDs 为空时返回空 map 且不查库。
+	GetUserAvatarsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*UserAvatar, error)
 	UpsertUserAvatar(ctx context.Context, userID int64, input UpsertUserAvatarInput) (*UserAvatar, error)
 	DeleteUserAvatar(ctx context.Context, userID int64) error
 

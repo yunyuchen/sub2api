@@ -125,6 +125,20 @@ func (m *mockUserRepo) GetUserAvatar(ctx context.Context, userID int64) (*UserAv
 	}
 	return nil, nil
 }
+func (m *mockUserRepo) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*UserAvatar, error) {
+	result := make(map[int64]*UserAvatar, len(userIDs))
+	for _, userID := range userIDs {
+		avatar, err := m.GetUserAvatar(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if avatar != nil {
+			result[userID] = avatar
+		}
+	}
+	return result, nil
+}
+
 func (m *mockUserRepo) UpsertUserAvatar(ctx context.Context, userID int64, input UpsertUserAvatarInput) (*UserAvatar, error) {
 	if txState, _ := ctx.Value(mockUserRepoTxKey{}).(*mockUserRepoTxState); txState != nil {
 		txState.upsertAvatarArgs = append(txState.upsertAvatarArgs, input)

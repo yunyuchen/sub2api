@@ -21,6 +21,7 @@ import (
 	dbpredicate "github.com/Wei-Shaw/sub2api/ent/predicate"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 )
 
 var (
@@ -761,6 +762,53 @@ WHERE user_id = $1`, userID)
 		return nil, err
 	}
 	return &avatar, nil
+}
+
+// GetUserAvatarsByUserIDs 批量取头像，管理员用户列表用它整页一次查完，
+// 避免逐行 GetUserAvatar 的 N+1。没有头像的 user_id 不会出现在结果里。
+func (r *userRepository) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*service.UserAvatar, error) {
+	result := make(map[int64]*service.UserAvatar, len(userIDs))
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+
+	exec, err := r.userProfileIdentitySQL(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := exec.QueryContext(ctx, `
+SELECT user_id, storage_provider, storage_key, url, content_type, byte_size, sha256
+FROM user_avatars
+WHERE user_id = ANY($1)`, pq.Array(userIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var (
+			userID int64
+			avatar service.UserAvatar
+		)
+		if scanErr := rows.Scan(
+			&userID,
+			&avatar.StorageProvider,
+			&avatar.StorageKey,
+			&avatar.URL,
+			&avatar.ContentType,
+			&avatar.ByteSize,
+			&avatar.SHA256,
+		); scanErr != nil {
+			return nil, scanErr
+		}
+		loaded := avatar
+		result[userID] = &loaded
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *userRepository) UpsertUserAvatar(ctx context.Context, userID int64, input service.UpsertUserAvatarInput) (*service.UserAvatar, error) {

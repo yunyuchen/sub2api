@@ -49,6 +49,10 @@ type AdminUser struct {
 
 	Notes      string     `json:"notes"`
 	LastUsedAt *time.Time `json:"last_used_at"`
+	// AvatarURL 是用户头像地址：inline 存储时为 data URL，外链存储时为 http(s) URL。
+	// 只加在管理员 DTO 上（后台列表/详情要显示真实头像），普通用户接口形态不变；
+	// 没有头像时为空串并被 omitempty 省略。
+	AvatarURL string `json:"avatar_url,omitempty"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]rateMultiplier
 	GroupRates map[int64]float64 `json:"group_rates,omitempty"`

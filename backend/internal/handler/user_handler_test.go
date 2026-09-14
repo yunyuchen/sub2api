@@ -59,6 +59,20 @@ func (s *userHandlerRepoStub) GetUserAvatar(context.Context, int64) (*service.Us
 		SHA256:          s.user.AvatarSHA256,
 	}, nil
 }
+func (s *userHandlerRepoStub) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*service.UserAvatar, error) {
+	result := make(map[int64]*service.UserAvatar, len(userIDs))
+	for _, userID := range userIDs {
+		avatar, err := s.GetUserAvatar(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if avatar != nil {
+			result[userID] = avatar
+		}
+	}
+	return result, nil
+}
+
 func (s *userHandlerRepoStub) UpsertUserAvatar(_ context.Context, _ int64, input service.UpsertUserAvatarInput) (*service.UserAvatar, error) {
 	s.user.AvatarURL = input.URL
 	s.user.AvatarSource = input.StorageProvider

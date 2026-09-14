@@ -34,6 +34,8 @@ type userRepoStub struct {
 	domainCountErr       error
 	domainLimitErr       error
 	domainLimitedCreates int
+	avatar               *UserAvatar
+	avatarErr            error
 }
 
 func (s *userRepoStub) CountUsersByEmailDomain(_ context.Context, domain string) (int, error) {
@@ -135,8 +137,27 @@ func (s *userRepoStub) Delete(ctx context.Context, id int64) error {
 	return s.deleteErr
 }
 
+// GetUserAvatar 返回 avatar/avatarErr。管理员的 GetUser / GetUserIncludeDeleted 会顺带取头像，
+// 所以这里不能 panic：默认（两个字段都零值）表示"该用户没有头像"。
 func (s *userRepoStub) GetUserAvatar(ctx context.Context, userID int64) (*UserAvatar, error) {
-	panic("unexpected GetUserAvatar call")
+	if s.avatarErr != nil {
+		return nil, s.avatarErr
+	}
+	return s.avatar, nil
+}
+
+func (s *userRepoStub) GetUserAvatarsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*UserAvatar, error) {
+	if s.avatarErr != nil {
+		return nil, s.avatarErr
+	}
+	result := make(map[int64]*UserAvatar, len(userIDs))
+	if s.avatar == nil {
+		return result, nil
+	}
+	for _, userID := range userIDs {
+		result[userID] = s.avatar
+	}
+	return result, nil
 }
 
 func (s *userRepoStub) UpsertUserAvatar(ctx context.Context, userID int64, input UpsertUserAvatarInput) (*UserAvatar, error) {

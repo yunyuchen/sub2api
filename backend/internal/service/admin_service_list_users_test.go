@@ -19,6 +19,9 @@ type userRepoStubForListUsers struct {
 	listWithFiltersParams pagination.PaginationParams
 	lastUsedByUserID      map[int64]*time.Time
 	lastUsedErr           error
+	avatarsByUserID       map[int64]*UserAvatar
+	avatarBatchErr        error
+	avatarBatchIDs        []int64
 }
 
 func (s *userRepoStubForListUsers) ListWithFilters(_ context.Context, params pagination.PaginationParams, _ UserListFilters) ([]User, *pagination.PaginationResult, error) {
@@ -57,6 +60,27 @@ func (s *userRepoStubForListUsers) GetLatestUsedAtByUserID(_ context.Context, us
 		return nil, s.lastUsedErr
 	}
 	return s.lastUsedByUserID[userID], nil
+}
+
+func (s *userRepoStubForListUsers) GetUserAvatar(_ context.Context, userID int64) (*UserAvatar, error) {
+	if s.avatarBatchErr != nil {
+		return nil, s.avatarBatchErr
+	}
+	return s.avatarsByUserID[userID], nil
+}
+
+func (s *userRepoStubForListUsers) GetUserAvatarsByUserIDs(_ context.Context, userIDs []int64) (map[int64]*UserAvatar, error) {
+	s.avatarBatchIDs = append([]int64(nil), userIDs...)
+	if s.avatarBatchErr != nil {
+		return nil, s.avatarBatchErr
+	}
+	result := make(map[int64]*UserAvatar, len(userIDs))
+	for _, userID := range userIDs {
+		if avatar, ok := s.avatarsByUserID[userID]; ok {
+			result[userID] = avatar
+		}
+	}
+	return result, nil
 }
 
 type userGroupRateRepoStubForListUsers struct {
@@ -186,4 +210,84 @@ func TestAdminService_ListUsers_PopulatesLastUsedAt(t *testing.T) {
 	require.Len(t, users, 1)
 	require.NotNil(t, users[0].LastUsedAt)
 	require.WithinDuration(t, lastUsed, *users[0].LastUsedAt, time.Second)
+}
+
+func TestAdminService_ListUsers_PopulatesAvatarURL(t *testing.T) {
+	userRepo := &userRepoStubForListUsers{
+		users: []User{
+			{ID: 101, Email: "inline@example.com"},
+			{ID: 202, Email: "remote@example.com"},
+			{ID: 303, Email: "none@example.com"},
+		},
+		avatarsByUserID: map[int64]*UserAvatar{
+			101: {StorageProvider: "inline", URL: "data:image/webp;base64,QUJD", ContentType: "image/webp"},
+			202: {StorageProvider: "remote_url", URL: "https://cdn.example.com/a.png"},
+		},
+	}
+	svc := &adminServiceImpl{userRepo: userRepo}
+
+	users, total, err := svc.ListUsers(context.Background(), 1, 20, UserListFilters{IncludeAvatars: true}, "", "")
+	require.NoError(t, err)
+	require.Equal(t, int64(3), total)
+	require.Len(t, users, 3)
+	require.ElementsMatch(t, []int64{101, 202, 303}, userRepo.avatarBatchIDs)
+
+	require.Equal(t, "data:image/webp;base64,QUJD", users[0].AvatarURL)
+	require.Equal(t, "inline", users[0].AvatarSource)
+	require.Equal(t, "https://cdn.example.com/a.png", users[1].AvatarURL)
+	require.Equal(t, "remote_url", users[1].AvatarSource)
+	require.Empty(t, users[2].AvatarURL)
+}
+
+func TestAdminService_ListUsers_AvatarBatchErrorKeepsUsers(t *testing.T) {
+	userRepo := &userRepoStubForListUsers{
+		users: []User{
+			{ID: 101, Email: "a@example.com"},
+			{ID: 202, Email: "b@example.com"},
+		},
+		avatarBatchErr: errors.New("avatar batch unavailable"),
+	}
+	svc := &adminServiceImpl{userRepo: userRepo}
+
+	users, total, err := svc.ListUsers(context.Background(), 1, 20, UserListFilters{IncludeAvatars: true}, "", "")
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Len(t, users, 2)
+	require.Equal(t, int64(101), users[0].ID)
+	require.Equal(t, int64(202), users[1].ID)
+	require.Empty(t, users[0].AvatarURL)
+	require.Empty(t, users[1].AvatarURL)
+}
+
+func TestAdminService_ListUsers_SkipsAvatarsUnlessRequested(t *testing.T) {
+	userRepo := &userRepoStubForListUsers{
+		users: []User{{ID: 101, Email: "inline@example.com"}},
+		avatarsByUserID: map[int64]*UserAvatar{
+			101: {StorageProvider: "inline", URL: "data:image/webp;base64,QUJD", ContentType: "image/webp"},
+		},
+	}
+	svc := &adminServiceImpl{userRepo: userRepo}
+
+	// 默认（搜索联想、批量取 ID 等调用方）不查头像、不下发头像。
+	users, _, err := svc.ListUsers(context.Background(), 1, 20, UserListFilters{}, "", "")
+	require.NoError(t, err)
+	require.Len(t, users, 1)
+	require.Nil(t, userRepo.avatarBatchIDs, "avatar batch must not run unless IncludeAvatars is set")
+	require.Empty(t, users[0].AvatarURL)
+}
+
+func TestAdminService_GetUser_PopulatesAvatarURL(t *testing.T) {
+	userRepo := &userRepoStubForListUsers{
+		avatarsByUserID: map[int64]*UserAvatar{
+			7: {StorageProvider: "inline", URL: "data:image/webp;base64,QUJD", ContentType: "image/webp", ByteSize: 3},
+		},
+	}
+	userRepo.user = &User{ID: 7, Email: "u@example.com"}
+	svc := &adminServiceImpl{userRepo: userRepo}
+
+	user, err := svc.GetUser(context.Background(), 7)
+	require.NoError(t, err)
+	require.Equal(t, "data:image/webp;base64,QUJD", user.AvatarURL)
+	require.Equal(t, "inline", user.AvatarSource)
+	require.Equal(t, "image/webp", user.AvatarMIME)
 }

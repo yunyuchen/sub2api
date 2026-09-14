@@ -52,6 +52,9 @@ func (s *userRepoStubForGroupUpdate) Delete(context.Context, int64) error { pani
 func (s *userRepoStubForGroupUpdate) GetUserAvatar(context.Context, int64) (*UserAvatar, error) {
 	panic("unexpected")
 }
+func (s *userRepoStubForGroupUpdate) GetUserAvatarsByUserIDs(context.Context, []int64) (map[int64]*UserAvatar, error) {
+	panic("unexpected")
+}
 func (s *userRepoStubForGroupUpdate) UpsertUserAvatar(context.Context, int64, UpsertUserAvatarInput) (*UserAvatar, error) {
 	panic("unexpected")
 }

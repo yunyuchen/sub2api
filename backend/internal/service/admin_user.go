@@ -61,6 +61,21 @@ func (s *adminServiceImpl) ListUsers(ctx context.Context, page, pageSize int, fi
 			s.loadUserGroupRatesOneByOne(ctx, users)
 		}
 	}
+	// 批量加载头像：只有后台用户列表页（filters.IncludeAvatars）需要，失败只记日志，不影响用户列表返回。
+	if filters.IncludeAvatars && len(users) > 0 {
+		userIDs := make([]int64, 0, len(users))
+		for i := range users {
+			userIDs = append(userIDs, users[i].ID)
+		}
+		avatarsByUserID, avatarErr := s.userRepo.GetUserAvatarsByUserIDs(ctx, userIDs)
+		if avatarErr != nil {
+			logger.LegacyPrintf("service.admin", "failed to load user avatars in batch: err=%v", avatarErr)
+		} else {
+			for i := range users {
+				applyUserAvatar(&users[i], avatarsByUserID[users[i].ID])
+			}
+		}
+	}
 	return users, result.Total, nil
 }
 
@@ -98,11 +113,31 @@ func (s *adminServiceImpl) GetUser(ctx context.Context, id int64) (*User, error)
 			user.GroupRates = rates
 		}
 	}
+	s.hydrateAdminUserAvatar(ctx, user)
 	return user, nil
 }
 
 func (s *adminServiceImpl) GetUserIncludeDeleted(ctx context.Context, id int64) (*User, error) {
-	return s.userRepo.GetByIDIncludeDeleted(ctx, id)
+	user, err := s.userRepo.GetByIDIncludeDeleted(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	s.hydrateAdminUserAvatar(ctx, user)
+	return user, nil
+}
+
+// hydrateAdminUserAvatar 给单个用户挂上头像。头像是纯展示信息，取不到时只记日志，
+// 让管理员接口照常返回用户主体。
+func (s *adminServiceImpl) hydrateAdminUserAvatar(ctx context.Context, user *User) {
+	if user == nil || user.ID == 0 {
+		return
+	}
+	avatar, err := s.userRepo.GetUserAvatar(ctx, user.ID)
+	if err != nil {
+		logger.LegacyPrintf("service.admin", "failed to load user avatar: user_id=%d err=%v", user.ID, err)
+		return
+	}
+	applyUserAvatar(user, avatar)
 }
 
 // normalizeUserRole 校验并归一化角色输入。

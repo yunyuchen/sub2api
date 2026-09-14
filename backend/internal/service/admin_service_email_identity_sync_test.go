@@ -77,6 +77,10 @@ func (s *emailSyncRepoStub) GetUserAvatar(context.Context, int64) (*UserAvatar, 
 	return nil, fmt.Errorf("unexpected GetUserAvatar call")
 }
 
+func (s *emailSyncRepoStub) GetUserAvatarsByUserIDs(context.Context, []int64) (map[int64]*UserAvatar, error) {
+	return nil, fmt.Errorf("unexpected GetUserAvatarsByUserIDs call")
+}
+
 func (s *emailSyncRepoStub) UpsertUserAvatar(context.Context, int64, UpsertUserAvatarInput) (*UserAvatar, error) {
 	return nil, fmt.Errorf("unexpected UpsertUserAvatar call")
 }

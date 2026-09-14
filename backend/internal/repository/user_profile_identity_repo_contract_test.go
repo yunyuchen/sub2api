@@ -532,6 +532,51 @@ func (s *UserProfileIdentityRepoSuite) TestUserAvatarCRUDAndUserLookup() {
 	s.Require().Nil(loadedAvatar)
 }
 
+func (s *UserProfileIdentityRepoSuite) TestGetUserAvatarsByUserIDs_OnlyReturnsUsersWithAvatar() {
+	withInlineAvatar := s.mustCreateUser("avatar-batch-inline")
+	withRemoteAvatar := s.mustCreateUser("avatar-batch-remote")
+	withoutAvatar := s.mustCreateUser("avatar-batch-none")
+
+	_, err := s.repo.UpsertUserAvatar(s.ctx, withInlineAvatar.ID, service.UpsertUserAvatarInput{
+		StorageProvider: "inline",
+		URL:             "data:image/png;base64,QUJD",
+		ContentType:     "image/png",
+		ByteSize:        3,
+		SHA256:          "902fbdd2b1df0c4f70b4a5d23525e932",
+	})
+	s.Require().NoError(err)
+
+	_, err = s.repo.UpsertUserAvatar(s.ctx, withRemoteAvatar.ID, service.UpsertUserAvatarInput{
+		StorageProvider: "remote_url",
+		URL:             "https://cdn.example.com/avatar.png",
+	})
+	s.Require().NoError(err)
+
+	avatars, err := s.repo.GetUserAvatarsByUserIDs(s.ctx, []int64{
+		withInlineAvatar.ID,
+		withRemoteAvatar.ID,
+		withoutAvatar.ID,
+	})
+	s.Require().NoError(err)
+	s.Require().Len(avatars, 2)
+
+	s.Require().NotNil(avatars[withInlineAvatar.ID])
+	s.Require().Equal("inline", avatars[withInlineAvatar.ID].StorageProvider)
+	s.Require().Equal("data:image/png;base64,QUJD", avatars[withInlineAvatar.ID].URL)
+	s.Require().Equal("image/png", avatars[withInlineAvatar.ID].ContentType)
+	s.Require().Equal(3, avatars[withInlineAvatar.ID].ByteSize)
+
+	s.Require().NotNil(avatars[withRemoteAvatar.ID])
+	s.Require().Equal("remote_url", avatars[withRemoteAvatar.ID].StorageProvider)
+	s.Require().Equal("https://cdn.example.com/avatar.png", avatars[withRemoteAvatar.ID].URL)
+
+	s.Require().NotContains(avatars, withoutAvatar.ID)
+
+	empty, err := s.repo.GetUserAvatarsByUserIDs(s.ctx, nil)
+	s.Require().NoError(err)
+	s.Require().Empty(empty)
+}
+
 func (s *UserProfileIdentityRepoSuite) TestUpdateUserLastLoginAndActiveAt_UsesDedicatedColumns() {
 	user := s.mustCreateUser("activity")
 	loginAt := time.Date(2026, 4, 20, 8, 0, 0, 0, time.UTC)

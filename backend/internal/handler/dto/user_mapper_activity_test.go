@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -30,4 +31,31 @@ func TestUserFromServiceAdmin_MapsActivityTimestamps(t *testing.T) {
 	require.NotNil(t, out.LastUsedAt)
 	require.WithinDuration(t, lastActiveAt, *out.LastActiveAt, time.Second)
 	require.WithinDuration(t, lastUsedAt, *out.LastUsedAt, time.Second)
+}
+
+func TestUserFromServiceAdmin_MapsAvatarURL(t *testing.T) {
+	t.Parallel()
+
+	out := UserFromServiceAdmin(&service.User{
+		ID:           42,
+		Email:        "admin@example.com",
+		AvatarURL:    "data:image/webp;base64,QUJD",
+		AvatarSource: "inline",
+	})
+
+	require.NotNil(t, out)
+	require.Equal(t, "data:image/webp;base64,QUJD", out.AvatarURL)
+}
+
+// 没有头像时 avatar_url 必须被 omitempty 整个省掉，普通用户 DTO 形态也不受影响。
+func TestUserFromServiceAdmin_OmitsEmptyAvatarURL(t *testing.T) {
+	t.Parallel()
+
+	out := UserFromServiceAdmin(&service.User{ID: 42, Email: "admin@example.com"})
+	require.NotNil(t, out)
+	require.Empty(t, out.AvatarURL)
+
+	encoded, err := json.Marshal(out)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "avatar_url")
 }

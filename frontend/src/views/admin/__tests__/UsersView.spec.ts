@@ -106,6 +106,9 @@ const DataTableStub = {
       <div v-for="row in data" :key="row.id">
         <slot name="cell-last_used_at" :value="row.last_used_at" :row="row" />
       </div>
+      <div v-for="row in data" :key="'email-' + row.id" :data-test="'email-cell-' + row.id">
+        <slot name="cell-email" :value="row.email" :row="row" />
+      </div>
     </div>
   `
 }
@@ -193,6 +196,48 @@ describe('admin UsersView', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('renders the uploaded avatar in the email cell when the row carries avatar_url', async () => {
+    listUsers.mockResolvedValue({
+      items: [
+        createAdminUser({
+          id: 42,
+          email: 'with-avatar@example.com',
+          avatar_url: 'data:image/webp;base64,AAAA'
+        })
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+
+    const wrapper = mountBulkDeleteView()
+    await flushPromises()
+
+    const cell = wrapper.get('[data-test="email-cell-42"]')
+    expect(cell.get('[data-test="user-avatar-image"]').attributes('src')).toBe('data:image/webp;base64,AAAA')
+    expect(cell.find('[data-test="user-avatar-initial"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('falls back to the email initial in the email cell when the row has no avatar_url', async () => {
+    listUsers.mockResolvedValue({
+      items: [createAdminUser({ id: 42, email: 'no-avatar@example.com' })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+
+    const wrapper = mountBulkDeleteView()
+    await flushPromises()
+
+    const cell = wrapper.get('[data-test="email-cell-42"]')
+    expect(cell.find('[data-test="user-avatar-image"]').exists()).toBe(false)
+    expect(cell.get('[data-test="user-avatar-initial"]').text()).toBe('N')
+    wrapper.unmount()
   })
 
   it('cancels bulk deletion without deleting or clearing selected users', async () => {
