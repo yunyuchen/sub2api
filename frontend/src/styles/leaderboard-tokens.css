@@ -1,117 +1,109 @@
 /**
- * 用量排行榜（/leaderboard）独立页的视觉 token 与动效 —— v3 报表（report）皮肤。
+ * 用量排行榜（/leaderboard）内页的视觉 token 与动效 —— spool 内页皮肤。
  *
  * 只由 `views/user/LeaderboardView.vue` 引入（组件不各自 import），与同目录的
  * `announcement-markdown.css`、`onboarding.css` 一样是页面级样式，MUST NOT 进全局样式入口：
- * 所有变量都定义在页面根节点 `.rp` 这一层而不是 `:root`，因此不会与站点既有的 Tailwind
- * 变量抢名字，其它页面也完全不受影响。
+ * 所有选择器都留在页面根节点 `.rp` 这一层，变量也定义在 `.rp` 上而不是 `:root`，因此不会与
+ * 站点既有的 Tailwind 变量抢名字，其它页面完全不受影响。
  *
- * 取值照已确认的画板移植（scratchpad/leaderboard-design-canvas/v3/gen_taste.py 的 CSS 常量）：
- * 变量名与画板一字不差（无前缀），类名一律加 `rp-` 前缀 —— 画板里的两字母类名（.sup / .ll /
- * .cmp / .vs …）MUST NOT 原样搬进代码，那既读不懂也迟早会跟别处撞名。
+ * `.rp` 不是视口根节点：页面套在站点的 `AppLayout` 外壳里，`.rp` 是 `<main>` 内一块浮在站点
+ * 底色上的深色内容面板（圆角 + 1px 边框），因此 MUST NOT 有 `min-height:100vh`，底纹的两个
+ * 伪元素也 MUST 是 `position:absolute`（`fixed` 会铺满视口，连侧边栏一起盖住）。
  *
- * 与 v2 相反：**亮色是基色**（变量直接定义在 `.rp` 上），暗色由 `.rp.dark` 覆写；`.dark` 由
- * 站点既有的 `html.dark` 推导（`main.ts` 的 initThemeClass 与 AppSidebar 的 toggleTheme 都是
- * `document.documentElement.classList.toggle('dark', ...)`），因此这里同时写上 `html.dark .rp`
- * —— 页面根节点还没来得及更新 class 时配色也不会与站点错开。
- * MUST NOT 用 `prefers-color-scheme` 单独判定，那会出现「站点是亮色、本页是暗色」。
+ * 取值照已确认的原型移植（scratchpad/lb-proto/final/build.py 的 CSS 常量与它生成的 index.html），
+ * 品牌源是 `deploy/brand-spool/home_content.html`（颜色/部件/字体）与 `frontend/public/docs.html`
+ * （内页版式节奏）。原型里的 `lb-` / `spool-` 类名 MUST NOT 带进仓库：落地一律用 `rp-` 前缀，
+ * 各章内部的既有类名一个都没改名，换皮只改 CSS 取值。
  *
- * 设计禁令（design-taste-frontend-v1）：零 box-shadow、零 backdrop-filter、零 filter、
- * 零渐变、零 z-index（除非必须）；圆角只有控件 4–5px、条与热力格 1.5–2px；唯一强调色
- * （亮 #a8412b / 暗 #e08066），中性冷灰，无 #000 与 rgba(0,0,0,…)。
+ * **深色专属**：不再有亮色基色与 `.rp.dark` 两套，页面根节点不带 `dark` 修饰类。站点其它页面的
+ * 主题机制（`html.dark` + `localStorage['theme']`）MUST NOT 被本页触碰——本页既不读也不写它。
  *
- * 字体自托管：woff2 走 vite 资源管线由同源下发（CSP 的 font-src 含 'self'）。站点 CSP 其实已经
- * 放行了 fonts.googleapis.com / fonts.gstatic.com，但 MUST NOT 为这一张页面改用 Google Fonts——
- * 内网与国内网络下未必可达，自托管才能保证任何部署都拿得到字体。
+ * 字体不再自托管：字体栈里的名字（MiSans / JetBrains Mono）有就用、没有就回落到系统字体，与首页、
+ * docs.html 完全一致，全页不加载任何字体文件。
+ *
+ * 硬约束：
+ * - 圆角只用 8 / 12 / 16 / 50% 四档，外加条形 track 的 999px 与热力格的 4px。
+ * - 全页最小字号 12px；所有数字走 `var(--mono)` + `tabular-nums`。
+ * - `.rp` 上 MUST NOT 出现 transform / filter / backdrop-filter / contain（`overflow:hidden`
+ *   可以）：它是底纹那两个 `position:absolute` 伪元素的包含块，靠的是 `position:relative`。
  */
 
 /* ------------------------------------------------------------------ */
-/* 自托管字体（拉丁子集的可变字体，OFL-1.1，见 assets/fonts/leaderboard/README.md） */
-/* unicode-range 只覆盖拉丁，中文与 emoji 自然回落到系统字体。               */
-/* ------------------------------------------------------------------ */
-@font-face {
-  font-family: 'Geist';
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url('../assets/fonts/leaderboard/geist-sans-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
-    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'Geist Mono';
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url('../assets/fonts/leaderboard/geist-mono-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
-    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-/* ------------------------------------------------------------------ */
-/* 变量：亮色是基色                                                      */
+/* 变量：深色专属，定义在页面根节点上                                     */
 /* ------------------------------------------------------------------ */
 .rp {
-  --pad: 56px;
-  --mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --bg: #1a1a1a; /* 页面底（暖黑） */
+  --accent: #d97757; /* 赤陶：唯一强调色 */
+  --accent-2: #f59e0b; /* 琥珀：渐变第二段、峰值 */
+  --cream: #f5e0c3; /* 大标题与重点数字 */
+  --text: #e2e8f0; /* 正文 */
+  --muted: #94a3b8; /* 次级文字：承载数据的灰字一律用它，不要更暗的 */
+  --line: #1e293b; /* 分隔线与边框 */
+  --panel: #0f172a; /* 标题栏 / 分段底 */
+  --well: #0d1117; /* 窗口内容底 */
+  --blue: #60a5fa;
+  --green: #4ade80;
 
-  --bg: #fbfbfc;
-  --bg-sunk: #f3f3f5;
-  --panel: #ffffff;
-  --ink: #18181b;
-  --ink-2: #45454e;
-  --ink-3: #6c6c78;
-  --ink-4: #8d8d99;
-  --line: #e2e2e7;
-  --line-soft: #ececf0;
-  --line-hard: #cfcfd6;
-  --dot: #c3c3cc;
-  --accent: #a8412b;
-  --accent-deep: #8e3523;
-  --accent-a: rgba(168, 65, 43, 1);
-  --accent-b: rgba(168, 65, 43, 0.62);
-  --accent-c: rgba(168, 65, 43, 0.36);
-  --accent-d: rgba(168, 65, 43, 0.18);
-  --accent-wash: rgba(168, 65, 43, 0.055);
-  --accent-edge: rgba(168, 65, 43, 0.28);
-  --heat-0: #eaeaec;
-  /* 强调色底上的前景色：亮色下是纸白，暗色下是页面底色（见下方覆写） */
-  --on-accent: #fbfbfc;
+  /* 卡片底：半透明的 --panel 压在 --bg 上（首页 .spool-card 原配方）。 */
+  --card: rgba(15, 23, 42, 0.5);
+  /* 同一个卡片底合成出来的不透明色（0.5 × #0f172a + 0.5 × #1a1a1a）。挖空折线端点、
+     盖住断轴虚线、钉住热力图周几标签这三处需要一块与卡片一模一样的实色，透明色会露馅。 */
+  --card-solid: #151922;
 
-  min-height: 100vh;
+  --sans: 'MiSans', 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+    sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* 内容面板而不是整页：高度由内容决定，`position:relative` + `overflow:hidden` 让两个底纹
+     伪元素以面板自身为包含块并被圆角裁掉。 */
+  position: relative;
+  overflow: hidden;
+  /* 深色专属的面板会长期出现在亮色站点里（契约 9.3 有意为之）：不声明 color-scheme 时
+     `.rp-lb` / `.rp-win-body` 的原生横向滚动条会按 UA 的亮色方案画成一条浅灰条，压在
+     #1a1a1a / #0d1117 上非常刺眼。面板自己有显式 background，不会因此借到宿主底色；
+     `.rp` 内没有原生表单控件，没有其它连带影响。 */
+  color-scheme: dark;
   background: var(--bg);
-  color: var(--ink);
-  font-family: 'Geist', system-ui, -apple-system, 'PingFang SC', 'Noto Sans CJK SC', sans-serif;
-  font-size: 13.5px;
-  line-height: 1.55;
-  letter-spacing: -0.005em;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-.rp.dark,
-html.dark .rp {
-  --bg: #0b0b0d;
-  --bg-sunk: #141417;
-  --panel: #101013;
-  --ink: #f2f2f4;
-  --ink-2: #bcbcc5;
-  --ink-3: #94949f;
-  --ink-4: #75757f;
-  --line: #26262c;
-  --line-soft: #1d1d22;
-  --line-hard: #3a3a43;
-  --dot: #3d3d46;
-  --accent: #e08066;
-  --accent-deep: #ef9d86;
-  --accent-a: rgba(224, 128, 102, 1);
-  --accent-b: rgba(224, 128, 102, 0.62);
-  --accent-c: rgba(224, 128, 102, 0.38);
-  --accent-d: rgba(224, 128, 102, 0.22);
-  --accent-wash: rgba(224, 128, 102, 0.09);
-  --accent-edge: rgba(224, 128, 102, 0.34);
-  --heat-0: #1a1a1e;
-  --on-accent: #0b0b0d;
+/* ------------------------------------------------------------------ */
+/* 底纹：24px 网格 + 顶部赤陶光晕（docs.html 的 body::before / body::after）           */
+/* 面板形态下 MUST 是 absolute：fixed 会脱离 `.rp` 铺满视口，把侧边栏与顶栏一起盖住。   */
+/* ------------------------------------------------------------------ */
+.rp::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.rp::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(100%, 1320px);
+  height: 620px;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 620px 360px at 50% 0%,
+    rgba(217, 119, 87, 0.15),
+    rgba(217, 119, 87, 0) 72%
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -125,6 +117,7 @@ html.dark .rp {
 .rp h1,
 .rp h2,
 .rp h3,
+.rp h4,
 .rp p,
 .rp ul,
 .rp ol {
@@ -134,6 +127,10 @@ html.dark .rp {
 .rp ol {
   padding: 0;
   list-style: none;
+}
+.rp a {
+  color: inherit;
+  text-decoration: none;
 }
 .rp button {
   font: inherit;
@@ -153,7 +150,6 @@ html.dark .rp {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  letter-spacing: -0.01em;
 }
 
 .rp-icon {
@@ -161,447 +157,531 @@ html.dark .rp {
   vertical-align: -2px;
 }
 
+/* 焦点环用唯一强调色，outline 不是 box-shadow */
+.rp button:focus-visible,
+.rp a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* 右对齐是一个工具类，MUST NOT 与入场动画的 `.rp-r` 混用（`.rp-r` 是 rise，不是 right）。 */
+.rp-right {
+  text-align: right;
+}
+
 /* ------------------------------------------------------------------ */
-/* 骨架：页面与「边注栏 + 内容」两列网格                                   */
+/* 容器：内页版式，max-width 1320 + 左右内距                              */
+/* 左右内距 MUST 用 padding-left/right 而不是 shorthand —— shorthand 会把   */
+/* 章与页头自己的上下内距清零（原型踩过这个坑）。                          */
 /* ------------------------------------------------------------------ */
 .rp-page {
-  padding: 0 var(--pad) 20px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  /* 面板外面已经有 AppLayout `<main>` 的内距，这里再叠 32px 会太空：收到 24px。 */
+  padding-left: 24px;
+  padding-right: 24px;
 }
+
 /* ------------------------------------------------------------------ */
-/* 报头（masthead）                                                     */
+/* 页头（内页：一块，无整屏 hero）                                        */
 /* ------------------------------------------------------------------ */
-.rp-masthead {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px 24px;
-  padding: 12px 0 10px;
-  border-bottom: 1px solid var(--line-hard);
+.rp-phead {
+  padding-top: 24px;
+  padding-bottom: 24px;
 }
-/* 刊头是一行：粗体站名 + 一个细字，不再是两行的 brand + LEADERBOARD。 */
-.rp-brand {
-  display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  gap: 8px;
+.rp-phead h1 {
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -1px;
+  color: var(--cream);
 }
-.rp-brand b {
-  font-weight: 600;
+.rp-phead-sub {
+  margin-top: 8px;
   font-size: 15px;
-  letter-spacing: -0.025em;
+  color: var(--muted);
 }
-/* --ink-4 用在 10px 上只有 3.17:1（亮）/ 4.31:1（暗），不满足非大字号 4.5:1；
-   小字一律用 --ink-3（5.01 / 6.55），--ink-4 留给大字与装饰。 */
-.rp-brand-mark {
-  font-size: 11.5px;
-  color: var(--ink-3);
-  letter-spacing: 0.01em;
-}
-.rp-dials {
+.rp-ctls {
+  margin-top: 20px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 7px 10px;
-  justify-content: flex-end;
+  gap: 12px;
 }
-/* 档位 chip：报头上唯一一个纯文字 chip，只在匿名档出现。 */
-.rp-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--panel);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.rp-k {
-  color: var(--ink-3);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  font-size: 10px;
-}
+
+/* 分段：控件比页面底亮一档（深色下不再是「控件底≈页面底，全靠 1px 边框划界」的纸张隐喻）。 */
 .rp-seg {
   display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(15, 23, 42, 0.72);
   border: 1px solid var(--line);
-  border-radius: 5px;
-  overflow: hidden;
-  background: var(--panel);
+  border-radius: 8px;
+}
+.rp-seg b {
+  padding: 0 10px 0 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .rp-seg button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  font-size: 11.5px;
-  color: var(--ink-3);
+  padding: 7px 15px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
   transition:
-    background-color 0.2s ease,
     color 0.2s ease,
-    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.rp-seg button + button {
-  border-left: 1px solid var(--line);
+    background 0.2s ease,
+    transform 0.2s ease;
 }
 .rp-seg button:hover {
-  color: var(--ink);
+  color: #fff;
 }
 .rp-seg button[aria-pressed='true'] {
-  background: var(--accent-wash);
-  color: var(--accent-deep);
-  font-weight: 500;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(217, 119, 87, 0.32);
 }
 .rp-seg button:active {
   transform: translateY(1px);
 }
-/* 焦点环用唯一强调色，outline 不是 box-shadow，不触碰禁令清单。
-   分段容器 overflow:hidden 会削掉外描边，段内按钮改用内描边。 */
-.rp button:focus-visible,
-.rp a:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  border-radius: 4px;
-}
-.rp-seg button:focus-visible {
-  outline-offset: -2px;
-  border-radius: 0;
-}
-.rp-sep {
-  width: 1px;
-  height: 14px;
-  background: var(--line);
-}
+
+/* 快照 chip 与档位 chip（匿名档）共用一套：999px 圆角 + rgba(15,23,42,.6) 底 + 1px --line。
+   档位 chip 在页头里挂的是 `.rp-chip`（见下方 `.rp-ctls .rp-chip`）。 */
 .rp-snap {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  color: var(--ink-2);
+  gap: 9px;
+  padding: 8px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.6);
+  font-size: 13px;
+  color: var(--muted);
+}
+.rp-snap {
+  font-family: var(--mono);
+}
+.rp-snap span {
+  white-space: nowrap;
 }
 .rp-snap-rebuild {
-  color: var(--ink-3);
+  color: var(--muted);
 }
 .rp-pulse {
-  width: 5px;
-  height: 5px;
+  position: relative;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--accent);
-  animation: breathe 2.8s ease-in-out infinite;
+  background: var(--green);
+  flex: none;
 }
-.rp-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-  background: var(--panel);
-  transition:
-    border-color 0.2s ease,
-    color 0.2s ease,
-    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.rp-ghost:hover {
-  border-color: var(--line-hard);
-  color: var(--ink);
-}
-.rp-ghost:active {
-  transform: translateY(1px) scale(0.985);
+.rp-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(74, 222, 128, 0.55);
+  animation: breathe 2.4s ease-out infinite;
 }
 
 /* ------------------------------------------------------------------ */
-/* 标题块                                                               */
-/* ------------------------------------------------------------------ */
-.rp-titleblock {
-  padding: 15px 0 2px;
-}
-.rp-h1 {
-  font-size: 28px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1.18;
-  color: var(--ink);
-}
-.rp-sub {
-  margin-top: 8px;
-  max-width: 62ch;
-  font-size: 12.5px;
-  color: var(--ink-2);
-  line-height: 1.65;
-}
-.rp-dotsep {
-  color: var(--ink-4);
-  padding: 0 5px;
-}
-
-/* ------------------------------------------------------------------ */
-/* 章节容器                                                             */
+/* 章：48px 段距 + 左对齐细线小标题（docs .body h2）                       */
+/* 章号 chip 是 `.rp-h2row` 的直接子元素，不再内联在 h2 里。                */
 /* ------------------------------------------------------------------ */
 .rp-chapter {
-  padding-top: 12px;
-  margin-top: 16px;
-  border-top: 1px solid var(--line);
-}
-.rp-num {
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--accent-deep);
-  letter-spacing: 0.1em;
-  margin-right: 10px;
-  vertical-align: 2px;
-}
-.rp-h2 {
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ink);
+  padding-top: 48px;
 }
 .rp-h2row {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
+  align-items: baseline;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+}
+.rp-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 8px;
+  flex: none;
+  background: rgba(217, 119, 87, 0.14);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+}
+.rp-h2 {
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.5px;
+  color: #fff;
 }
 .rp-h2sub {
-  font-size: 11.5px;
-  color: var(--ink-3);
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
 }
+/* 卡片与窗口内的小标题（原型 .lb-eb / .lb-sub）：13px 600 灰字，不再是通栏小标签。 */
 .rp-eyebrow {
-  font-size: 10.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-3);
   display: block;
-  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
 }
 
 /* ------------------------------------------------------------------ */
-/* 01 高亮                                                              */
+/* 窗口（docs .code-block：42px 标题栏 + 三圆点）                          */
 /* ------------------------------------------------------------------ */
-.rp-lead-grid {
-  display: grid;
-  grid-template-columns: 1.55fr 1fr 1.12fr;
-  column-gap: 34px;
-  align-items: start;
+.rp-win {
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
 }
-.rp-lead .rp-eyebrow {
-  color: var(--accent-deep);
-}
-.rp-who {
-  font-size: 14.5px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-}
-/* 只有 tokens 领先者那一行在名字前挂头像（design D25），flex 只给它：
-   `.rp-mini .rp-who` 没有头像，保持原来的行内文本形态。 */
-.rp-who.has-avatar {
+.rp-win-head {
+  height: 42px;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
+  padding: 0 12px 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
-.rp-big {
+.rp-win-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+.rp-win-d1 {
+  background: #ef4444;
+}
+.rp-win-d2 {
+  background: #eab308;
+}
+.rp-win-d3 {
+  background: #22c55e;
+}
+.rp-win-title {
+  margin-left: 8px;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--cream);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 标题栏右侧的状态小字：窄屏按宽度截断而不是整条隐藏。 */
+.rp-win-meta {
+  margin-left: auto;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 窗口内容区：榜单表自己在 `.rp-lb` 里横滚，这一层只兜住别的内容。 */
+.rp-win-body {
+  overflow-x: auto;
+}
+/* 加载 / 失败 / 计算中 / 抑制 / 空态直接坐在窗口里，没有自己的容器：补一份内距，
+   别贴着窗口边框。 */
+.rp-win-body > .rp-empty,
+.rp-win-body > [data-testid='leaderboard-loading'],
+.rp-win-body > [data-testid='leaderboard-computing'] {
+  padding: 18px;
+}
+
+/* 刷新按钮：坐在窗口标题栏右端。 */
+.rp-ghost {
+  margin-left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  flex: none;
+  font-size: 12.5px;
+  color: var(--muted);
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+.rp-ghost .rp-icon {
+  color: var(--accent);
+}
+.rp-ghost:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: rgba(217, 119, 87, 0.45);
+  background: rgba(217, 119, 87, 0.08);
+}
+.rp-ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ */
+/* 卡片（首页 .spool-card 原配方）                                        */
+/*                                                                     */
+/* 各章内部的类名一个都没改，因此卡片靠既有容器的结构选择器落位：一条选择器   */
+/* 对应原型里的一张卡。改这里之前先看模板：`.rp-body` 是 LbChapter 的无样式   */
+/* 包装 div，下面每一条都以它或章内的栅格为锚点。                          */
+/* ------------------------------------------------------------------ */
+.rp-lead,
+.rp-stack,
+.rp-siteblock,
+.rp-whoami > div,
+.rp-sup > li,
+.rp-two > *,
+.rp-plat,
+.rp-rhythm > div,
+.rp-trendwrap > div,
+.rp-comp > div,
+.rp-body > .rp-r {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+.rp-lead:hover,
+.rp-stack:hover,
+.rp-siteblock:hover,
+.rp-whoami > div:hover,
+.rp-sup > li:hover,
+.rp-two > *:hover,
+.rp-plat:hover,
+.rp-rhythm > div:hover,
+.rp-trendwrap > div:hover,
+.rp-comp > div:hover,
+.rp-body > .rp-r:hover {
+  border-color: var(--accent-2);
+  transform: translateY(-2px);
+}
+
+/* ------------------------------------------------------------------ */
+/* 01 榜单（窗口内的六列表）                                             */
+/* 六列：名次 / 用户 / 相对第一名 / tokens / 成功请求 / 金额。            */
+/* 窄屏不再折行重排，整张表在 `.rp-lb` 里横滚（原型做法）。               */
+/* ------------------------------------------------------------------ */
+.rp-lb {
+  overflow-x: auto;
+}
+.rp-lb-row {
+  display: grid;
+  grid-template-columns:
+    74px minmax(140px, 1.5fr) minmax(120px, 1.4fr) minmax(92px, 1fr)
+    minmax(72px, 0.8fr) minmax(96px, 1fr);
+  align-items: center;
+  column-gap: 18px;
+  min-width: 720px;
+  padding: 12px 18px;
+  border-top: 1px solid rgba(30, 41, 59, 0.75);
+  transition: background-color 0.2s ease;
+}
+.rp-lb-head {
+  min-width: 720px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+  background: rgba(15, 23, 42, 0.55);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+/* 表头之后的第一条数据行不再画顶线（表头自己有底线）。 */
+.rp-lb-head + .rp-lb-row {
+  border-top: 0;
+}
+/* 数据行的名字前有 24px 头像 + 10px 间距，表头「用户」补同样的前导，字才对得齐。 */
+.rp-lb-head > [role='columnheader']:nth-child(2) {
+  padding-left: 34px;
+}
+.rp-lb-row:hover {
+  background: rgba(217, 119, 87, 0.04);
+}
+.rp-lb-rank {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 48px;
-  line-height: 1;
-  font-weight: 400;
-  letter-spacing: -0.045em;
-  margin-top: 6px;
-  color: var(--ink);
+  font-size: 15px;
+  color: var(--muted);
 }
-.rp-big small {
-  font-size: 14px;
-  color: var(--ink-3);
-  margin-left: 8px;
-  letter-spacing: 0;
+.rp-lb-row.is-top .rp-lb-rank {
+  color: var(--accent-2);
+  font-weight: 700;
 }
-/* 与第 2 名的距离 */
-.rp-cmp {
-  margin-top: 14px;
-  display: grid;
-  row-gap: 5px;
-}
-.rp-cmp-row {
-  display: grid;
-  grid-template-columns: 60px minmax(0, 1fr) 58px;
+/* 名字前挂一个 24px 头像，所以这一格是 flex 而不是单行文本：
+   省略号随之搬到 `.rp-lb-nametext` 上——overflow 留在容器上会把头像一起裁掉。 */
+.rp-lb-name {
+  display: flex;
   align-items: center;
-  column-gap: 11px;
-  font-size: 11px;
-  color: var(--ink-3);
+  gap: 10px;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
 }
-.rp-cmp-t {
+.rp-lb-row.is-top .rp-lb-name {
+  color: #fff;
+}
+/* 榜单 / 画像 / 领先者三处的名字共用这一条：只有名字被压缩并省略，头像与「你」标记不动。 */
+.rp-lb-nametext {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rp-cmp-v {
-  text-align: right;
+.rp-anon {
+  color: var(--muted);
+}
+/* flex 容器里 gap 已经给足间距，徽标自己那份 `margin-left` 会叠成两份。 */
+.rp-lb-name .rp-you,
+.rp-who.has-avatar .rp-you {
+  margin-left: 0;
+}
+.rp-lb-avatar {
+  flex: none;
+}
+/* 头像空圆用 --panel 底 + 1px --line 描边：匿名行就是一个不带任何字符的素色空圆。
+   选择器写到三层是为了盖掉组件自带的 Tailwind `bg-primary-*` / `text-primary-*`——
+   本文件由 LeaderboardView 引入，与 utilities 的先后顺序不保证，只能靠权重赢。
+   MUST NOT 用行悬停底色（rgba(217,119,87,.04) 压在 --well 上）做空圆底，那样悬停时空圆会消失；
+   --panel #0f172a 压在 --well #0d1117 上仍有一档可见差，悬停也不受影响。 */
+.rp .rp-lb-name .rp-lb-avatar,
+.rp .rp-u .rp-lb-avatar,
+.rp .rp-who .rp-lb-avatar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.rp .rp-lb-avatar > span {
+  color: var(--cream);
+}
+/* 本人行：淡赤陶底 + 左缘 3px 内阴影色条（内阴影不受横滚裁剪，伪元素会被裁掉）。 */
+.rp-lb-row.is-self {
+  background: rgba(217, 119, 87, 0.06);
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.rp-lb-row.is-self:hover {
+  background: rgba(217, 119, 87, 0.09);
+}
+.rp-lb-row.is-self .rp-lb-rank {
+  color: var(--accent);
+  font-weight: 700;
+}
+.rp-lb-row.is-self .rp-lb-name {
+  color: #fff;
+  font-weight: 700;
+}
+.rp-lb-num {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-2);
+  font-size: 15px;
+  text-align: right;
+  color: var(--text);
 }
-.rp-cmp-row.is-lead .rp-cmp-v {
-  color: var(--ink);
+.rp-lb-num.is-dim {
+  color: var(--muted);
 }
-.rp-cmp-track {
-  height: 9px;
-  background: var(--line-soft);
-  border-radius: 1px;
+.rp-lb-row.is-self .rp-lb-num {
+  color: #fff;
+}
+
+/* 条与百分比（榜单、领先者、模型三处共用同一套 track / fill） */
+.rp-bar {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
   overflow: hidden;
 }
-.rp-cmp-track i {
+.rp-bar-fill {
   display: block;
   height: 100%;
-  background: var(--accent-c);
+  border-radius: 999px;
+  /* 次级填充统一 rgba(148,163,184,.65)：压在 track（.12 灰压在卡片底/窗口底）上是
+     3.2:1（卡片）与 3.4:1（窗口），过非文本 3:1；原型的 .42 只有 2.2:1。 */
+  background: rgba(148, 163, 184, 0.65);
   transform-origin: left center;
 }
-.rp-cmp-row.is-lead .rp-cmp-track i {
-  background: var(--accent);
+.rp-lb-row.is-top .rp-bar-fill,
+.rp-lb-row.is-self .rp-bar-fill {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
-.rp-say {
-  margin-top: 7px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-}
-.rp-say b {
-  font-weight: 400;
-  color: var(--accent-deep);
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-/* 全站：引导点线对账单 */
-.rp-siteblock {
-  border-left: 1px solid var(--line);
-  padding-left: 26px;
-}
-.rp-ll > li {
+.rp-barwrap {
   display: flex;
-  align-items: baseline;
-  gap: 9px;
-  padding: 3px 0;
-  font-size: 12px;
-  color: var(--ink-2);
+  align-items: center;
+  gap: 10px;
 }
-.rp-dots {
+.rp-barwrap .rp-bar {
   flex: 1 1 auto;
-  min-width: 14px;
-  border-bottom: 1px dotted var(--dot);
-  transform: translateY(-3px);
+  min-width: 26px;
+  height: 6px;
 }
-.rp-ll .rp-ll-v {
+.rp-pc {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
   font-size: 12.5px;
+  color: var(--muted);
+  width: 44px;
+  text-align: right;
+  flex: none;
 }
-.rp-stack {
-  border-left: 1px solid var(--line);
-  padding-left: 26px;
-  display: flex;
-  flex-direction: column;
+/* 表下那一行解读句坐在窗口外（原型 .lb-readout）；万一被包进窗口，改用内距不留白边。 */
+.rp-lb-foot {
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--muted);
 }
-.rp-stack > div + div {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line-soft);
-}
-.rp-mini .rp-who {
-  font-size: 12px;
-  color: var(--ink-2);
-  margin-top: 2px;
-  font-weight: 400;
-}
-.rp-mini-v {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 26px;
-  letter-spacing: -0.035em;
-  color: var(--ink);
-}
-.rp-mini-v small {
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-left: 7px;
-  letter-spacing: 0;
-}
-.rp-note-line {
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-top: 4px;
-  line-height: 1.55;
-}
-.rp-you {
-  display: inline-block;
-  margin-left: 7px;
-  padding: 0 5px;
-  border-radius: 3px;
-  font-size: 10px;
-  background: var(--accent);
-  color: var(--on-accent);
-  letter-spacing: 0.02em;
-  vertical-align: 1.5px;
-}
-
-/* ------------------------------------------------------------------ */
-/* 02 之最（阶梯错位由 --i 算，不写死 nth-child）                          */
-/* ------------------------------------------------------------------ */
-.rp-sup {
-  display: grid;
-  grid-template-columns: 1.18fr 1fr 1.26fr;
-  column-gap: 32px;
-  row-gap: 6px;
-}
-.rp-sup > li {
-  padding-top: 10px;
+.rp-win .rp-lb-foot {
+  margin-top: 0;
+  padding: 12px 16px;
   border-top: 1px solid var(--line);
-  margin-top: calc(var(--i, 0) * 4px);
 }
-.rp-sup-t {
-  font-size: 11.5px;
-  color: var(--ink-3);
-  letter-spacing: -0.01em;
-}
-.rp-sup-v {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 22px;
-  letter-spacing: -0.035em;
-  margin-top: 5px;
-  color: var(--ink);
-  white-space: nowrap;
-}
-.rp-sup-v small {
-  font-family: 'Geist', system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-left: 6px;
-  letter-spacing: 0;
-}
-.rp-sup-who {
-  font-size: 11.5px;
-  color: var(--accent-deep);
-  margin-top: 3px;
-}
-.rp-sup-who em {
-  color: var(--ink-3);
+.rp-lb-foot p {
+  max-width: 68ch;
 }
 
 /* ------------------------------------------------------------------ */
-/* 03 我的位置                                                          */
+/* 02 你的排名                                                          */
 /* ------------------------------------------------------------------ */
 .rp-whoami {
   display: grid;
-  grid-template-columns: 0.82fr 1.8fr;
-  column-gap: 36px;
-  align-items: start;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 24px;
+  align-items: stretch;
 }
 /* 右栏（或左栏）整块缺席时两栏收成一栏：`is-single` 的特指度高于断点里的两栏规则，
    因此在任何宽度下都成立。 */
@@ -612,332 +692,430 @@ html.dark .rp {
 .rp-rhythm.is-single {
   grid-template-columns: minmax(0, 1fr);
 }
-.rp-two.is-single .rp-prof {
-  border-left: 0;
-  padding-left: 0;
-}
 .rp-rank-v {
+  margin-top: 12px;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 50px;
+  font-size: 80px;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.05em;
-  color: var(--ink);
+  letter-spacing: -3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .rp-of {
-  font-size: 11.5px;
-  color: var(--ink-2);
-  margin-top: 7px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+/* 「你的位置」那一格的提示是一块淡赤陶提示框；LbStates 里的 `.rp-hint` 仍是普通小字。 */
+.rp-whoami .rp-hint {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(217, 119, 87, 0.28);
+  background: rgba(217, 119, 87, 0.07);
+  font-size: 14px;
+  color: var(--cream);
 }
 .rp-private {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 11px;
-  padding: 2.5px 8px;
-  border: 1px dashed var(--line-hard);
-  border-radius: 4px;
-  font-size: 10.5px;
-  color: var(--ink-3);
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--muted);
 }
-.rp-chartwrap {
-  border-left: 1px solid var(--line);
-  padding-left: 26px;
+.rp-subblock {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
 }
+.rp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.rp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.5);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.rp-chip .rp-chip-p {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--cream);
+}
+.rp-chip.is-lead {
+  border-color: rgba(217, 119, 87, 0.45);
+  background: rgba(217, 119, 87, 0.08);
+}
+/* 页头控制条上的档位 chip（只在匿名档出现）与快照 chip 是同一副形状，
+   只是文案是中文，走 --sans 而不是 mono。 */
+.rp-ctls .rp-chip {
+  padding: 8px 15px;
+  background: rgba(15, 23, 42, 0.6);
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* 折线（名次走势与缓存命中率趋势共用） */
 .rp-chart {
   display: block;
   width: 100%;
   height: auto;
 }
+.rp-chartwrap .rp-chart {
+  margin-top: 14px;
+}
 .rp-chart .rp-chart-line {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 1.6;
+  stroke-width: 1.8;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 .rp-chart .rp-chart-area {
   fill: var(--accent);
-  opacity: 0.08;
+  /* 深底上的面积填充要比亮底厚才看得出来（亮底是 .08/.09）。 */
+  opacity: 0.16;
   stroke: none;
 }
+/* 空心点是用父容器底色挖空的：折线坐在卡片里，取卡片的合成色，不是页面底色。 */
 .rp-chart .rp-chart-dot {
-  fill: var(--bg);
+  fill: var(--card-solid);
   stroke: var(--accent);
-  stroke-width: 1.4;
+  stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
 }
 .rp-chart .rp-chart-dot.is-last {
   fill: var(--accent);
   stroke: none;
 }
+/* 平滑路径在时，原始折线只作为数据回退，不重复画一遍。 */
+.rp-chart-line-data {
+  opacity: 0;
+}
+.rp-chart-line-smooth {
+  display: block;
+}
 .rp-axis {
+  margin-top: 10px;
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 10.5px;
-  color: var(--ink-3);
-  margin-top: 5px;
-}
-.rp-subblock {
-  margin-top: 13px;
-  padding-top: 11px;
-  border-top: 1px solid var(--line-soft);
-}
-.rp-chips {
-  display: flex;
+  /* 放不下时整段换行，MUST NOT 让 flex 把每一段压到断词换行：`2026-08-31` 在连字符处是
+     可断的，差两三个像素就会碎成 `2026-08-` / `31`（面板比整页窄一档之后正好踩中）。 */
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 7px;
-}
-.rp-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 3px 9px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-  background: var(--panel);
-}
-.rp-chip .rp-chip-p {
+  justify-content: space-between;
+  gap: 2px 12px;
   font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--accent-deep);
+  font-size: 12.5px;
+  color: var(--muted);
 }
-.rp-chip.is-lead {
-  border-color: var(--accent-edge);
-  background: var(--accent-wash);
+.rp-axis > * {
+  white-space: nowrap;
 }
+
+/* 我 vs 全站 */
 .rp-vs {
   display: grid;
-  row-gap: 11px;
-  margin-top: 7px;
+  row-gap: 14px;
+  margin-top: 12px;
 }
 .rp-vs-row {
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr) 68px;
+  grid-template-columns: 78px minmax(0, 1fr) 76px;
   align-items: center;
   column-gap: 12px;
-  font-size: 11.5px;
-  color: var(--ink-2);
+  font-size: 13px;
+  color: var(--muted);
 }
 .rp-vs-bars {
   display: grid;
-  row-gap: 4px;
+  row-gap: 5px;
 }
 .rp-vs-line {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   column-gap: 8px;
 }
 .rp-vs-line .rp-vs-t {
-  font-size: 10px;
-  color: var(--ink-3);
+  font-size: 12px;
+  color: var(--muted);
 }
 .rp-vs-me,
 .rp-vs-all {
-  height: 6px;
-  border-radius: 1px;
-  background: var(--line-soft);
   position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
   overflow: hidden;
 }
 .rp-vs-me i,
 .rp-vs-all i {
   position: absolute;
   inset: 0 auto 0 0;
-  border-radius: 1px;
+  border-radius: 999px;
   transform-origin: left center;
 }
 .rp-vs-me i {
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
-/* 对照条与轨道（--line-soft）要过 3:1：--ink-4 叠 0.5 透明度只剩 1.58:1，
-   直接用 --ink-3（约 3.3:1），仍明显弱于强调色的「我」那一根。 */
+/* 对照条与轨道要过 3:1。轨道是 rgba(148,163,184,.12) 压在卡片底上（#242a34，L=.024）：
+   同色 .42 只有 2.2:1、.55 是 2.9:1，.65 到 3.2:1 才够，比「我」那一根仍明显弱。 */
 .rp-vs-all i {
-  background: var(--ink-3);
+  background: rgba(148, 163, 184, 0.65);
 }
 .rp-vs-val {
   text-align: right;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
+  font-size: 13px;
+  color: var(--cream);
 }
 .rp-vs-val em {
   display: block;
-  font-size: 10.5px;
-  color: var(--ink-3);
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* ------------------------------------------------------------------ */
-/* 04 榜单                                                              */
+/* 03 今日亮点（三张卡）                                                 */
 /* ------------------------------------------------------------------ */
-.rp-tools {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex-wrap: wrap;
-}
-.rp-lb {
-  border-top: 1px solid var(--line-hard);
-}
-/* 六列：名次 / 用户 / 相对第一名 / tokens / 成功请求 / 金额，后三列都是右对齐的数值列。
-   改这里的列数时，1180 与 767 两个断点处的覆写要一起改，否则窄屏会少一格。 */
-.rp-lb-row {
+.rp-lead-grid {
   display: grid;
-  /* 用户列的最小宽度含头像那一份（24px + 8px gap）：D25 之前是 112px，加头像后补到 144px，
-     名字自己能用的宽度不变。1180 断点处的 96px 同理补到 128px。 */
-  grid-template-columns: 48px minmax(144px, 1.2fr) minmax(0, 2.2fr) 96px 74px 104px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+.rp-who {
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+/* 只有 tokens 领先者那一行在名字前挂头像，flex 只给它：
+   `.rp-mini .rp-who` 没有头像，保持原来的行内文本形态。 */
+.rp-who.has-avatar {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  column-gap: 16px;
-  padding: 5.5px 10px 5.5px 0;
-  border-bottom: 1px solid var(--line-soft);
-  position: relative;
-  transition: background-color 0.2s ease;
+  gap: 10px;
+  min-width: 0;
 }
-.rp-lb-row:hover {
-  background: var(--bg-sunk);
-}
-.rp-lb-head {
-  padding: 7px 10px 7px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 10.5px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-/* 右对齐是一个工具类，MUST NOT 复用入场动画的 `.rp-r`——画板里的两字母类名
-   （`.r` 右对齐）撞上移植后的 `.rp-r`，会让表头那两列单独被 rise 动画到。 */
-.rp-lb-head .rp-right {
-  text-align: right;
-}
-/* 数据行的名字前有 24px 头像 + 8px 间距（design D25），表头「用户」补同样的前导，字才对得齐。 */
-.rp-lb-head > [role='columnheader']:nth-child(2) {
-  padding-left: 32px;
-}
-.rp-lb-rank {
+.rp-big {
+  margin-top: 16px;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
-  color: var(--ink-3);
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -1.6px;
+  color: #fff;
 }
-.rp-lb-row.is-top .rp-lb-rank {
-  color: var(--accent-deep);
+.rp-big small {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--accent-2);
+  margin-left: 10px;
+  letter-spacing: 0;
 }
-/* 名字前挂一个 24px 头像（design D25），所以这一格是 flex 而不是单行文本：
-   省略号随之搬到 `.rp-lb-nametext` 上——overflow 留在容器上会把头像一起裁掉。 */
-.rp-lb-name {
+/* 与第 2 名的距离 */
+.rp-cmp {
+  margin-top: 20px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 12.5px;
-  color: var(--ink);
-  letter-spacing: -0.01em;
+  flex-direction: column;
+  gap: 12px;
 }
-/* 榜单 / 画像 / 领先者三处的名字共用这一条：只有名字被压缩并省略，头像与「你」标记不动。 */
-.rp-lb-nametext {
-  min-width: 0;
+.rp-cmp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.rp-cmp-t {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rp-lb-name .rp-anon {
-  color: var(--ink-2);
-}
-/* flex 容器里 gap 已经给足间距，徽标自己那份 `margin-left` 会叠成 15px。 */
-.rp-lb-name .rp-you,
-.rp-who.has-avatar .rp-you {
-  margin-left: 0;
-}
-.rp-lb-avatar {
-  flex: none;
-}
-/* 头像圆圈在报表皮肤里用中性底色（与 `.rp-anon` 同色系），不引入新颜色：
-   匿名行就是一个不带任何字符的素色空圆。选择器写到三层是为了盖掉组件自带的
-   Tailwind `bg-primary-*` / `text-primary-*`——本文件由 LeaderboardView 懒加载引入，
-   与 utilities 的先后顺序不保证，只能靠权重赢。 */
-.rp .rp-lb-name .rp-lb-avatar,
-.rp .rp-u .rp-lb-avatar,
-.rp .rp-who .rp-lb-avatar {
-  /* 不能用 --bg-sunk：那正是 .rp-lb-row:hover 的底色，悬停时空圆会整个消失。 */
-  background: var(--line-soft);
-}
-.rp .rp-lb-avatar > span {
-  color: var(--ink-2);
-}
-.rp-lb-row.is-self {
-  background: var(--accent-wash);
-}
-.rp-lb-row.is-self::before {
-  content: '';
-  position: absolute;
-  left: -10px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--accent);
-}
-.rp-lb-num {
+.rp-cmp-v {
+  text-align: right;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
-  text-align: right;
-  color: var(--ink);
+  color: var(--text);
 }
-.rp-lb-num.is-dim {
-  color: var(--ink-2);
+.rp-cmp-row.is-lead .rp-cmp-v {
+  color: var(--cream);
 }
-.rp-bar {
-  display: block;
-  height: 7px;
-  background: var(--line-soft);
-  border-radius: 1px;
+.rp-cmp-track {
+  grid-column: 1 / -1;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
   overflow: hidden;
 }
-.rp-bar-fill {
+.rp-cmp-track i {
   display: block;
   height: 100%;
-  background: var(--accent-c);
-  border-radius: 1px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.65);
   transform-origin: left center;
 }
-.rp-lb-row.is-self .rp-bar-fill {
-  background: var(--accent);
+.rp-cmp-row.is-lead .rp-cmp-track i {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
-.rp-lb-row.is-top .rp-bar-fill {
-  background: var(--accent-b);
+.rp-say {
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+  color: var(--muted);
 }
-.rp-barwrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.rp-barwrap .rp-bar {
-  flex: 1 1 auto;
-  min-width: 26px;
-}
-.rp-pc {
+.rp-say b {
+  font-weight: 400;
+  color: var(--cream);
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  color: var(--ink-3);
-  width: 36px;
-  text-align: right;
-  flex: none;
 }
-.rp-lb-foot {
-  margin-top: 9px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-  line-height: 1.62;
+/* 中卡：上下两小格 */
+.rp-stack {
+  justify-content: space-between;
+  gap: 18px;
 }
-.rp-lb-foot p {
-  max-width: 62ch;
+.rp-stack > div + div {
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.rp-mini .rp-who {
+  margin-top: 12px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.rp-mini-v {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -1px;
+  color: #fff;
+}
+.rp-mini-v small {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent-2);
+  margin-left: 8px;
+  letter-spacing: 0;
+}
+.rp-note-line {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+/* 右卡：引导点线 */
+.rp-ll {
+  margin-top: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+.rp-ll > li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.rp-dots {
+  flex: 1 1 auto;
+  min-width: 14px;
+  border-bottom: 1px dotted rgba(148, 163, 184, 0.2);
+  transform: translateY(-4px);
+}
+.rp-ll .rp-ll-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--cream);
+  white-space: nowrap;
+}
+/* 「你」徽标：不再是白字压赤陶（3.12:1），改成淡赤陶底 + 赤陶字（4.59:1）。 */
+.rp-you {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(217, 119, 87, 0.14);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ */
+/* 04 六项纪录（阶梯错位由 --i 算，不写死 nth-child）                      */
+/* ------------------------------------------------------------------ */
+.rp-sup {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+.rp-sup > li {
+  margin-top: calc(var(--i, 0) * 4px);
+}
+.rp-sup-t {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.rp-sup-v {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -1.2px;
+  color: #fff;
+}
+.rp-sup-v small {
+  font-family: var(--sans);
+  font-variant-numeric: normal;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 8px;
+  letter-spacing: 0;
+}
+.rp-sup-who {
+  margin-top: 12px;
+  font-size: 13.5px;
+  color: var(--cream);
+}
+.rp-sup-who em {
+  color: var(--muted);
 }
 
 /* ------------------------------------------------------------------ */
@@ -945,84 +1123,90 @@ html.dark .rp {
 /* ------------------------------------------------------------------ */
 .rp-two {
   display: grid;
-  grid-template-columns: 1.32fr 1fr;
-  column-gap: 40px;
-  align-items: start;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 24px;
+  align-items: stretch;
+}
+.rp-mlist {
+  margin-top: 4px;
 }
 .rp-mlist > li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px 40px;
+  grid-template-columns: minmax(0, 1fr) auto 38px;
   align-items: center;
-  column-gap: 12px;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--line-soft);
+  column-gap: 10px;
+  margin-top: 16px;
 }
 .rp-nm {
-  font-size: 12px;
-  color: var(--ink-2);
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--text);
 }
 .rp-nm span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 定宽是为了让各行的条形从同一条轴起跑；宽度要放得下常见的 16 字模型名
+     （`claude-fable-5-1` 在 13.5px mono 下是 130px），否则每行都被切掉最后一个字符。 */
   flex: none;
-  width: 126px;
+  width: 134px;
 }
 .rp-nm .rp-bar {
   flex: 1;
   min-width: 20px;
+  height: 7px;
 }
 .rp-mlist .rp-c {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: 13px;
   text-align: right;
-  color: var(--ink);
+  color: var(--muted);
 }
 .rp-mlist .rp-p {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
+  font-size: 13px;
   text-align: right;
-  color: var(--ink-3);
+  color: var(--cream);
 }
-.rp-prof {
-  border-left: 1px solid var(--line);
-  padding-left: 26px;
-}
+/* 画像：名字列含头像那一份（24px + 8px gap）。 */
 .rp-prof li {
   display: grid;
-  /* 名字列含头像那一份（24px + 8px gap）：D25 之前是 94px，加头像后补到 126px。 */
   grid-template-columns: 126px minmax(0, 1fr);
   column-gap: 14px;
-  /* 名字这一格自从挂上头像（design D25）就不能再按基线对齐：flex 容器的基线取自首个
-     子项，而首个子项在「有小图」的行是 img（基线 = 底边），在「回退首字母」的行是文字
-     （基线 = 字的基线）——同一张表里两种行会错开半个头像的高度。
-     也不能整行居中：模型 chip 折成多行时名字会浮到中间。顶对齐，`.rp-u` 自己内部居中。 */
+  /* 名字这一格挂了头像就不能再按基线对齐：flex 容器的基线取自首个子项，而首个子项在
+     「有小图」的行是 img（基线 = 底边），在「回退首字母」的行是文字（基线 = 字的基线）——
+     同一张表里两种行会错开半个头像的高度。也不能整行居中：模型 chip 折成多行时名字会浮到
+     中间。顶对齐，`.rp-u` 自己内部居中。 */
   align-items: start;
-  padding: 3.5px 0;
-  border-top: 1px solid var(--line-soft);
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
 }
-.rp-prof li:first-child {
+.rp-prof li:first-of-type {
   border-top: 0;
 }
-/* 名字前挂头像（design D25）：整格右对齐时整组（头像 + 名字）一起贴右边界，
-   chip 的左边界那条轴不动。省略号搬到 `.rp-lb-nametext`。 */
+.rp-prof .rp-eyebrow + ul {
+  margin-top: 10px;
+}
+/* 整格右对齐时整组（头像 + 名字）一起贴右边界，chip 的左边界那条轴不动。 */
 .rp-prof .rp-u {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
-  font-size: 11px;
-  color: var(--ink-3);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
 }
 .rp-prof .rp-u.is-self {
-  color: var(--accent-deep);
+  color: var(--accent-2);
+  font-weight: 700;
 }
 .rp-cs {
   display: flex;
@@ -1030,98 +1214,106 @@ html.dark .rp {
   flex-wrap: wrap;
 }
 .rp-cs span {
-  font-size: 10.5px;
-  color: var(--ink-2);
-  padding: 1px 6px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid rgba(30, 41, 59, 0.9);
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.5);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
   white-space: nowrap;
 }
 .rp-cs span b {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-weight: 400;
-  color: var(--ink-3);
-  margin-left: 5px;
+  color: var(--muted);
 }
+/* 平台构成：05 章下方的通栏卡 */
 .rp-plat {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-soft);
+  margin-top: 24px;
 }
 .rp-stackbar {
+  margin-top: 18px;
   display: flex;
-  height: 20px;
-  border-radius: 2px;
+  height: 16px;
+  border-radius: 8px;
   overflow: hidden;
-  background: var(--line-soft);
+  background: rgba(148, 163, 184, 0.12);
 }
 .rp-stackbar i {
   display: block;
+  height: 100%;
   transform-origin: left center;
 }
 .rp-sw1 {
-  background: var(--accent-a);
+  background: var(--accent);
 }
 .rp-sw2 {
-  background: var(--accent-b);
+  background: var(--blue);
 }
 .rp-sw3 {
-  background: var(--accent-c);
+  background: var(--accent-2);
 }
 .rp-sw4 {
-  background: var(--accent-d);
+  background: #64748b;
 }
 .rp-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 26px;
-  margin-top: 11px;
+  gap: 12px 26px;
+  margin-top: 18px;
 }
 .rp-legend > li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--ink-2);
+  gap: 9px;
+  font-size: 13.5px;
+  color: var(--muted);
 }
 .rp-sw {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   flex: none;
 }
 .rp-legend .rp-legend-v {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  font-size: 11.5px;
+  font-size: 13.5px;
+  color: var(--cream);
 }
 .rp-legend em {
-  color: var(--ink-3);
-  font-size: 10.5px;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 /* ------------------------------------------------------------------ */
 /* 06 活跃节奏                                                          */
 /* ------------------------------------------------------------------ */
 .rp-heat30 {
+  margin-top: 18px;
   display: grid;
   grid-template-columns: repeat(30, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
 }
 .rp-heat30 i {
   display: block;
-  height: 24px;
-  border-radius: 1.5px;
-  background: var(--heat-0);
+  height: 28px;
+  /* 热力格是圆角的唯一例外：8px 在小格上会读成圆点。 */
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.08);
 }
 .rp-heat-ticks {
   position: relative;
-  height: 14px;
-  margin-top: 6px;
-  font-size: 10.5px;
-  color: var(--ink-3);
+  height: 18px;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
 }
 .rp-heat-ticks span {
   position: absolute;
@@ -1137,46 +1329,52 @@ html.dark .rp {
   right: 0;
 }
 .rp-rhythm {
-  margin-top: 15px;
+  margin-top: 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr);
-  column-gap: 40px;
-  align-items: start;
+  grid-template-columns: 1.25fr 0.75fr;
+  gap: 24px;
+  align-items: stretch;
 }
+/* 7 × 24：格子列与小时刻度是两张表，行标列 MUST 定宽（不能 max-content），
+   否则刻度那张表的行标列是空的、宽度归零，两张表整体错开一格。 */
 .rp-week-grid {
+  margin-top: 18px;
   display: grid;
-  /* 标签列按内容定宽：zh「周一」两个汉字、en「Mon」三个等宽字符都不换行 */
-  grid-template-columns: max-content minmax(0, 1fr);
-  column-gap: 9px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  column-gap: 0;
+  row-gap: 4px;
   align-items: center;
-  row-gap: 3px;
 }
 .rp-week-lbl {
-  font-size: 10px;
-  color: var(--ink-3);
-  text-align: right;
-  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  align-self: stretch;
+  padding-right: 8px;
+  font-size: 12px;
+  color: var(--muted);
   white-space: nowrap;
 }
 .rp-week-row {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
 }
 .rp-week-row i {
   display: block;
-  height: 15px;
-  border-radius: 1.5px;
-  background: var(--heat-0);
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 28px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.08);
 }
 .rp-hourscale {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
-  gap: 3px;
-  margin-top: 5px;
-  font-size: 9.5px;
-  color: var(--ink-3);
+  gap: 4px;
   font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
 }
 .rp-hourscale span {
   text-align: center;
@@ -1184,80 +1382,82 @@ html.dark .rp {
 .rp-scale-key {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
-  color: var(--ink-3);
-  margin-top: 12px;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--muted);
 }
 .rp-scale-key i {
-  width: 11px;
-  height: 11px;
-  border-radius: 2px;
-  background: var(--heat-0);
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.08);
 }
 .rp-heat30 i.rp-lv1,
 .rp-week-row i.rp-lv1,
 .rp-scale-key i.rp-lv1 {
-  background: var(--accent-d);
+  background: rgba(217, 119, 87, 0.24);
 }
 .rp-heat30 i.rp-lv2,
 .rp-week-row i.rp-lv2,
 .rp-scale-key i.rp-lv2 {
-  background: var(--accent-c);
+  background: rgba(217, 119, 87, 0.46);
 }
 .rp-heat30 i.rp-lv3,
 .rp-week-row i.rp-lv3,
 .rp-scale-key i.rp-lv3 {
-  background: var(--accent-b);
+  background: rgba(217, 119, 87, 0.72);
 }
 .rp-heat30 i.rp-lv4,
 .rp-week-row i.rp-lv4,
 .rp-scale-key i.rp-lv4 {
-  background: var(--accent-a);
+  background: var(--accent-2);
 }
+/* 今日 24 小时柱 */
 .rp-hbars {
+  margin-top: 18px;
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
-  column-gap: 4px;
+  column-gap: 3px;
   align-items: end;
-  height: 58px;
+  height: 120px;
 }
 .rp-hbars .rp-b {
-  background: var(--accent-c);
-  border-radius: 1.5px 1.5px 0 0;
   min-height: 2px;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
   transform-origin: bottom center;
 }
 .rp-hbars .rp-b.is-zero {
-  background: var(--line-soft);
+  background: rgba(148, 163, 184, 0.12);
   height: 2px !important;
 }
 .rp-hbars .rp-b.is-peak {
-  background: var(--accent);
+  background: linear-gradient(180deg, #fff, var(--accent-2));
 }
 .rp-hticks {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
-  column-gap: 4px;
-  margin-top: 6px;
-  font-size: 9.5px;
-  color: var(--ink-3);
+  column-gap: 3px;
+  margin-top: 8px;
   font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
   text-align: center;
 }
 .rp-hticks span.is-on {
-  color: var(--accent-deep);
+  color: var(--accent-2);
 }
 .rp-peaknote {
-  margin-top: 9px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-  line-height: 1.65;
-  max-width: 44ch;
+  margin-top: 14px;
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.6;
 }
 .rp-peaknote .rp-icon {
-  margin-right: 5px;
-  color: var(--accent-deep);
+  margin-right: 6px;
+  color: var(--accent);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1265,17 +1465,18 @@ html.dark .rp {
 /* ------------------------------------------------------------------ */
 .rp-trendwrap {
   display: grid;
-  grid-template-columns: 3.3fr 1fr;
-  column-gap: 38px;
-  align-items: end;
+  grid-template-columns: 7fr 5fr;
+  gap: 24px;
+  align-items: stretch;
 }
 .rp-plot {
   position: relative;
+  margin-top: 18px;
 }
 .rp-bars {
   display: grid;
   grid-template-columns: repeat(14, minmax(0, 1fr));
-  column-gap: 8px;
+  column-gap: 10px;
   align-items: end;
   height: 120px;
 }
@@ -1289,12 +1490,12 @@ html.dark .rp {
 .rp-bars .rp-v {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  line-height: 13px;
-  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 15px;
+  min-height: 15px;
+  color: var(--muted);
   text-align: center;
   white-space: nowrap;
-  min-height: 13px;
   flex: 0 0 auto;
 }
 /* 柱区 = 列高减去读数行与 gap。柱子的百分比高度对这一层求值，100% 正好是柱区满格；
@@ -1307,183 +1508,197 @@ html.dark .rp {
 }
 .rp-bars .rp-b {
   flex: 1 1 auto;
-  background: var(--accent-c);
-  border-radius: 1.5px 1.5px 0 0;
   min-height: 2px;
+  border-radius: 8px 8px 0 0;
+  background: rgba(217, 119, 87, 0.45);
   transform-origin: bottom center;
 }
 .rp-bars .rp-col.is-hot .rp-b {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+}
+.rp-bars .rp-col.is-peak .rp-b {
+  background: linear-gradient(180deg, #fff, var(--accent-2));
 }
 .rp-bars .rp-col.is-hot .rp-v {
-  color: var(--accent-deep);
+  color: var(--cream);
 }
 .rp-breakline {
   position: absolute;
   left: 0;
   right: 0;
-  border-top: 1px dashed var(--line-hard);
+  border-top: 1px dashed var(--line);
   pointer-events: none;
 }
+/* 断轴标签压在虚线上：底色取卡片的合成色，不是页面底色。 */
 .rp-breakline span {
   position: absolute;
   left: 0;
-  top: -14px;
-  font-size: 10px;
-  color: var(--ink-3);
-  background: var(--bg);
+  top: -16px;
   padding: 0 5px;
   font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--card-solid);
 }
 .rp-bar-ticks {
   display: grid;
   grid-template-columns: repeat(14, minmax(0, 1fr));
-  column-gap: 8px;
-  margin-top: 6px;
-  font-size: 9.5px;
-  color: var(--ink-3);
+  column-gap: 10px;
+  margin-top: 10px;
   font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
   text-align: center;
 }
-.rp-monthbox {
-  border-left: 1px solid var(--line);
-  padding-left: 24px;
-  padding-bottom: 4px;
+/* 刻度隔一根柱印一个，右邻格恒为空：`nowrap` 让 `08-31` 溢出到那个空格里，仍然居中在自己
+   那根柱下。缺了它，面板宽度收窄后每格只剩十几像素，日期会在连字符处断成两行。 */
+.rp-bar-ticks > span {
+  white-space: nowrap;
 }
 .rp-monthbox .rp-month-v {
+  margin-top: 14px;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 28px;
-  letter-spacing: -0.04em;
-  color: var(--ink);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -1px;
+  color: #fff;
 }
 .rp-monthbox .rp-month-d {
-  font-size: 11.5px;
-  color: var(--ink-2);
-  margin-top: 6px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
   gap: 6px;
+  font-size: 13.5px;
+  color: var(--muted);
 }
 .rp-comp {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-soft);
+  margin-top: 24px;
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-  column-gap: 40px;
-  align-items: start;
+  gap: 24px;
+  align-items: stretch;
 }
 .rp-cache-row {
+  margin-top: 14px;
   display: grid;
-  grid-template-columns: 102px minmax(0, 1fr);
-  column-gap: 18px;
+  grid-template-columns: minmax(0, 140px) minmax(0, 1fr);
+  column-gap: 24px;
   align-items: center;
-  margin-top: 6px;
 }
 .rp-cache-row .rp-big {
-  font-size: 34px;
   margin-top: 0;
-  letter-spacing: -0.045em;
+  font-size: 44px;
+  letter-spacing: -1.4px;
 }
-.rp-cache-row .rp-k {
-  font-size: 10.5px;
-  color: var(--ink-3);
-  margin-top: 5px;
+.rp-k {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
   line-height: 1.5;
-  text-transform: none;
-  letter-spacing: 0;
 }
 
 /* ------------------------------------------------------------------ */
 /* 非正常态（加载 / 计算中 / 失败 / 空 / 横幅）                            */
 /* ------------------------------------------------------------------ */
 .rp-banner {
-  border-left: 2px solid var(--accent);
-  background: var(--accent-wash);
-  padding: 11px 14px;
-  margin-top: 12px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(217, 119, 87, 0.28);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: rgba(217, 119, 87, 0.07);
 }
 .rp-banner-title {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cream);
 }
 .rp-hint {
-  font-size: 11.5px;
-  color: var(--ink-3);
-  line-height: 1.65;
-  margin-top: 4px;
+  margin-top: 6px;
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.6;
 }
 .rp-empty {
-  padding: 22px 0;
-  border-top: 1px solid var(--line);
-  font-size: 12.5px;
-  color: var(--ink-2);
+  padding: 20px 0;
+  font-size: 14px;
+  color: var(--muted);
 }
+/* 骨架就是几条灰块，MUST NOT 用圆形 spinner。 */
 .rp-skel {
-  background: var(--bg-sunk);
-  border-radius: 2px;
-  height: 11px;
+  height: 14px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.1);
 }
 .rp-skel + .rp-skel {
-  margin-top: 9px;
+  margin-top: 10px;
 }
 .rp-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 11px;
-  border: 1px solid var(--line-hard);
-  border-radius: 5px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-  background: var(--panel);
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  font-size: 14px;
+  color: var(--text);
   transition:
     border-color 0.2s ease,
     color 0.2s ease,
-    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    background 0.2s ease;
 }
 .rp-btn:hover {
-  color: var(--ink);
-}
-.rp-btn:active {
-  transform: translateY(1px) scale(0.985);
+  color: var(--accent);
+  border-color: rgba(217, 119, 87, 0.45);
+  background: rgba(217, 119, 87, 0.08);
 }
 
 /* ------------------------------------------------------------------ */
-/* 页脚                                                                 */
+/* 页脚：一条细线 + colophon 一行 + 版权一行                              */
 /* ------------------------------------------------------------------ */
 .rp-colophon {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 24px;
-  margin-top: 16px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-hard);
+  margin-top: 48px;
+  padding-top: 26px;
+  padding-bottom: 34px;
+  border-top: 1px solid var(--line);
 }
 .rp-colophon .rp-line {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 12px;
-  font-size: 11px;
-  color: var(--ink-3);
+  gap: 4px 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
   line-height: 1.8;
+}
+.rp-colophon .rp-line span {
+  white-space: nowrap;
 }
 .rp-colophon .rp-line b {
   font-weight: 400;
-  color: var(--ink-2);
-  font-family: var(--mono);
+  color: var(--cream);
   font-variant-numeric: tabular-nums;
+}
+.rp-colophon .rp-line + .rp-line,
+.rp-cp {
+  margin-top: 8px;
+}
+/* 版权行坐在 --bg #1a1a1a 上（首页 / docs 的同一行坐在更深的底上），用 --muted（7.3:1）。 */
+.rp-cp {
+  font-size: 13px;
+  color: var(--muted);
 }
 
 /* ------------------------------------------------------------------ */
-/* 动效：只动 transform，首帧即可读（不用 opacity 入场）                   */
+/* 动效：入场只动 transform，首帧即可读（MUST NOT 用 opacity 入场）        */
+/* 级联靠模板注入的 --i，缓动统一 cubic-bezier(.16,1,.3,1)。              */
 /* ------------------------------------------------------------------ */
 @keyframes rise {
   from {
-    transform: translateY(7px);
+    transform: translateY(14px);
   }
   to {
     transform: none;
@@ -1491,7 +1706,7 @@ html.dark .rp {
 }
 @keyframes grow {
   from {
-    transform: scaleX(0.88);
+    transform: scaleX(0.04);
   }
   to {
     transform: none;
@@ -1499,36 +1714,42 @@ html.dark .rp {
 }
 @keyframes growy {
   from {
-    transform: scaleY(0.9);
+    transform: scaleY(0.04);
   }
   to {
     transform: none;
   }
 }
 @keyframes breathe {
-  0%,
-  100% {
-    opacity: 0.35;
+  0% {
+    transform: scale(0.5);
+    opacity: 0.9;
   }
-  50% {
-    opacity: 1;
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
   }
 }
+/* `.rp-r` 是 rise（入场），不是 right。右对齐用 `.rp-right`。 */
 .rp-r {
-  animation: rise 0.52s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   animation-delay: calc(var(--i, 0) * 60ms);
 }
 .rp-grow {
-  animation: grow 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: grow 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   animation-delay: calc(var(--i, 0) * 60ms + 80ms);
   transform-origin: left center;
 }
 .rp-growy {
-  animation: growy 0.58s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: growy 0.68s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   animation-delay: calc(var(--i, 0) * 60ms + 80ms);
   transform-origin: bottom center;
 }
+/* 复位必须写全 `*,*::before,*::after`：只写 `*` 不匹配伪元素（呼吸点的光环就在伪元素上）。 */
 @media (prefers-reduced-motion: reduce) {
+  .rp,
+  .rp::before,
+  .rp::after,
   .rp *,
   .rp *::before,
   .rp *::after {
@@ -1538,48 +1759,68 @@ html.dark .rp {
 }
 
 /* ------------------------------------------------------------------ */
-/* 中间宽度：768–1180                                                   */
+/* 响应式：1220 / 1140 / 900 / 700 / 560 / 430                          */
 /* ------------------------------------------------------------------ */
-@media (max-width: 1180px) {
-  .rp {
-    --pad: 32px;
+@media (max-width: 1220px) {
+  .rp-whoami,
+  .rp-two,
+  .rp-rhythm,
+  .rp-trendwrap,
+  .rp-comp {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .rp-lead-grid {
-    grid-template-columns: 1.4fr 1fr;
-    column-gap: 24px;
-    row-gap: 20px;
+  .rp-cache-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
   }
-  .rp-lead-grid .rp-siteblock {
-    grid-column: 1 / -1;
-    border-left: 0;
-    padding-left: 0;
-    padding-top: 14px;
-    border-top: 1px solid var(--line-soft);
-  }
-  .rp-lead-grid .rp-ll {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 30px;
-  }
+}
+
+@media (max-width: 1140px) {
+  .rp-lead-grid,
   .rp-sup {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 24px;
+  }
+  .rp-lead-grid > *:last-child {
+    grid-column: 1 / -1;
   }
   .rp-sup > li {
-    margin-top: calc(var(--i, 0) * 6px);
+    margin-top: calc(var(--i, 0) * 3px);
   }
-  .rp-whoami {
-    grid-template-columns: 0.7fr 1.6fr;
-    column-gap: 26px;
-  }
-  .rp-two,
-  .rp-trendwrap,
-  .rp-comp,
-  .rp-rhythm {
-    column-gap: 26px;
-  }
-  .rp-prof {
+}
+
+@media (max-width: 900px) {
+  .rp-page {
     padding-left: 20px;
+    padding-right: 20px;
+  }
+  .rp-chapter {
+    padding-top: 36px;
+  }
+  /* 页头总高 ≤200px：两组分段在窄屏并排一行，组名（窗口 / 排名指标）收起，
+     label 仍在 aria-label 上。 */
+  .rp-phead {
+    padding-top: 24px;
+    padding-bottom: 22px;
+  }
+  .rp-phead h1 {
+    font-size: 32px;
+    letter-spacing: -0.6px;
+  }
+  .rp-ctls {
+    margin-top: 16px;
+    gap: 8px;
+  }
+  .rp-seg b {
+    display: none;
+  }
+  .rp-h2 {
+    font-size: 24px;
+    letter-spacing: -0.3px;
+  }
+  .rp-plat,
+  .rp-rhythm,
+  .rp-comp {
+    margin-top: 20px;
   }
   .rp-prof li {
     grid-template-columns: minmax(0, 1fr);
@@ -1589,16 +1830,48 @@ html.dark .rp {
   .rp-prof .rp-u {
     justify-content: flex-start;
   }
-  .rp-lb-row {
-    grid-template-columns: 44px minmax(128px, 1.1fr) minmax(0, 1.7fr) 88px 66px 96px;
-    column-gap: 12px;
+  .rp-colophon {
+    margin-top: 36px;
   }
-  /* 断轴之上通常有两根柱各带一个读数，而列宽在 768px 处已经收到约 21px
-     （两栏的 `.rp-trendwrap` 左栏再分 14 列），一个紧凑读数（`12.4M`）本身就要 30px：
-     相邻两个读数会直接叠在一起。这里只留峰值那一根，其余各天的值由 `.rp-col` 的 title
-     与图下那一句兜住；`.rp-v` 的 13px 占位保留（用 visibility 而不是 display），柱高不跳变。
-     首末两列的读数贴着自己那一侧对齐，读数 MUST NOT 溢出绘图区。
-     1180–900 之间列宽其实还放得下第二个读数，这里一并收掉是为了不再开第三个断点。 */
+}
+
+@media (max-width: 700px) {
+  .rp-phead {
+    padding-top: 22px;
+    padding-bottom: 14px;
+  }
+  .rp-phead h1 {
+    font-size: 29px;
+  }
+  .rp-phead-sub {
+    margin-top: 4px;
+    font-size: 14px;
+  }
+  .rp-ctls {
+    margin-top: 12px;
+  }
+  .rp-seg button {
+    padding: 7px 12px;
+    font-size: 13.5px;
+  }
+  .rp-snap {
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+  .rp-win-meta {
+    font-size: 12px;
+  }
+  /* 标题栏右侧的状态小字按段收起，而不是整条打省略号（截出来的是半个单词）：
+     这一档先丢「· top 50」——「前 50 名」章名里已经写着。 */
+  .rp-win-meta-top {
+    display: none;
+  }
+  .rp-heat30 i {
+    height: 24px;
+  }
+  /* 14 天柱区列宽已收到 ~21px，一个紧凑读数（`12.4M`）本身就要 30px：相邻两个读数会叠在
+     一起。只留峰值那一根，其余各天的值由 `.rp-col` 的 title 与图下那一句兜住；`.rp-v` 的
+     占位保留（用 visibility 而不是 display），柱高不跳变。 */
   .rp-bars .rp-v {
     visibility: hidden;
   }
@@ -1613,331 +1886,168 @@ html.dark .rp {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* 窄屏：<768 一律单列，边注栏折成章头一行                                 */
-/* ------------------------------------------------------------------ */
-@media (max-width: 767px) {
-  .rp {
-    --pad: 16px;
-  }
-  .rp-page {
-    padding-bottom: 32px;
-  }
-  /* 左块（刊头）与右块（拨盘）各占一行，两块都靠左。 */
-  .rp-masthead {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 12px 0 10px;
-  }
-  .rp-dials {
-    justify-content: flex-start;
-  }
-  .rp-dials .rp-sep {
+@media (max-width: 560px) {
+  /* 再丢「· tokens」，只剩 window：指标在页头的分段上是高亮着的，这里不重复。 */
+  .rp-win-meta-metric {
     display: none;
   }
-  .rp-chapter {
-    margin-top: 26px;
-    padding-top: 14px;
-  }
-  .rp-titleblock {
-    padding: 15px 0 2px;
-  }
-  .rp-h1 {
-    font-size: 25px;
-  }
   .rp-lead-grid,
-  .rp-whoami,
-  .rp-two,
-  .rp-comp,
-  .rp-trendwrap,
-  .rp-rhythm {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: 18px;
-  }
-  .rp-stack,
-  .rp-chartwrap,
-  .rp-prof,
-  .rp-monthbox,
-  .rp-siteblock {
-    border-left: 0;
-    padding-left: 0;
-    border-top: 1px solid var(--line-soft);
-    padding-top: 16px;
-  }
-  .rp-lead .rp-big {
-    font-size: 40px;
-  }
   .rp-sup {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: 0;
+    gap: 20px;
+  }
+  .rp-lead-grid > *:last-child {
+    grid-column: auto;
   }
   .rp-sup > li {
-    margin-top: 0 !important;
+    margin-top: 0;
   }
-  /* 窄屏折成两行四列：首行是名次 / 用户 / tokens / 金额，次行是相对条 / 成功请求。
-     金额与 tokens 并排在首行（当前 Metric 是哪一列都看得见），成功请求贴着次行右端
-     与它们对齐；条那一格 MUST NOT 被隐藏。 */
-  .rp-lb-row {
-    grid-template-columns: 24px minmax(0, 1fr) auto auto;
-    row-gap: 6px;
-    column-gap: 10px;
-    padding: 11px 8px 11px 0;
+  .rp-big {
+    font-size: 40px;
   }
-  .rp-lb-rank {
-    grid-area: 1 / 1 / 2 / 2;
+  .rp-sup-v {
+    font-size: 32px;
   }
-  .rp-lb-name {
-    grid-area: 1 / 2 / 2 / 3;
+  .rp-rank-v {
+    font-size: 64px;
   }
-  .rp-lb-tok {
-    grid-area: 1 / 3 / 2 / 4;
-  }
-  .rp-lb-cost {
-    grid-area: 1 / 4 / 2 / 5;
-  }
-  .rp-lb-barcell {
-    grid-area: 2 / 1 / 3 / 3;
-  }
-  .rp-lb-req {
-    grid-area: 2 / 3 / 3 / 5;
-  }
-  .rp-lb-row.is-self::before {
-    left: -8px;
-  }
-  /* 视觉隐藏而不是 display:none：窄屏下数据行仍是 role=table 的行，
-     表头留在可访问性树里，两个数值单元格才有列名可念。 */
-  .rp-lb-head {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .rp-heat30 {
-    gap: 2px;
-  }
-  .rp-heat30 i {
-    height: 24px;
-  }
-  .rp-week-grid {
-    grid-template-columns: 15px minmax(0, 1fr);
-    column-gap: 6px;
-    row-gap: 2px;
-  }
-  .rp-week-row {
-    gap: 2px;
-  }
-  .rp-week-row i {
-    height: 11px;
-  }
-  .rp-hourscale {
-    gap: 2px;
-    font-size: 9.5px;
-  }
-  .rp-hourscale span:nth-child(even) {
-    visibility: hidden;
-  }
-  .rp-bars {
-    column-gap: 4px;
-    height: 116px;
-  }
-  .rp-bar-ticks {
-    column-gap: 4px;
-    font-size: 9.5px;
-  }
-  .rp-bar-ticks span:nth-child(4n + 3) {
-    visibility: hidden;
-  }
-  .rp-hbars {
-    column-gap: 3px;
-    height: 56px;
-  }
-  .rp-hticks {
-    column-gap: 3px;
-    font-size: 9.5px;
-  }
-  .rp-hticks span:nth-child(even) {
-    visibility: hidden;
-  }
-  .rp-mlist > li {
-    grid-template-columns: minmax(0, 1fr) 38px 38px;
-    column-gap: 9px;
-  }
-  .rp-nm {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .rp-nm span:first-child {
-    width: 100%;
-  }
-  .rp-nm .rp-bar {
-    width: 100%;
-    flex: 1 1 100%;
+  .rp-cache-row .rp-big {
+    font-size: 38px;
   }
   .rp-vs-row {
-    grid-template-columns: 60px minmax(0, 1fr) 70px;
+    grid-template-columns: 64px minmax(0, 1fr) 68px;
     column-gap: 8px;
   }
-  .rp-cache-row {
-    grid-template-columns: 76px minmax(0, 1fr);
-    column-gap: 14px;
-  }
   .rp-legend {
-    gap: 7px 18px;
+    gap: 10px 18px;
   }
-  .rp-cmp-row {
-    grid-template-columns: 54px minmax(0, 1fr) 54px;
-    column-gap: 9px;
+  /* 7 × 24 在这一档开始横滚（格子再压下去就不成正方了）：滚动容器是整张卡，
+     格子与小时刻度才会一起滚，两张表 MUST NOT 各滚各的。 */
+  .rp-rhythm > div:has(.rp-week-grid) {
+    overflow-x: auto;
+  }
+  .rp-week-row,
+  .rp-hourscale {
+    min-width: 428px;
+  }
+  /* 周几标签钉在滚动容器左缘，底色取卡片的合成色，格子滑过去时不会透出来。 */
+  .rp-week-lbl {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--card-solid);
   }
 }
-/* Final polish: stronger editorial frame without changing data layout. */
-.rp {
-  --pad: clamp(20px, 4.2vw, 72px);
-}
 
-.rp-page {
-  width: min(100%, 1480px);
-  margin: 0 auto;
-  padding-bottom: 48px;
-}
-
-.rp-masthead {
-  position: relative;
-  padding-top: 18px;
-  padding-bottom: 14px;
-}
-
-.rp-masthead::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: -2px;
-  width: 56px;
-  height: 3px;
-  background: var(--accent);
-}
-
-.rp-titleblock {
-  padding-top: 28px;
-  padding-bottom: 8px;
-}
-
-.rp-h1 {
-  max-width: 18ch;
-  font-size: clamp(30px, 3.8vw, 54px);
-  font-weight: 560;
-  letter-spacing: -0.055em;
-  line-height: 1.04;
-  text-wrap: balance;
-}
-
-.rp-sub {
-  margin-top: 12px;
-  font-size: 13px;
-}
-
-.rp-chapter {
-  margin-top: 28px;
-  padding-top: 16px;
-}
-
-.rp-chapter:first-of-type {
-  margin-top: 34px;
-}
-
-.rp-h2row {
-  margin-bottom: 14px;
-}
-
-.rp-h2 {
-  font-size: 16px;
-  font-weight: 560;
-}
-
-.rp-lb-row {
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-.rp-lb-row.is-top .rp-lb-rank {
-  font-weight: 600;
-}
-
-.rp-lb-row.is-self {
-  outline: 1px solid var(--accent-edge);
-  outline-offset: -1px;
-}
-
-.rp-colophon {
-  margin-top: 34px;
-  padding-bottom: 8px;
-}
-
-@media (max-width: 767px) {
-  .rp {
-    background-size: 100% 28px, 28px 100%;
+@media (max-width: 430px) {
+  /* 轴脚三段（起止日期 + 中间一句）在这一档只差几个像素放不下：先把段间距收到 6px 把它
+     压回一行；真放不下时靠 `.rp-axis` 的 `flex-wrap` 整段换行，而不是把日期拆成两行。 */
+  .rp-axis {
+    column-gap: 6px;
   }
-
   .rp-page {
-    padding-bottom: 32px;
+    padding-left: 16px;
+    padding-right: 16px;
   }
-
-  .rp-titleblock {
-    padding-top: 24px;
+  .rp-phead h1 {
+    font-size: 27px;
   }
-
-  .rp-h1 {
-    font-size: 34px;
+  .rp-h2 {
+    font-size: 22px;
   }
-
-  .rp-chapter:first-of-type {
-    margin-top: 28px;
+  .rp-seg button {
+    padding: 7px 10px;
+  }
+  .rp-lead,
+  .rp-stack,
+  .rp-siteblock,
+  .rp-whoami > div,
+  .rp-sup > li,
+  .rp-two > *,
+  .rp-plat,
+  .rp-rhythm > div,
+  .rp-trendwrap > div,
+  .rp-comp > div,
+  .rp-body > .rp-r {
+    padding: 18px;
+  }
+  .rp-win-head {
+    padding: 0 10px 0 12px;
+    gap: 7px;
+  }
+  .rp-win-title {
+    margin-left: 6px;
+    font-size: 12.5px;
+  }
+  .rp-ghost {
+    margin-left: 8px;
+    padding: 5px 9px;
+  }
+  .rp-lb-row {
+    grid-template-columns:
+      60px minmax(120px, 1.5fr) minmax(104px, 1.3fr) minmax(84px, 1fr)
+      minmax(64px, 0.8fr) minmax(88px, 1fr);
+    column-gap: 12px;
+    min-width: 620px;
+    padding: 10px 12px;
+    padding-right: 30px;
+  }
+  .rp-lb-head {
+    min-width: 620px;
+  }
+  .rp-pc {
+    width: 38px;
+  }
+  .rp-colophon {
+    padding-top: 22px;
+    padding-bottom: 28px;
+  }
+  .rp-colophon .rp-line,
+  .rp-cp {
+    font-size: 12px;
   }
 }
 
-.rp-chartwrap .rp-eyebrow {
-  margin-bottom: 7px;
-}
+/* 榜单表的横滚渐隐：一眼看出还能左右滑。渐隐带 14px，最后一列（金额）补 30px 右内距——
+   滚到最右端时金额的末位数字落在完全不透明区，不会永久半透明。
+   门槛 MUST 按「表格真的溢出」推导而不是照搬视口：`.rp` 是外壳 `<main>` 里的一块面板，
+   表格可用宽度 = 视口 − 侧边栏 − main 内距（32 / 24 / 16）− 面板边框（2）− 面板内距
+   （24 / 20 / 16），表自身 min-width 是 720。外壳的侧边栏只在 ≥1024 占位，而且有展开
+   （256px）与折叠（72px）两种宽度，两种状态要分开推：
 
-.rp-chart {
-  min-height: 0;
-}
+   - <1024（侧边栏是抽屉，不占位）：临界 = 720 + 32 + 2 + 16 = 770 → 取整 810（给 24 / 32
+     两档内距留余量），展开与折叠同值。
+   - ≥1024 且侧边栏展开：临界 = 720 + 256 + 64 + 2 + 48 = 1090。
+   - ≥1024 且侧边栏折叠：临界 = 720 + 72 + 64 + 2 + 48 = 906 < 1024，也就是折叠态下
+     ≥1024 的表**永远放得下**，这一支整个不该生效。
 
-.rp-chart .rp-chart-line {
-  stroke-width: 1.7;
-}
-
-.rp-chart .rp-chart-area {
-  opacity: 0.09;
-}
-
-.rp-chart .rp-chart-dot {
-  stroke-width: 1.5;
-}
-
-.rp-axis {
-  margin-top: 6px;
-  font-size: 10.5px;
-}
-
-@media (max-width: 767px) {
-  .rp-chartwrap .rp-eyebrow {
-    margin-bottom: 6px;
+   视口再宽表就放得下，渐隐 MUST NOT 出现——那会把每行 hairline 的右端淡出、让金额列比
+   左侧多 12px 的不对称留白。折叠态读不出 CSS 媒体查询，因此由 `LeaderboardView.vue` 按
+   `appStore.sidebarCollapsed` 在 `.rp` 上挂 `.is-shell-collapsed`，第二支排除掉它。 */
+@media (max-width: 810px) {
+  .rp-lb {
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      rgba(2, 6, 23, 1) calc(100% - 14px),
+      rgba(2, 6, 23, 0)
+    );
+    mask-image: linear-gradient(90deg, rgba(2, 6, 23, 1) calc(100% - 14px), rgba(2, 6, 23, 0));
   }
-
-  .rp-chart {
-    min-height: 0;
+  .rp-lb-row {
+    padding-right: 30px;
   }
 }
 
-.rp-chart-line-data {
-  opacity: 0;
-}
-
-.rp-chart-line-smooth {
-  display: block;
+@media (min-width: 1024px) and (max-width: 1090px) {
+  .rp:not(.is-shell-collapsed) .rp-lb {
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      rgba(2, 6, 23, 1) calc(100% - 14px),
+      rgba(2, 6, 23, 0)
+    );
+    mask-image: linear-gradient(90deg, rgba(2, 6, 23, 1) calc(100% - 14px), rgba(2, 6, 23, 0));
+  }
+  .rp:not(.is-shell-collapsed) .rp-lb-row {
+    padding-right: 30px;
+  }
 }

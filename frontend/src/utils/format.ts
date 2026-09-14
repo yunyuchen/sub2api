@@ -187,7 +187,7 @@ export function formatTimeToMinuteInTimeZone(
 }
 
 /**
- * 站点时区下的「YYYY-MM-DD」，用于标题块（LbTitle）的副题日期。时区处理同上。
+ * 站点时区下的「YYYY-MM-DD」，用于榜单页头的副题日期。时区处理同上。
  */
 export function formatDateOnlyInTimeZone(
   date: string | Date | null | undefined,

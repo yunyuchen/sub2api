@@ -1,206 +1,197 @@
 <template>
-  <div class="rp" :class="{ dark: isDark }">
-    <!-- 全屏独立页：不再套 AppLayout，视觉 token 作用域就是这个根节点（design D15/D16/D23）。
-         v3 报表皮肤里**亮色是基色**，站点处于暗色时追加 `.dark`，状态由 html.dark 推导
-         （方向与 v2 相反）。注释放在根节点之内，避免多一个根节点让本组件变成 fragment。 -->
-    <div class="rp-page">
-      <LbMasthead
-        :site-name="siteName"
-        :active-window="activeWindow"
-        :active-metric="activeMetric"
-        :mode="data?.mode ?? null"
-        :snapshot-updated-at="data?.snapshot_updated_at ?? null"
-        :stale="Boolean(data?.stale)"
-        :timezone="data?.timezone ?? siteTimezoneFallback"
-        @select-window="selectWindow"
-        @select-metric="selectMetric"
-        @theme-change="onThemeChange"
-      />
+  <AppLayout>
+    <!-- 应用内页：套站点的 `AppLayout` 外壳，侧边栏与顶栏由外壳提供，页面本身 MUST NOT 再
+         另起一条站点导航，也 MUST NOT 提供「返回仪表盘」这类页内跳转入口——侧边栏就是导航
+         （2026-09-14 用户指令：「做成不用跳转的内页」）。
+         `.rp` 不再是视口根节点，而是浮在站点底色上的一块深色内容面板，视觉 token 的作用域
+         仍然是它这一层（design D15/D16/D23）。spool 内页皮肤是**深色专属**：`.rp` 上直接定义
+         深色变量，页面不提供主题切换，也没有 `.dark` 修饰类；站点自己的主题机制
+         （html.dark + localStorage['theme']）MUST NOT 被本页读写。 -->
+    <!-- `.is-shell-collapsed` 只喂给榜单横滚渐隐那条媒体查询：外壳侧边栏折叠成 72px 后，
+         ≥1024 的表格再也不会溢出，那条渐隐 MUST NOT 出现（推导见 leaderboard-tokens.css
+         里该 @media 上方的注释）。CSS 读不到 store 状态，只能由这里挂个修饰类。 -->
+    <div class="rp" :class="{ 'is-shell-collapsed': shellCollapsed }">
+      <div class="rp-page">
+        <!-- 预览横幅说的是「这一份响应普通用户看不到」，排在页头之上。 -->
+        <LbStates v-if="isPreview" variant="preview" />
 
-      <LbStates v-if="isPreview" variant="preview" />
-
-      <LbTitle
-        :active-window="activeWindow"
-        :ready="isReady && !loading"
-        :participant-count="participantCount"
-        :snapshot-updated-at="data?.snapshot_updated_at ?? null"
-        :timezone="data?.timezone ?? siteTimezoneFallback"
-      />
-
-      <LbStates v-if="isStale" variant="stale" />
-
-      <!-- 章号是固定编号而不是序号：某一章因数据缺失整章不渲染时，其余章号 MUST NOT 重排
-           （页面上出现 01 02 04 05 06 07 是正确行为）。
-           章名右侧的小字副题已按「全页文案瘦身」整体去掉，只有 04 章那一格让位给榜单工具条。 -->
-
-      <!-- 01 高亮：骨架只代表「还在算」。快照已就绪却没有 highlights（抑制态、空窗口、
-           旧快照）时整章隐藏，不留一章永远转不完的骨架。 -->
-      <LbChapter
-        v-if="showHighlights"
-        num="01"
-        :title="t(`leaderboard.chapters.01.name.${activeWindow}`)"
-      >
-        <LbHighlights :highlights="highlights" :active-window="activeWindow" />
-      </LbChapter>
-
-      <!-- 02 之最：整块随 highlights 走（同一个 key、同一批快照），单项为 null 时只少一格。 -->
-      <LbChapter
-        v-if="hasExtremes"
-        num="02"
-        :title="t('leaderboard.chapters.02.name')"
-      >
-        <LbExtremes :extremes="extremes" />
-      </LbChapter>
-
-      <!-- 03 我的位置：数据缺失时整章不渲染，后面的章号照旧。 -->
-      <LbChapter
-        v-if="showWhoami"
-        num="03"
-        :title="t('leaderboard.chapters.03.name')"
-      >
-        <LbWhoami
-          :my-rank="myRank"
+        <LbMasthead
+          :active-window="activeWindow"
+          :active-metric="activeMetric"
+          :mode="data?.mode ?? null"
+          :snapshot-updated-at="data?.snapshot_updated_at ?? null"
+          :stale="Boolean(data?.stale)"
+          :timezone="data?.timezone ?? siteTimezoneFallback"
+          :ready="isReady && !loading"
           :participant-count="participantCount"
-          :suppressed="isSuppressed"
-          :computing="isComputing"
-          :viewer="viewer"
-          :site="highlights?.site ?? null"
+          @select-window="selectWindow"
+          @select-metric="selectMetric"
         />
-      </LbChapter>
 
-      <!-- 04 榜单：非正常态都落在这一章里，章本身照常渲染。 -->
-      <LbChapter
-        num="04"
-        :title="t('leaderboard.chapters.04.name')"
-      >
-        <!-- 工具条与报头的两个分段是同一份状态、同一组请求参数（MUST NOT 各自维护）；
-             testid 另起一套，免得与报头上的那两组撞名。 -->
-        <template #tools>
-          <div class="rp-tools">
-            <span class="rp-seg" role="group" :aria-label="t('leaderboard.windows.label')">
-              <button
-                v-for="option in windowOptions"
-                :key="option.value"
-                type="button"
-                :aria-pressed="activeWindow === option.value"
-                :title="option.title"
-                :data-testid="`leaderboard-rank-window-${option.testid}`"
-                @click="selectWindow(option.value)"
+        <LbStates v-if="isStale" variant="stale" />
+
+        <!-- 章号是固定编号而不是序号：某一章因数据缺失整章不渲染时，其余章号 MUST NOT 重排
+             （页面上出现 01 02 05 06 07 是正确行为）。
+             章序按 2026-09-14 拍板的 spool 皮肤重排：榜单提到最前，亮点与纪录退到它之后。 -->
+
+        <!-- 01 榜单：非正常态都落在这一章里，章本身照常渲染。
+             整章内容（含非正常态）装进三圆点窗口；窗口 / 指标只在页头一处，
+             刷新按钮移进窗口标题栏，testid 与 disabled 语义照旧。 -->
+        <LbChapter
+          num="01"
+          :title="t('leaderboard.chapters.01.name')"
+        >
+          <div class="rp-win">
+            <div class="rp-win-head">
+              <span class="rp-win-dot rp-win-d1" aria-hidden="true"></span>
+              <span class="rp-win-dot rp-win-d2" aria-hidden="true"></span>
+              <span class="rp-win-dot rp-win-d3" aria-hidden="true"></span>
+              <span class="rp-win-title">{{ t('leaderboard.chapters.01.name') }}</span>
+              <!-- 状态小字三段都是技术字面量（window · metric · top N），不进 i18n（design D4）。
+                   窄屏按段收起而不是整条截断：先丢「· top 50」，再丢「· tokens」，最后只剩
+                   window（原型 final/build.py 的 .lb-wsx / .lb-wsx2 是同一套做法）。三段拼起来
+                   的文本不变，`leaderboard-board-meta` 的文本断言照旧成立。 -->
+              <span class="rp-win-meta" data-testid="leaderboard-board-meta"
+                >{{ activeWindow
+                }}<span class="rp-win-meta-metric"> · {{ metricLiteral }}</span
+                ><span class="rp-win-meta-top"> · top {{ BOARD_TOP_N }}</span></span
               >
-                {{ option.value }}
-              </button>
-            </span>
-
-            <span class="rp-seg" role="group" :aria-label="t('leaderboard.metrics.label')">
               <button
-                v-for="option in metricOptions"
-                :key="option.value"
                 type="button"
-                :aria-pressed="activeMetric === option.value"
-                :title="option.title"
-                :data-testid="`leaderboard-rank-metric-${option.testid}`"
-                @click="selectMetric(option.value)"
+                class="rp-ghost"
+                :title="t('common.refresh')"
+                :aria-label="t('common.refresh')"
+                :disabled="loading"
+                data-testid="leaderboard-refresh"
+                @click="load(false)"
               >
-                {{ option.label }}
+                <LbIcon name="refresh" :size="13" />{{ t('common.refresh') }}
               </button>
-            </span>
+            </div>
 
-            <button
-              type="button"
-              class="rp-ghost"
-              :title="t('common.refresh')"
-              :aria-label="t('common.refresh')"
-              :disabled="loading"
-              data-testid="leaderboard-refresh"
-              @click="load(false)"
-            >
-              <LbIcon name="refresh" :size="13" />{{ t('common.refresh') }}
-            </button>
+            <div class="rp-win-body">
+              <div v-if="loading" data-testid="leaderboard-loading">
+                <div v-for="row in 4" :key="row" class="rp-skel"></div>
+              </div>
+
+              <div v-else-if="loadFailed" class="rp-empty" data-testid="leaderboard-error">
+                <p>{{ t('leaderboard.states.loadFailed') }}</p>
+                <button type="button" class="rp-btn" style="margin-top: 10px" @click="load(false)">
+                  {{ t('common.refresh') }}
+                </button>
+              </div>
+
+              <!-- 「正在计算」不是空榜也不是报错 -->
+              <LbStates v-else-if="isComputing" variant="computing" />
+
+              <!-- 抑制态由 entries_suppressed 判定，不从「entries 是空数组」反推 -->
+              <LbStates v-else-if="isSuppressed" variant="suppressed" />
+
+              <div v-else-if="isEmpty" class="rp-empty" data-testid="leaderboard-empty">
+                <p>{{ t('leaderboard.states.empty') }}</p>
+                <p class="rp-hint">{{ t('leaderboard.states.emptyHint') }}</p>
+              </div>
+
+              <!-- `site` 只用于解读句里「前三名占全站 N%」那一句的分母；匿名档缺席时那句自动省略。 -->
+              <LbRankList
+                v-else
+                :entries="entries"
+                :metric="activeMetric"
+                :site="highlights?.site ?? null"
+              />
+            </div>
           </div>
-        </template>
+        </LbChapter>
 
-        <div v-if="loading" data-testid="leaderboard-loading">
-          <div v-for="row in 4" :key="row" class="rp-skel"></div>
-        </div>
+        <!-- 02 你的排名：数据缺失时整章不渲染，后面的章号照旧。 -->
+        <LbChapter
+          v-if="showWhoami"
+          num="02"
+          :title="t('leaderboard.chapters.02.name')"
+        >
+          <LbWhoami
+            :my-rank="myRank"
+            :participant-count="participantCount"
+            :suppressed="isSuppressed"
+            :computing="isComputing"
+            :viewer="viewer"
+            :site="highlights?.site ?? null"
+          />
+        </LbChapter>
 
-        <div v-else-if="loadFailed" class="rp-empty" data-testid="leaderboard-error">
-          <p>{{ t('leaderboard.states.loadFailed') }}</p>
-          <button type="button" class="rp-btn" style="margin-top: 10px" @click="load(false)">
-            {{ t('common.refresh') }}
-          </button>
-        </div>
+        <!-- 03 亮点：骨架只代表「还在算」。快照已就绪却没有 highlights（抑制态、空窗口、
+             旧快照）时整章隐藏，不留一章永远转不完的骨架。章名随窗口走（今日/本周/本月亮点）。 -->
+        <LbChapter
+          v-if="showHighlights"
+          num="03"
+          :title="t(`leaderboard.chapters.03.name.${activeWindow}`)"
+        >
+          <LbHighlights :highlights="highlights" :active-window="activeWindow" />
+        </LbChapter>
 
-        <!-- 「正在计算」不是空榜也不是报错 -->
-        <LbStates v-else-if="isComputing" variant="computing" />
+        <!-- 04 六项纪录：整块随 highlights 走（同一个 key、同一批快照），单项为 null 时只少一格。 -->
+        <LbChapter
+          v-if="hasExtremes"
+          num="04"
+          :title="t('leaderboard.chapters.04.name')"
+        >
+          <LbExtremes :extremes="extremes" />
+        </LbChapter>
 
-        <!-- 抑制态由 entries_suppressed 判定，不从「entries 是空数组」反推 -->
-        <LbStates v-else-if="isSuppressed" variant="suppressed" />
+        <!-- 洞察区块：来源缺行时后端按区块各自给 null，这里隐藏该章而不是用 0 填充。 -->
+        <LbChapter
+          v-if="showModelsRow"
+          num="05"
+          :title="t('leaderboard.chapters.05.name')"
+        >
+          <!-- 两栏里只剩一栏有内容时收成一栏：MUST NOT 让单独一块占三成宽、右侧空一片。 -->
+          <div class="rp-two" :class="{ 'is-single': modelsRowSingle }">
+            <LbModelHeat :models="modelsToday" />
+            <LbProfiles :profiles="profiles" />
+          </div>
+          <LbPlatforms :platforms="platformsToday" />
+        </LbChapter>
 
-        <div v-else-if="isEmpty" class="rp-empty" data-testid="leaderboard-empty">
-          <p>{{ t('leaderboard.states.empty') }}</p>
-          <p class="rp-hint">{{ t('leaderboard.states.emptyHint') }}</p>
-        </div>
+        <LbChapter
+          v-if="showActivityRow"
+          num="06"
+          :title="t('leaderboard.chapters.06.name')"
+        >
+          <LbHeatmap :daily="daily30" />
+          <div class="rp-rhythm" :class="{ 'is-single': activityRowSingle }">
+            <LbRhythm :rhythm="weeklyRhythm" />
+            <LbHourly :hourly="hourlyToday" />
+          </div>
+        </LbChapter>
 
-        <!-- `site` 只用于解读句里「前三名占全站 N%」那一句的分母；匿名档缺席时那句自动省略。 -->
-        <LbRankList
-          v-else
-          :entries="entries"
-          :metric="activeMetric"
-          :site="highlights?.site ?? null"
+        <LbChapter
+          v-if="showTrendRow"
+          num="07"
+          :title="t('leaderboard.chapters.07.name')"
+        >
+          <LbTrend :daily="daily30" :month="month" />
+          <!-- 两类 token 口径：构成在左，缓存在右（同一个数不画两遍）。 -->
+          <div class="rp-comp" :class="{ 'is-single': trendRowSingle }">
+            <LbComposition :composition="compositionToday" />
+            <LbCacheTrend :cache="cacheToday" :points="cacheTrend14" />
+          </div>
+        </LbChapter>
+
+        <LbFooter
+          v-if="data"
+          :timezone="data.timezone"
+          :snapshot-updated-at="data.snapshot_updated_at"
+          :site-name="siteName"
         />
-      </LbChapter>
-
-      <!-- 洞察区块：来源缺行时后端按区块各自给 null，这里隐藏该章而不是用 0 填充。 -->
-      <LbChapter
-        v-if="showModelsRow"
-        num="05"
-        :title="t('leaderboard.chapters.05.name')"
-      >
-        <!-- 两栏里只剩一栏有内容时收成一栏：MUST NOT 让单独一块占三成宽、右侧空一片。 -->
-        <div class="rp-two" :class="{ 'is-single': modelsRowSingle }">
-          <LbModelHeat :models="modelsToday" />
-          <LbProfiles :profiles="profiles" />
-        </div>
-        <LbPlatforms :platforms="platformsToday" />
-      </LbChapter>
-
-      <LbChapter
-        v-if="showActivityRow"
-        num="06"
-        :title="t('leaderboard.chapters.06.name')"
-      >
-        <LbHeatmap :daily="daily30" />
-        <div class="rp-rhythm" :class="{ 'is-single': activityRowSingle }">
-          <LbRhythm :rhythm="weeklyRhythm" />
-          <LbHourly :hourly="hourlyToday" />
-        </div>
-      </LbChapter>
-
-      <LbChapter
-        v-if="showTrendRow"
-        num="07"
-        :title="t('leaderboard.chapters.07.name')"
-      >
-        <LbTrend :daily="daily30" :month="month" />
-        <!-- 两类 token 口径：构成在左，缓存在右（同一个数不画两遍）。 -->
-        <div class="rp-comp" :class="{ 'is-single': trendRowSingle }">
-          <LbComposition :composition="compositionToday" />
-          <LbCacheTrend :cache="cacheToday" :points="cacheTrend14" />
-        </div>
-      </LbChapter>
-
-      <LbFooter
-        v-if="data"
-        :timezone="data.timezone"
-        :snapshot-updated-at="data.snapshot_updated_at"
-      />
+      </div>
     </div>
-  </div>
+  </AppLayout>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppLayout from '@/components/layout/AppLayout.vue'
 import LbCacheTrend from '@/components/user/leaderboard/LbCacheTrend.vue'
 import LbChapter from '@/components/user/leaderboard/LbChapter.vue'
 import LbComposition from '@/components/user/leaderboard/LbComposition.vue'
@@ -217,7 +208,6 @@ import LbProfiles from '@/components/user/leaderboard/LbProfiles.vue'
 import LbRankList from '@/components/user/leaderboard/LbRankList.vue'
 import LbRhythm from '@/components/user/leaderboard/LbRhythm.vue'
 import LbStates from '@/components/user/leaderboard/LbStates.vue'
-import LbTitle from '@/components/user/leaderboard/LbTitle.vue'
 import LbTrend from '@/components/user/leaderboard/LbTrend.vue'
 import LbWhoami from '@/components/user/leaderboard/LbWhoami.vue'
 import { getLeaderboard } from '@/api/leaderboard'
@@ -239,49 +229,27 @@ const loading = ref(true)
 const loadFailed = ref(false)
 const activeWindow = ref<LeaderboardWindow>('today')
 const activeMetric = ref<LeaderboardMetric>('total_tokens')
-/**
- * 主题不是页面私有状态：初值从站点既有的 `html.dark` 读，之后由报头的分段开关回传。
- * 根节点据此追加 `.dark`（亮色是基色，没有 `.dark` 就是亮色）。
- */
-const isDark = ref(
-  typeof document !== 'undefined' && document.documentElement.classList.contains('dark'),
-)
 
 let controller: AbortController | null = null
 let sequence = 0
 
 const siteName = computed(() => appStore.siteName || 'spool')
 
-/**
- * 04 章工具条上的两个分段。取值与短标签跟报头完全一致（那边也是同一组 i18n 键），
- * 状态与请求参数同源——两处切换的是同一个 ref，MUST NOT 各自维护一份。
- */
-const windowOptions = computed(() => [
-  { value: 'today' as const, testid: 'today', title: t('leaderboard.windows.today') },
-  { value: 'week' as const, testid: 'week', title: t('leaderboard.windows.week') },
-  { value: 'month' as const, testid: 'month', title: t('leaderboard.windows.month') },
-])
-const metricOptions = computed(() => [
-  {
-    value: 'total_tokens' as const,
-    testid: 'total-tokens',
-    label: t('leaderboard.masthead.metricTokens'),
-    title: t('leaderboard.metrics.totalTokens'),
-  },
-  {
-    value: 'successful_requests' as const,
-    testid: 'successful-requests',
-    label: t('leaderboard.masthead.metricRequests'),
-    title: t('leaderboard.metrics.successfulRequests'),
-  },
-  {
-    value: 'cost' as const,
-    testid: 'cost',
-    label: t('leaderboard.masthead.metricCost'),
-    title: t('leaderboard.metrics.cost'),
-  },
-])
-/** 还没拿到响应时报头上的 tz 先留一个占位符，MUST NOT 猜一个时区名。 */
+/** 外壳侧边栏的折叠态：唯一消费者是榜单横滚渐隐的宽度推导（见 `.rp` 的修饰类注释）。 */
+const shellCollapsed = computed(() => Boolean(appStore.sidebarCollapsed))
+
+/** 榜单只取前 50 名，与后端口径一致；窗口标题栏那句状态小字用它。 */
+const BOARD_TOP_N = 50
+/** 状态小字里的指标字面量：技术词，与分段上的短标签同源但不走 i18n（design D4）。 */
+const METRIC_LITERALS: Record<LeaderboardMetric, string> = {
+  total_tokens: 'tokens',
+  successful_requests: 'requests',
+  cost: 'cost',
+}
+/** `today · tokens · top 50` 的中间一段：技术字面量，不进 i18n。窄屏按段收起，见模板。 */
+const metricLiteral = computed(() => METRIC_LITERALS[activeMetric.value])
+
+/** 还没拿到响应时页头上的 tz 先留一个占位符，MUST NOT 猜一个时区名。 */
 const siteTimezoneFallback = '...'
 
 /**
@@ -312,7 +280,7 @@ const hasExtremes = computed(() =>
 /** 本人数据不出自快照，因此 computing 时照常渲染；旧后端不下发时为 null。 */
 const viewer = computed(() => data.value?.viewer ?? null)
 /**
- * 01 章的去留：有数据就渲染；没有数据时只有「还在算」（加载中或 computing）才摆骨架，
+ * 03 章的去留：有数据就渲染；没有数据时只有「还在算」（加载中或 computing）才摆骨架，
  * 快照已就绪却没有 highlights（抑制态、空窗口、旧快照）时整章隐藏——骨架不是空态的替身。
  */
 const showHighlights = computed(() => {
@@ -321,7 +289,7 @@ const showHighlights = computed(() => {
   return loading.value || isComputing.value
 })
 /**
- * 「我的位置」跟着「拿到响应」走而不是「快照已就绪」：viewer 不出自快照，
+ * 「你的排名」跟着「拿到响应」走而不是「快照已就绪」：viewer 不出自快照，
  * computing 时名次那一格换成「正在计算」，其余照常。抑制态也要显示本人。
  */
 const showWhoami = computed(() => Boolean(data.value) && !loading.value && !loadFailed.value)
@@ -410,11 +378,6 @@ function selectMetric(value: LeaderboardMetric) {
   if (activeMetric.value === value) return
   activeMetric.value = value
   void load(false)
-}
-
-/** 报头切换主题后回传：站点的 html.dark 已经由报头改过，这里只同步根节点的修饰 class。 */
-function onThemeChange(dark: boolean) {
-  isDark.value = dark
 }
 
 onMounted(() => {

@@ -311,18 +311,18 @@ Ordinal（行序号）MUST 是当前 Window + Metric 下 `entries` 的连续序�
 - **THEN** `highlights` 与 `insights` 里 MUST NOT 出现 `user_id` 或邮箱，金额 MUST 只可能是 `highlights.site.cost`
 - **THEN** Highlights 里唯一可能出现的身份信息 MUST 只有 `identity.username`
 
-### Requirement: Leaderboard 是全屏独立页，自带顶栏
-Leaderboard（排行榜）页面 MUST 是全屏独立页，MUST NOT 套站点的 `AppLayout` 侧边栏外壳。页面 MUST 自带顶部工具区，至少提供当前页标记、主题开关与「返回仪表盘」入口。主题 MUST 跟随站点现有的 `html.dark`（`document.documentElement` 上的 `dark` class 与 `localStorage` 里的 `theme`），MUST NOT 另起一套页面私有的主题状态，也 MUST NOT 只按 `prefers-color-scheme` 判定。页面的视觉 token MUST 作用在页面根节点这一层而不是 `:root`，样式 MUST NOT 进入全局样式入口。侧边栏入口 MUST 保留（见「独立路由与侧边栏入口」）；路由、路由守卫与 `hideInSimpleMode` MUST NOT 因为页面形态改变而改变。顶部工具区的**形态**由当前皮肤决定，细则见「Leaderboard 页面的皮肤作用域、顶部工具区与区块标题」——v1 写在本条里的斜体 tagline 与环境动效开关这两项 MUST NOT 再作为实现依据；本条其余内容——不套 `AppLayout`、主题跟随 `html.dark`、token 作用域在页面根节点、样式不进全局入口、侧边栏入口保留——全部照旧。
+### Requirement: Leaderboard 是套站点外壳的应用内页
+Leaderboard（排行榜）页面 MUST 是应用内页：MUST 套站点的 `AppLayout` 外壳，与站点其它用户页一致，侧边栏与站点顶栏由外壳提供。页面 MUST NOT 另起一条页面私有的站点导航（品牌条、站内链接组、页内跳转按钮都算），也 MUST NOT 提供「返回仪表盘」这类页内跳转入口——页面间导航由 `AppLayout` 的侧边栏承担，当前页标记同理。页面自己的顶部工具区 MUST 只保留与本页数据有关的部分：当前生效的 Window（榜单窗口）与 Metric（排名指标）切换，以及 Snapshot（榜单快照）更新时间与 Leaderboard Mode（排行榜模式）的回显。页面 MUST 是深色专属：配色 MUST NOT 跟随站点的明暗（站点处于亮色时呈现为「浅色外壳 + 深色内容面板」，这是预期结果），页面 MUST NOT 读写站点的主题状态（`document.documentElement` 上的 `dark` class 与 `localStorage` 里的 `theme`），MUST NOT 另起一套页面私有的主题状态，也 MUST NOT 只按 `prefers-color-scheme` 判定。页面的视觉 token MUST 作用在承载皮肤的那个页面根节点这一层而不是 `:root`，样式 MUST NOT 进入全局样式入口；该节点是外壳内容区里的一块内容面板，MUST NOT 占满视口，其装饰层 MUST 限制在自己的盒子内，MUST NOT 覆盖外壳的侧边栏或顶栏。侧边栏入口 MUST 保留（见「独立路由与侧边栏入口」）；路由、路由守卫与 `hideInSimpleMode` MUST NOT 因为页面形态改变而改变。工具区的**形态**由当前皮肤决定，细则见「Leaderboard 页面的皮肤作用域、顶部工具区与区块标题」——v1 写在本条里的斜体 tagline 与环境动效开关、v3 写在本条里的「工具区提供主题开关」与「主题跟随 `html.dark`」、以及 v4 写在本条里的「全屏独立页、不套 `AppLayout`、自带站点顶栏与『返回仪表盘』入口」，MUST NOT 再作为实现依据（2026-09-14 用户指令「做成不用跳转的内页」把页面改回应用内页，深色专属不变）。
 
-#### Scenario: 页面没有侧边栏外壳
+#### Scenario: 页面在应用外壳内
 - **WHEN** 用户从侧边栏进入 `/leaderboard`
-- **THEN** 页面 MUST 以全屏独立页渲染，MUST NOT 出现站点侧边栏
-- **THEN** 页面顶栏 MUST 提供「返回仪表盘」的入口
+- **THEN** 页面 MUST 渲染在 `AppLayout` 外壳内，站点侧边栏 MUST 仍然可见
+- **THEN** 用户 MUST 能直接从侧边栏切到其它页面，页面 MUST NOT 提供额外的「返回仪表盘」入口或页面私有的站点导航
 
-#### Scenario: 在本页切换主题
-- **WHEN** 用户在 Leaderboard 顶栏切换到暗色，然后返回仪表盘
-- **THEN** 仪表盘 MUST 同样是暗色
-- **THEN** 系统 MUST NOT 出现「站点亮色、本页暗色」的两套主题
+#### Scenario: 页面恒为深色
+- **WHEN** 站点处于亮色主题（`html` 上没有 `dark` class）时用户进入 `/leaderboard`
+- **THEN** 页面 MUST 仍然渲染深色，MUST NOT 出现亮色配色，页面上 MUST NOT 有主题开关
+- **THEN** 用户从侧边栏切回仪表盘后仪表盘 MUST 仍然是亮色——本页 MUST NOT 改变站点主题，MUST NOT 写 `html.dark` 或 `localStorage` 里的 `theme`；外壳（侧边栏与顶栏）MUST NOT 被本页的深色面板覆盖
 
 #### Scenario: 页面样式不外溢
 - **WHEN** 用户从 Leaderboard 跳到其它任意页面
@@ -363,12 +363,12 @@ Leaderboard（排行榜）页面 MUST 是全屏独立页，MUST NOT 套站点的
 - **THEN** 榜单、Highlights 与其余 Insights 区块 MUST 照常渲染
 
 ### Requirement: Leaderboard 页面的皮肤作用域、顶部工具区与区块标题
-Leaderboard（排行榜）页面的视觉 MUST 由一套页面私有的皮肤渲染，且 MUST 满足以下与皮肤无关的约束。页面根节点 MUST 带一个承载视觉 token 的 class，明暗两套配色各自完整；明暗 MUST 由 `html.dark` 推导（根节点上追加与之对应的修饰 class），MUST NOT 另起一套页面私有的主题状态，也 MUST NOT 只按 `prefers-color-scheme` 判定。视觉 token MUST 仍然定义在页面根节点这一层而不是 `:root`，样式 MUST NOT 进入全局样式入口；页面用到的非系统字体 MUST 自托管，MUST NOT 依赖站点 CSP 未放行的第三方字体域名。页面顶部 MUST 有一条工具区，至少包含站点标识、当前生效的 Window（榜单窗口）与 Metric（排名指标）切换、当前 Leaderboard Mode（排行榜模式）、Snapshot（榜单快照）更新时间、计算时区、主题开关与「返回仪表盘」入口；Window 与 Metric 的切换在页面上出现多处时 MUST 共用同一份状态与同一组请求参数，MUST NOT 各自维护。页面标题 MUST 回显当前生效的 Window，工具区 MUST 回显当前生效的 Window 与 Metric。每个区块 MUST 有自己的标题与一句口径说明。区块标题、口径说明、卡片标签、提示语与状态文案 MUST 走 i18n 且 zh / en 齐备；只有技术字面量——字段名、运算式（如 `successful_requests = actual_cost > 0`）、时区名，以及 Window 与 Metric 的英文取值——MUST NOT 被翻译。页面 MUST NOT 引入不可关闭的常驻动效；若皮肤提供了动效开关，其状态 MUST 持久化、默认值 MUST 取「用户没有要求减少动效」。`prefers-reduced-motion: reduce` 时页面 MUST 没有任何动画与数字滚动，内容 MUST 照常完整渲染。前三名的强调形态与它的判定规则见「前三名徽章按 Rank 值判定」，MUST NOT 在皮肤层改变判定。
+Leaderboard（排行榜）页面的视觉 MUST 由一套页面私有的皮肤渲染，且 MUST 满足以下与皮肤无关的约束。页面根节点 MUST 带一个承载视觉 token 的 class，配色 MUST 是深色专属的一套（v1–v3 的「明暗两套配色各自完整、明暗由 `html.dark` 推导」自 2026-09-14 的 spool 内页皮肤起 MUST NOT 再作为实现依据）；根节点 MUST NOT 再带明暗修饰 class，页面 MUST NOT 跟随站点明暗，MUST NOT 读写 `html.dark` 与 `localStorage` 里的 `theme`，MUST NOT 另起一套页面私有的主题状态，也 MUST NOT 只按 `prefers-color-scheme` 判定。视觉 token MUST 仍然定义在页面根节点这一层而不是 `:root`，样式 MUST NOT 进入全局样式入口；页面 MUST NOT 依赖站点 CSP 未放行的第三方字体域名；若用到非系统字体则 MUST 自托管（v3 皮肤自托管了两个 woff2，spool 内页皮肤自 2026-09-14 起改用与首页一致的系统字体栈、不再加载任何字体文件，因此本条对它以「不得引用第三方字体域名」的形式成立）。页面顶部 MUST 有一条工具区，至少包含当前生效的 Window（榜单窗口）与 Metric（排名指标）切换、当前 Leaderboard Mode（排行榜模式）与 Snapshot（榜单快照）更新时间（v1–v4 写在本条里的「站点标识」「计算时区」与「『返回仪表盘』入口」三项自 2026-09-14 的方向修订起 MUST NOT 再作为实现依据：站点标识与页面间导航归 `AppLayout` 的侧边栏，计算时区改在页脚回显一次）；Window 与 Metric 的切换在页面上出现多处时 MUST 共用同一份状态与同一组请求参数，MUST NOT 各自维护。页面标题 MUST 回显当前生效的 Window，工具区 MUST 回显当前生效的 Window 与 Metric。每个区块 MUST 有自己的标题与一句口径说明。区块标题、口径说明、卡片标签、提示语与状态文案 MUST 走 i18n 且 zh / en 齐备；只有技术字面量——字段名、运算式（如 `successful_requests = actual_cost > 0`）、时区名，以及 Window 与 Metric 的英文取值——MUST NOT 被翻译。页面 MUST NOT 引入不可关闭的常驻动效；若皮肤提供了动效开关，其状态 MUST 持久化、默认值 MUST 取「用户没有要求减少动效」。`prefers-reduced-motion: reduce` 时页面 MUST 没有任何动画与数字滚动，内容 MUST 照常完整渲染。前三名的强调形态与它的判定规则见「前三名徽章按 Rank 值判定」，MUST NOT 在皮肤层改变判定。
 
 #### Scenario: 页面顶部是工具区
 - **WHEN** 用户进入 `/leaderboard`
-- **THEN** 页面顶部 MUST 有一条工具区，回显当前的 Window、Metric、Leaderboard Mode、Snapshot 更新时间与计算时区
-- **THEN** 页面 MUST 仍然是全屏独立页并提供「返回仪表盘」入口，MUST NOT 出现站点侧边栏
+- **THEN** 页面顶部 MUST 有一条工具区，回显当前的 Window、Metric、Leaderboard Mode 与 Snapshot 更新时间（计算时区在页脚回显）
+- **THEN** 页面 MUST 仍然渲染在 `AppLayout` 外壳内，MUST NOT 提供「返回仪表盘」入口，MUST NOT 另起页面私有的站点导航
 
 #### Scenario: 标题与工具区回显当前参数
 - **WHEN** 请求生效的参数是 `window=week`、`metric=successful_requests`
@@ -385,10 +385,10 @@ Leaderboard（排行榜）页面的视觉 MUST 由一套页面私有的皮肤渲
 - **THEN** `successful_requests = actual_cost > 0` 这类字段名与运算式，以及 `today` / `week` / `month` 这类取值 MUST 在两种语言下完全相同
 - **THEN** 区块标题、口径说明与卡片标签 MUST 分别渲染成中文与英文
 
-#### Scenario: 亮色站点下的页面
-- **WHEN** 站点处于亮色主题（`html` 上没有 `dark` class）
-- **THEN** 页面 MUST 渲染亮色配色，根节点的明暗修饰 class MUST 与 `html.dark` 一致
-- **THEN** 用户在本页切到暗色再返回仪表盘时，仪表盘 MUST 同样是暗色
+#### Scenario: 页面恒深色且不改变站点主题
+- **WHEN** 站点处于亮色主题（`html` 上没有 `dark` class）时渲染本页
+- **THEN** 页面 MUST 渲染深色配色，根节点 MUST 只带承载 token 的那一个 class，MUST NOT 带任何明暗修饰 class
+- **THEN** 页面在整个生命周期内 MUST NOT 增删 `html` 上的 `dark` class，也 MUST NOT 写 `localStorage` 里的 `theme`；离开本页后站点 MUST 仍是亮色
 
 #### Scenario: 强调形态换了但判定不变
 - **WHEN** 前两个条目的 `rank` 都是 `1`，另有一个条目的 `rank` 是 `4`

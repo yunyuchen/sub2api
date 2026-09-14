@@ -975,11 +975,12 @@ export default {
       successfulRequests: '成功请求数',
       cost: '消费金额',
     },
-    // 报头：左刊头（站名 + 一个细字），右一行拨盘。日期进标题块副题、时区进页脚、
-    // 快照时分进右侧 chip，因此这里不再有 window / metric / mode / tz / snapshot 这些键名。
-    // 窗口 / 指标在报头与榜单工具条两处都有，状态同源（都由页面持有）。
+    // 页头：H1 + 副题 + 一行控制条（窗口分段、指标分段、快照 chip、匿名档 chip）。
+    // 日期进副题、时区进页脚、快照时分进 chip，因此这里不再有 window / metric / mode / tz /
+    // snapshot 这些键名。窗口 / 指标只在页头一处，状态由页面持有。
+    // 页面是套 AppLayout 的应用内页，侧边栏就是导航，因此没有站点标识与返回入口：
+    // `brand`、`backToDashboard` 与三个主题开关键都已删除（零引用）。
     masthead: {
-      brand: '用量排行榜',
       // 档位 chip 只在匿名档出现；实名档是常态，不挂任何档位 chip。
       modeAnonymous: '匿名档',
       // 「距下一次重建还剩几分钟」，按重建周期现算；快照未生成或已陈旧时整段不渲染。
@@ -987,10 +988,6 @@ export default {
       metricTokens: 'tokens',
       metricRequests: '请求数',
       metricCost: '金额',
-      theme: '主题',
-      themeLight: '亮',
-      themeDark: '暗',
-      backToDashboard: '返回仪表盘',
     },
     // 标题块（v3 取代 v2 的命令行标题）。`leaderboard.title` 已经是路由标题用的叶子字符串
     // （router/index.ts 的 titleKey），因此这里另起 titleBlock，MUST NOT 把 title 改成对象。
@@ -1004,22 +1001,23 @@ export default {
     },
     // 七章的章号是固定编号而不是序号：某一章整章不渲染时其余章号不重排。
     // 键名里的 `01`–`07` 就是页面上印的那个章号。章名右侧的小字副题已整体去掉，因此没有 `sub`。
+    // 只有 `03`（亮点）的章名随 Window 变，是三个变体的对象，其余六章都是字符串。
     chapters: {
       '01': {
+        name: '排行榜（前 50 名）',
+      },
+      '02': {
+        name: '你的排名',
+      },
+      '03': {
         name: {
           today: '今日亮点',
           week: '本周亮点',
           month: '本月亮点',
         },
       },
-      '02': {
-        name: '六项纪录',
-      },
-      '03': {
-        name: '你的排名',
-      },
       '04': {
-        name: '排行榜（前 50 名）',
+        name: '六项纪录',
       },
       '05': {
         name: '模型与平台',
@@ -1233,6 +1231,8 @@ export default {
     footer: {
       rebuild: '每 5 分钟重建',
       noMoney: '不展示邮箱地址',
+      // 年份与站名取自运行时，MUST NOT 写死。
+      copyright: '© {year} {site}. All rights reserved.',
     },
     states: {
       loadFailed: '榜单加载失败，请稍后重试',

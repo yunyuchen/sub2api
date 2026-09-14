@@ -11,10 +11,9 @@ import type {
   LeaderboardViewer,
 } from '@/api/leaderboard'
 
-const { getLeaderboard, showError, push } = vi.hoisted(() => ({
+const { getLeaderboard, showError } = vi.hoisted(() => ({
   getLeaderboard: vi.fn(),
   showError: vi.fn(),
-  push: vi.fn(),
 }))
 
 // 只有一个只读接口，其余交互都由本地状态驱动。
@@ -22,8 +21,18 @@ vi.mock('@/api/leaderboard', () => ({
   getLeaderboard,
 }))
 
+/**
+ * 页面从 app store 里只取两样东西：`showError` 与外壳侧边栏的折叠态
+ * （`sidebarCollapsed` 只喂给 `.rp` 的 `.is-shell-collapsed` 修饰类）。
+ */
+const appState = vi.hoisted(() => ({ sidebarCollapsed: false }))
+
 vi.mock('@/stores/app', () => ({
-  useAppStore: () => ({ showError, siteName: 'Sub2API' }),
+  useAppStore: () => ({
+    showError,
+    siteName: 'Sub2API',
+    sidebarCollapsed: appState.sidebarCollapsed,
+  }),
 }))
 
 /**
@@ -34,15 +43,8 @@ const authState = vi.hoisted(() => ({ user: null as { username: string } | null 
 
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => authState }))
 
-// 状态栏的「返回仪表盘」走站点路由，这里只关心它不炸。
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ push }),
-}))
-
 const messages: Record<string, string> = {
   'common.refresh': 'Refresh',
-  'nav.darkMode': 'Dark Mode',
-  'nav.lightMode': 'Light Mode',
   'leaderboard.highlights.topTokens.today': 'Top burner today',
   'leaderboard.highlights.cacheKing': 'Efficiency star',
   'leaderboard.highlights.topRequests': 'Busiest',
@@ -70,26 +72,21 @@ const messages: Record<string, string> = {
   'leaderboard.metrics.totalTokens': 'Total tokens',
   'leaderboard.metrics.successfulRequests': 'Successful requests',
   'leaderboard.metrics.cost': 'Spend',
-  'leaderboard.masthead.brand': 'Leaderboard',
   'leaderboard.masthead.modeAnonymous': 'Anonymous',
   'leaderboard.masthead.rebuildIn': '(rebuilds in {minutes}m)',
   'leaderboard.masthead.metricTokens': 'tokens',
   'leaderboard.masthead.metricRequests': 'requests',
   'leaderboard.masthead.metricCost': 'spend',
-  'leaderboard.masthead.theme': 'Theme',
-  'leaderboard.masthead.themeLight': 'Light',
-  'leaderboard.masthead.themeDark': 'Dark',
-  'leaderboard.masthead.backToDashboard': 'Back to dashboard',
   'leaderboard.titleBlock.heading.today': 'Who is using it today',
   'leaderboard.titleBlock.heading.week': 'Who is using it this week',
   'leaderboard.titleBlock.heading.month': 'Who is using it this month',
   'leaderboard.titleBlock.participantsUnit': 'active',
-  'leaderboard.chapters.01.name.today': 'Highlights today',
-  'leaderboard.chapters.01.name.week': 'Highlights this week',
-  'leaderboard.chapters.01.name.month': 'Highlights this month',
-  'leaderboard.chapters.02.name': 'Six records',
-  'leaderboard.chapters.03.name': 'Your position',
-  'leaderboard.chapters.04.name': 'Board, top 50',
+  'leaderboard.chapters.01.name': 'Board, top 50',
+  'leaderboard.chapters.02.name': 'Your position',
+  'leaderboard.chapters.03.name.today': 'Highlights today',
+  'leaderboard.chapters.03.name.week': 'Highlights this week',
+  'leaderboard.chapters.03.name.month': 'Highlights this month',
+  'leaderboard.chapters.04.name': 'Six records',
   'leaderboard.chapters.05.name': 'Models and platforms',
   'leaderboard.chapters.06.name': 'Activity rhythm',
   'leaderboard.chapters.07.name': 'Trend and composition',
@@ -187,6 +184,7 @@ const messages: Record<string, string> = {
   'leaderboard.cacheTrend.range': 'Today',
   'leaderboard.footer.rebuild': 'rebuild every 5m',
   'leaderboard.footer.noMoney': 'no cost · no email',
+  'leaderboard.footer.copyright': '© {year} {site}. All rights reserved.',
   'leaderboard.states.loadFailed': 'Failed to load the leaderboard',
   'leaderboard.states.empty': 'Nobody has any usage in this window yet',
   'leaderboard.states.emptyHint': 'The board appears as soon as the first usage is recorded.',
@@ -414,44 +412,74 @@ function anonymousInsights(): LeaderboardInsights {
   }
 }
 
+/**
+ * 页面套在站点的 `AppLayout` 外壳里。外壳本身（侧边栏、顶栏、引导 tour、若干 store）不在
+ * 本 spec 的验证范围内，因此 stub 掉它——stub 渲染一个带 `.app-layout` 标记的容器并原样
+ * 透出默认插槽，这样「页面在外壳内」这条断言仍有可断言的标记。
+ */
+const AppLayoutStub = { template: '<div class="app-layout"><slot /></div>' }
+
 function mountView() {
-  return mount(LeaderboardView)
+  // 页面自己不含任何 <router-link>（跳转入口都归外壳的侧边栏），只需 stub 掉外壳。
+  return mount(LeaderboardView, {
+    global: { stubs: { AppLayout: AppLayoutStub } },
+  })
 }
 
 describe('user LeaderboardView', () => {
   beforeEach(() => {
     getLeaderboard.mockReset()
     showError.mockReset()
-    push.mockReset()
+    appState.sidebarCollapsed = false
     document.documentElement.classList.remove('dark')
     authState.user = null
     getLeaderboard.mockResolvedValue(makeResponse())
   })
 
-  // design D15 + v3 换皮：页面不再套 AppLayout，自己从 `.rp` 根节点起渲染整页，顶部是报头。
-  it('renders as a full-screen standalone page with the masthead, not inside AppLayout', async () => {
+  // 2026-09-14 方向修订：页面是应用内页，MUST 套 `AppLayout`（侧边栏就是导航），
+  // 页面自己 MUST NOT 再起一条站点导航。`.rp` 从页面根降级成外壳里的一块内容面板。
+  it('renders inside the AppLayout shell as a content panel, with no page-private site nav', async () => {
     getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()] }))
 
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.element.classList.contains('rp')).toBe(true)
-    expect(wrapper.find('.app-layout').exists()).toBe(false)
+    const layout = wrapper.find('.app-layout')
+    expect(layout.exists()).toBe(true)
+    // 皮肤的 token 作用域仍然是 `.rp`，只是它现在住在外壳里
+    const panel = wrapper.find('.rp')
+    expect(panel.exists()).toBe(true)
+    expect(layout.element.contains(panel.element)).toBe(true)
+    // 页面私有的站点导航整条没了：侧边栏由外壳提供
+    expect(wrapper.find('.rp-sitenav').exists()).toBe(false)
+    expect(wrapper.find('.rp-nav').exists()).toBe(false)
     expect(wrapper.find('[data-testid="leaderboard-masthead"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="leaderboard-title"]').exists()).toBe(true)
     const masthead = wrapper.find('[data-testid="leaderboard-masthead"]')
-    expect(masthead.text()).toContain('Sub2API')
-    expect(masthead.text()).toContain('Leaderboard')
-    // 报头收紧后：没有日期戳、没有 tz，实名档也不挂档位 chip
+    // 页头收紧后：没有日期戳、没有 tz，实名档也不挂档位 chip
     expect(masthead.find('[data-testid="leaderboard-masthead-stamp"]').exists()).toBe(false)
     expect(masthead.find('[data-testid="leaderboard-masthead-tz"]').exists()).toBe(false)
     expect(masthead.find('[data-testid="leaderboard-masthead-mode"]').exists()).toBe(false)
     expect(masthead.text()).not.toContain('Asia/Shanghai')
-    // v2 的状态栏、命令行标题与 v1 的顶栏 / hero 都已经没有了
+    // v2 的状态栏、命令行标题与 v1 的 hero 都已经没有了
     expect(wrapper.find('[data-testid="leaderboard-status-bar"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="leaderboard-prompt"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="leaderboard-nav"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="leaderboard-hero"]').exists()).toBe(false)
+  })
+
+  // 榜单横滚渐隐的宽度推导要分侧边栏的展开（256px）与折叠（72px）两档：折叠后 ≥1024 的表
+  // 再也不会溢出，渐隐 MUST NOT 出现。CSS 读不到 store，靠 `.rp` 上这个修饰类分档。
+  it('mirrors the shell sidebar collapse state onto the panel', async () => {
+    getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()] }))
+
+    const expanded = mountView()
+    await flushPromises()
+    expect(expanded.find('.rp').classes()).not.toContain('is-shell-collapsed')
+
+    appState.sidebarCollapsed = true
+    const collapsed = mountView()
+    await flushPromises()
+    expect(collapsed.find('.rp').classes()).toContain('is-shell-collapsed')
   })
 
   // 标题随窗口换一句话（窗口字面量只在报头的分段上，标题不回显）；报头分段的 aria-pressed 跟着走。
@@ -488,8 +516,10 @@ describe('user LeaderboardView', () => {
         'aria-pressed',
       ),
     ).toBe('true')
-    // 01 章的章名也跟着窗口走
-    expect(wrapper.find('[data-testid="leaderboard-chapter-01"]').text()).toContain(
+    // 01 章是榜单，章名与窗口无关
+    expect(wrapper.find('[data-testid="leaderboard-chapter-01"]').text()).toContain('Board, top 50')
+    // 亮点那一章（03）的章名跟着窗口走
+    expect(wrapper.find('[data-testid="leaderboard-chapter-03"]').text()).toContain(
       'Highlights this week',
     )
   })
@@ -531,13 +561,14 @@ describe('user LeaderboardView', () => {
     await flushPromises()
 
     const html = wrapper.html()
+    // v4 章序：榜单提到页头正下方，亮点与纪录退到「你的排名」之后
     const order = [
       'leaderboard-masthead',
       'leaderboard-title',
+      'leaderboard-rank-list',
+      'leaderboard-whoami',
       'leaderboard-highlights',
       'leaderboard-extremes',
-      'leaderboard-whoami',
-      'leaderboard-rank-list',
     ].map((testid) => html.indexOf(testid))
 
     for (let index = 1; index < order.length; index += 1) {
@@ -571,12 +602,12 @@ describe('user LeaderboardView', () => {
     ])
   })
 
-  // 某一章整章不渲染时，其余章号 MUST NOT 重排：页面从 03 开始是正确行为。
-  it('never renumbers the remaining chapters when the leading ones drop out', async () => {
+  // 某一章整章不渲染时，其余章号 MUST NOT 重排：页面上出现 01 02 05 06 07 是正确行为。
+  it('never renumbers the remaining chapters when the middle ones drop out', async () => {
     getLeaderboard.mockResolvedValue(
       makeResponse({
         entries: [namedEntry()],
-        // 快照已就绪却没有 highlights：01 与 02 整章消失（之最与 highlights 同住一批快照）
+        // 快照已就绪却没有 highlights：03 与 04 整章消失（之最与 highlights 同住一批快照）
         highlights: null,
         viewer: namedViewer(),
         my_rank: { rank: 12, total_tokens: 900, successful_requests: 7, cost: 0.42 },
@@ -588,25 +619,36 @@ describe('user LeaderboardView', () => {
     await flushPromises()
 
     expect(wrapper.findAll('.rp-chapter .rp-num').map((num) => num.text())).toEqual([
-      '03',
-      '04',
+      '01',
+      '02',
       '05',
       '06',
       '07',
     ])
-    expect(wrapper.find('[data-testid="leaderboard-chapter-01"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="leaderboard-chapter-04"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="leaderboard-chapter-03"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-chapter-04"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-chapter-01"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="leaderboard-chapter-05"]').exists()).toBe(true)
   })
 
-  // Window / Metric 在报头与榜单工具条两处都有，状态同源：切一处两处一起变，只发一次请求。
-  it('shares one window and metric state between the masthead and the board toolbar', async () => {
+  // v4：04 章的工具条整条删掉，Window / Metric 只剩页头一处，切一次只发一次请求。
+  it('keeps the only window and metric segments in the page head, with no board toolbar', async () => {
     getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()] }))
 
     const wrapper = mountView()
     await flushPromises()
 
+    // 榜单那一章不再自带第二套分段
+    expect(wrapper.find('[data-testid="leaderboard-rank-window-week"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-rank-metric-successful-requests"]').exists()).toBe(
+      false,
+    )
+    expect(wrapper.find('.rp-tools').exists()).toBe(false)
+    expect(wrapper.findAll('[data-testid="leaderboard-window-week"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="leaderboard-metric-successful-requests"]')).toHaveLength(1)
+
     getLeaderboard.mockClear()
-    await wrapper.find('[data-testid="leaderboard-rank-window-week"]').trigger('click')
+    await wrapper.find('[data-testid="leaderboard-window-week"]').trigger('click')
     await flushPromises()
 
     expect(getLeaderboard).toHaveBeenCalledTimes(1)
@@ -617,12 +659,9 @@ describe('user LeaderboardView', () => {
     expect(
       wrapper.find('[data-testid="leaderboard-window-week"]').attributes('aria-pressed'),
     ).toBe('true')
-    expect(
-      wrapper.find('[data-testid="leaderboard-rank-window-week"]').attributes('aria-pressed'),
-    ).toBe('true')
 
     await wrapper
-      .find('[data-testid="leaderboard-rank-metric-successful-requests"]')
+      .find('[data-testid="leaderboard-metric-successful-requests"]')
       .trigger('click')
     await flushPromises()
 
@@ -635,10 +674,14 @@ describe('user LeaderboardView', () => {
         'aria-pressed',
       ),
     ).toBe('true')
+    // 窗口标题栏的状态小字跟着这份状态走
+    expect(wrapper.find('[data-testid="leaderboard-board-meta"]').text()).toBe(
+      'week · requests · top 50',
+    )
   })
 
   // Metric 是三项：cost 与另两项走同一份状态、同一组请求参数，列高亮也随之切换。
-  it('switches to the spend metric from either segment and asks the backend for it', async () => {
+  it('switches to the spend metric from the page head and asks the backend for it', async () => {
     getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()], highlights: namedHighlights() }))
 
     const wrapper = mountView()
@@ -652,7 +695,7 @@ describe('user LeaderboardView', () => {
     getLeaderboard.mockResolvedValue(
       makeResponse({ metric: 'cost', entries: [namedEntry()], highlights: namedHighlights() }),
     )
-    await wrapper.find('[data-testid="leaderboard-rank-metric-cost"]').trigger('click')
+    await wrapper.find('[data-testid="leaderboard-metric-cost"]').trigger('click')
     await flushPromises()
 
     expect(getLeaderboard).toHaveBeenCalledTimes(1)
@@ -660,9 +703,12 @@ describe('user LeaderboardView', () => {
       expect.objectContaining({ window: 'today', metric: 'cost' }),
       expect.anything(),
     )
-    // 报头与工具条是同一份状态
+    // 页头的分段与榜单窗口的状态小字是同一份状态
     expect(wrapper.find('[data-testid="leaderboard-metric-cost"]').attributes('aria-pressed')).toBe(
       'true',
+    )
+    expect(wrapper.find('[data-testid="leaderboard-board-meta"]').text()).toBe(
+      'today · cost · top 50',
     )
     expect(wrapper.find('[data-testid="leaderboard-col-cost"]').attributes('aria-sort')).toBe(
       'descending',
@@ -760,25 +806,44 @@ describe('user LeaderboardView', () => {
     vi.unstubAllGlobals()
   })
 
-  // v3 亮色是基色：站点处于亮色时根节点不带修饰 class，切到暗色后才追加 `.dark`。
-  it('keeps the root light by default and follows the theme segment', async () => {
+  // v4 深色专属：内容面板恒为 `.rp`，不带 `.dark` 修饰类，也不随站点明暗变；
+  // 主题开关整块已删，页面 MUST NOT 读写站点的 html.dark / localStorage['theme']。
+  // 站点处于亮色时的效果是「浅色外壳 + 深色面板」，这是有意为之。
+  it('stays dark-only: no theme switch, no dark modifier, no dependence on the site theme', async () => {
     getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()] }))
 
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.element.classList.contains('dark')).toBe(false)
-    expect(wrapper.find('[data-testid="leaderboard-theme-light"]').attributes('aria-pressed')).toBe(
-      'true',
-    )
-
-    await wrapper.find('[data-testid="leaderboard-theme-dark"]').trigger('click')
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
-    expect(wrapper.element.classList.contains('dark')).toBe(true)
-
-    await wrapper.find('[data-testid="leaderboard-theme-light"]').trigger('click')
+    // 侧边栏展开（`beforeEach` 的默认态）时面板上没有任何修饰类，更没有 `dark`
+    expect(wrapper.find('.rp').classes()).toEqual(['rp'])
+    expect(wrapper.find('[data-testid="leaderboard-theme-light"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-theme-dark"]').exists()).toBe(false)
+    // 站点主题状态一律不碰
     expect(document.documentElement.classList.contains('dark')).toBe(false)
-    expect(wrapper.element.classList.contains('dark')).toBe(false)
+    expect(localStorage.getItem('theme')).toBeNull()
+
+    // 站点处于暗色时，面板仍然只有 `.rp`：皮肤与站点明暗无关
+    document.documentElement.classList.add('dark')
+    const onDarkSite = mountView()
+    await flushPromises()
+    expect(onDarkSite.find('.rp').classes()).toEqual(['rp'])
+    document.documentElement.classList.remove('dark')
+  })
+
+  // 页面不再占满视口（面板住在外壳的 <main> 里），因此不再有那条防橡皮筋的 body class：
+  // 页面 MUST NOT 在 body 上留下任何痕迹，更 MUST NOT 顺手去 toggle html.dark。
+  it('leaves the document body untouched while mounted', async () => {
+    getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()] }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(document.body.classList.contains('leaderboard-dark-page')).toBe(false)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+
+    wrapper.unmount()
+    expect(document.body.classList.contains('leaderboard-dark-page')).toBe(false)
   })
 
   it('requests today / total_tokens on mount and shows the skeleton until it resolves', async () => {
@@ -888,7 +953,9 @@ describe('user LeaderboardView', () => {
 
     const extremes = wrapper.find('[data-testid="leaderboard-extremes"]')
     expect(extremes.exists()).toBe(true)
-    expect(wrapper.find('[data-testid="leaderboard-chapter-02"]').text()).toContain('Six records')
+    // 六项纪录退到 04 章，02 章是「你的排名」
+    expect(wrapper.find('[data-testid="leaderboard-chapter-04"]').text()).toContain('Six records')
+    expect(wrapper.find('[data-testid="leaderboard-chapter-02"]').text()).toContain('Your position')
     expect(extremes.text()).toContain('grace')
     expect(squash(extremes.find('[data-testid="leaderboard-extreme-streak"]').text())).toContain(
       '23days in a row',
@@ -1382,8 +1449,8 @@ describe('user LeaderboardView', () => {
     expect(wrapper.find('[data-testid="leaderboard-chapter-05"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="leaderboard-chapter-06"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="leaderboard-chapter-07"]').exists()).toBe(false)
-    // 榜单那一章的章号不因此重排
-    expect(wrapper.find('[data-testid="leaderboard-chapter-04"]').exists()).toBe(true)
+    // 榜单那一章的章号不因此重排（榜单是 01，恒在）
+    expect(wrapper.find('[data-testid="leaderboard-chapter-01"]').exists()).toBe(true)
     // 洞察缺席不影响榜单与 footer
     expect(wrapper.find('[data-testid="leaderboard-rank-list"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="leaderboard-snapshot-meta"]').exists()).toBe(true)
@@ -1435,16 +1502,67 @@ describe('user LeaderboardView', () => {
     expect(wrapper.findAll('[data-testid="leaderboard-rhythm-cell"]')).toHaveLength(7 * 24)
   })
 
-  // v3 删掉了 CRT 开关：报头上只剩主题分段与返回仪表盘。
-  it('navigates back to the dashboard from the masthead and keeps no CRT toggle', async () => {
+  // v3 删掉了 CRT 开关；2026-09-14 的方向修订把「返回仪表盘」也删了——页面是内页，
+  // 侧边栏一直在，MUST NOT 再提供任何页内跳转出去的入口。
+  it('offers no back-to-dashboard entry and no CRT toggle', async () => {
     getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()] }))
 
     const wrapper = mountView()
     await flushPromises()
 
     expect(wrapper.find('[data-testid="leaderboard-crt-toggle"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-back-to-dashboard"]').exists()).toBe(false)
+    // 页面上不该有任何指向仪表盘的跳转入口（外壳的侧边栏不在本 spec 的渲染树里）
+    expect(wrapper.findAll('a[href="/dashboard"]')).toHaveLength(0)
+    // 页面根本不碰 vue-router：跳转能力只存在于外壳里
+    expect(wrapper.findAll('a')).toHaveLength(0)
+  })
 
-    await wrapper.find('[data-testid="leaderboard-back-to-dashboard"]').trigger('click')
-    expect(push).toHaveBeenCalledWith('/dashboard')
+  // 榜单窗口化：01 章的全部内容（含非正常态）都在 `.rp-win` 里，刷新按钮在窗口标题栏。
+  it('wraps the board chapter in a three-dot window whose head carries the refresh button', async () => {
+    getLeaderboard.mockResolvedValue(makeResponse({ entries: [namedEntry()] }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const chapter = wrapper.find('[data-testid="leaderboard-chapter-01"]')
+    const win = chapter.find('.rp-win')
+    expect(win.exists()).toBe(true)
+
+    const head = win.find('.rp-win-head')
+    expect(head.exists()).toBe(true)
+    expect(head.findAll('.rp-win-dot')).toHaveLength(3)
+    expect(head.find('.rp-win-d1').exists()).toBe(true)
+    expect(head.find('.rp-win-d2').exists()).toBe(true)
+    expect(head.find('.rp-win-d3').exists()).toBe(true)
+    expect(head.find('.rp-win-title').text()).toBe('Board, top 50')
+    expect(head.find('.rp-win-meta').text()).toBe('today · tokens · top 50')
+
+    // 刷新按钮沿用原来的 testid 与 disabled 语义，位置搬到窗口标题栏
+    const refresh = head.find('[data-testid="leaderboard-refresh"]')
+    expect(refresh.exists()).toBe(true)
+    expect(refresh.attributes('disabled')).toBeUndefined()
+
+    // 榜单本体在窗口里
+    expect(win.find('[data-testid="leaderboard-rank-list"]').exists()).toBe(true)
+
+    getLeaderboard.mockClear()
+    await refresh.trigger('click')
+    await flushPromises()
+    expect(getLeaderboard).toHaveBeenCalledTimes(1)
+  })
+
+  // 非正常态也在窗口里：窗口是这一章的容器，不是「有数据才有」的装饰。
+  it('keeps the abnormal board states inside the same window', async () => {
+    getLeaderboard.mockResolvedValue(
+      makeResponse({ status: 'ready', entries: [], participant_count: 0 }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const win = wrapper.find('[data-testid="leaderboard-chapter-01"] .rp-win')
+    expect(win.find('[data-testid="leaderboard-empty"]').exists()).toBe(true)
+    expect(win.find('.rp-win-head [data-testid="leaderboard-refresh"]').exists()).toBe(true)
   })
 })

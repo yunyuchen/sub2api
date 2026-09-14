@@ -971,12 +971,14 @@ export default {
       successfulRequests: 'Successful requests',
       cost: 'Spend',
     },
-    // The masthead: brand on the left (site name plus one thin word), every dial on the
-    // right. The date moved to the title block, the timezone to the footer and the snapshot
-    // time into the chip, so there are no window / metric / mode / tz / snapshot key labels
-    // here any more. Window / metric appear both here and on the board toolbar, one state.
+    // The page head: H1, sub line and one control row (window segment, metric segment,
+    // snapshot chip, anonymous-mode chip). The date lives in the sub line, the timezone in
+    // the footer and the snapshot time in the chip, so there are no window / metric / mode /
+    // tz / snapshot key labels here any more. Window / metric appear once, one state.
+    // The page is an in-app page inside AppLayout; the sidebar is the navigation,
+    // so there is no site mark and no back entry: `brand`, `backToDashboard` and the
+    // three theme-toggle keys are all gone (zero references).
     masthead: {
-      brand: 'Leaderboard',
       // The mode chip only shows up in anonymous mode; named mode is the norm and gets none.
       modeAnonymous: 'Anonymous',
       // Minutes until the next rebuild, computed from the rebuild period; dropped entirely
@@ -985,10 +987,6 @@ export default {
       metricTokens: 'tokens',
       metricRequests: 'requests',
       metricCost: 'spend',
-      theme: 'Theme',
-      themeLight: 'Light',
-      themeDark: 'Dark',
-      backToDashboard: 'Back to dashboard',
     },
     // The title block (v3, replaces the v2 command-line title). `leaderboard.title` is already
     // a leaf string used as the route title (titleKey in router/index.ts), so the block lives
@@ -1004,22 +1002,24 @@ export default {
     // The seven chapter numbers are fixed labels, not a running index: when a chapter is not
     // rendered at all, the remaining numbers MUST NOT be renumbered. The small subtitle next
     // to a chapter name is gone page-wide, so there is no `sub` any more.
+    // Only `03` (highlights) varies with the window and is an object of three variants; the
+    // other six chapter names are plain strings.
     chapters: {
       '01': {
+        name: 'Board, top 50',
+      },
+      '02': {
+        name: 'Your position',
+      },
+      '03': {
         name: {
           today: 'Highlights today',
           week: 'Highlights this week',
           month: 'Highlights this month',
         },
       },
-      '02': {
-        name: 'Six records',
-      },
-      '03': {
-        name: 'Your position',
-      },
       '04': {
-        name: 'Board, top 50',
+        name: 'Six records',
       },
       '05': {
         name: 'Models and platforms',
@@ -1237,6 +1237,8 @@ export default {
     footer: {
       rebuild: 'rebuild every 5m',
       noMoney: 'No email addresses are shown',
+      // Year and site name come from runtime state; never hard-code them.
+      copyright: '© {year} {site}. All rights reserved.',
     },
     states: {
       loadFailed: 'Failed to load the leaderboard',

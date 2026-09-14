@@ -5,13 +5,7 @@ import LbMasthead from '../LbMasthead.vue'
 import type { LeaderboardMetric, LeaderboardWindow } from '@/api/leaderboard'
 import type { LeaderboardMode } from '@/utils/featureFlags'
 
-const { push } = vi.hoisted(() => ({ push: vi.fn() }))
-
-vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
-
 const messages: Record<string, string> = {
-  'nav.darkMode': 'Dark Mode',
-  'nav.lightMode': 'Light Mode',
   'leaderboard.windows.label': 'Window',
   'leaderboard.windows.today': 'Today',
   'leaderboard.windows.week': 'This week',
@@ -20,16 +14,15 @@ const messages: Record<string, string> = {
   'leaderboard.metrics.totalTokens': 'Total tokens',
   'leaderboard.metrics.successfulRequests': 'Successful requests',
   'leaderboard.metrics.cost': 'Spend',
-  'leaderboard.masthead.brand': 'Leaderboard',
   'leaderboard.masthead.modeAnonymous': 'Anonymous',
   'leaderboard.masthead.rebuildIn': '(rebuilds in {minutes}m)',
   'leaderboard.masthead.metricTokens': 'tokens',
   'leaderboard.masthead.metricRequests': 'requests',
   'leaderboard.masthead.metricCost': 'spend',
-  'leaderboard.masthead.theme': 'Theme',
-  'leaderboard.masthead.themeLight': 'Light',
-  'leaderboard.masthead.themeDark': 'Dark',
-  'leaderboard.masthead.backToDashboard': 'Back to dashboard',
+  'leaderboard.titleBlock.heading.today': 'Who is using it today',
+  'leaderboard.titleBlock.heading.week': 'Who is using it this week',
+  'leaderboard.titleBlock.heading.month': 'Who is using it this month',
+  'leaderboard.titleBlock.participantsUnit': 'active',
 }
 
 function translate(key: string, params?: Record<string, unknown>): string {
@@ -45,33 +38,38 @@ vi.mock('vue-i18n', async () => {
 
 function mountMasthead(
   props: {
-    siteName?: string
     activeWindow?: LeaderboardWindow
     activeMetric?: LeaderboardMetric
     mode?: LeaderboardMode | null
     snapshotUpdatedAt?: string | null
     stale?: boolean
     timezone?: string
+    ready?: boolean
+    participantCount?: number | string
   } = {},
 ) {
   return mount(LbMasthead, {
     props: {
-      siteName: 'Sub2API',
       activeWindow: 'today' as const,
       activeMetric: 'total_tokens' as const,
       mode: 'named' as const,
       snapshotUpdatedAt: '2026-09-12T04:30:00Z',
       stale: false,
       timezone: 'Asia/Shanghai',
+      ready: true,
+      participantCount: 137,
       ...props,
     },
   })
 }
 
+/** 副题被换行拆成了多个节点，断言前把空白折成一个空格。 */
+function squash(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
 describe('LbMasthead', () => {
   beforeEach(() => {
-    push.mockReset()
-    document.documentElement.classList.remove('dark')
     vi.useFakeTimers()
     // 快照时间 12:30（Asia/Shanghai），现在是 12:32 → 距下一次重建还有 3 分钟
     vi.setSystemTime(new Date('2026-09-12T04:32:00Z'))
@@ -81,37 +79,141 @@ describe('LbMasthead', () => {
     vi.useRealTimers()
   })
 
-  // 刊头是一行：粗体站名 + 一个细字，没有 LEADERBOARD 小字、没有日期行、没有时分 · tz 行。
-  it('renders the brand as one line and nothing else on the left', () => {
+  // 页头是 H1 + 副题 + 一条控制条；站名与「返回仪表盘」已经归站点导航，这里不再有刊头。
+  it('renders the page head as a heading, a sub line and one control bar', () => {
     const wrapper = mountMasthead()
 
-    expect(wrapper.find('[data-testid="leaderboard-masthead"]').exists()).toBe(true)
-    expect(wrapper.find('.rp-brand b').text()).toBe('Sub2API')
-    expect(wrapper.find('.rp-brand span').text()).toBe('Leaderboard')
+    expect(wrapper.find('[data-testid="leaderboard-masthead"]').classes()).toContain('rp-phead')
+    expect(wrapper.find('.rp-phead h1').text()).toBe('Who is using it today')
+    expect(squash(wrapper.find('.rp-phead-sub').text())).toBe('137 active · 2026-09-12')
+    expect(wrapper.findAll('.rp-ctls .rp-seg')).toHaveLength(2)
     expect(wrapper.find('[data-testid="leaderboard-masthead-stamp"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="leaderboard-masthead-tz"]').exists()).toBe(false)
   })
 
-  // 报头上不再印 WINDOW / METRIC 两个键名，也不再印 tz：日期进标题块，时区进页脚。
-  it('drops the dial labels and the timezone from the masthead', () => {
-    const text = mountMasthead().text()
+  // 刊头与主题切换都已经没有了：页头 MUST NOT 再渲染它们，也不再发主题事件。
+  // 站名归站点外壳；页内跳转入口整体取消（侧边栏就是导航），因此这里也不再断言它。
+  it('renders neither a brand block nor a theme switch', () => {
+    const wrapper = mountMasthead()
 
-    expect(text).not.toContain('window')
-    expect(text).not.toContain('metric')
-    expect(text).not.toContain('Asia/Shanghai')
-    expect(text).not.toContain('2026-09-12')
-    expect(text).not.toContain('snapshot')
+    expect(wrapper.find('.rp-brand').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-theme-light"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-theme-dark"]').exists()).toBe(false)
+    expect(wrapper.emitted('theme-change')).toBeUndefined()
   })
 
-  // 实名档是常态，不挂任何档位 chip；匿名档挂一个小 chip。
+  // 页头上不再印时区（时区在页脚），日期只在副题上出现这一次。
+  it('keeps the timezone out of the page head and prints the date once', () => {
+    const wrapper = mountMasthead()
+    const text = wrapper.text()
+
+    expect(text).not.toContain('Asia/Shanghai')
+    expect(text.match(/2026-09-12/g)).toHaveLength(1)
+  })
+
+  // 两组分段并排，各自带一个 mono 小标签，否则分不出哪一组是窗口、哪一组是指标。
+  it('labels both segments in the control bar', () => {
+    const labels = mountMasthead()
+      .findAll('.rp-seg b')
+      .map((node) => node.text())
+
+    expect(labels).toEqual(['Window', 'Metric'])
+  })
+
+  // H1 只剩一句话：`· today` 那段窗口回显已删，窗口本身就印在控制条的分段上。
+  it('changes the heading with the window and does not echo the window literal', () => {
+    expect(squash(mountMasthead().find('[data-testid="leaderboard-title-heading"]').text())).toBe(
+      'Who is using it today',
+    )
+    expect(
+      squash(
+        mountMasthead({ activeWindow: 'week' })
+          .find('[data-testid="leaderboard-title-heading"]')
+          .text(),
+      ),
+    ).toBe('Who is using it this week')
+    expect(
+      squash(
+        mountMasthead({ activeWindow: 'month' })
+          .find('[data-testid="leaderboard-title-heading"]')
+          .text(),
+      ),
+    ).toBe('Who is using it this month')
+  })
+
+  // 副题只剩两段：人数与日期。档位说明与隐私声明都不在这里。
+  it('keeps only the participant count and the date in the sub line', () => {
+    const note = squash(mountMasthead().find('[data-testid="leaderboard-title-note"]').text())
+
+    // 日期按**站点时区**渲染，与页脚上的 tz 一致
+    expect(note).toBe('137 active · 2026-09-12')
+  })
+
+  it('drops the mode rule and the privacy sentence from the sub line', () => {
+    const named = squash(mountMasthead().find('[data-testid="leaderboard-title-note"]').text())
+    const anonymous = squash(
+      mountMasthead({ participantCount: '100+' })
+        .find('[data-testid="leaderboard-title-note"]')
+        .text(),
+    )
+
+    for (const note of [named, anonymous]) {
+      expect(note).not.toContain('mode')
+      expect(note).not.toContain('costs')
+      expect(note).not.toContain('email')
+      expect(note).not.toContain('user ID')
+    }
+  })
+
+  // 「正在计算」MUST NOT 渲染成 0 值：人数那一段整段略过。
+  it('drops the participant segment while the snapshot is not ready', () => {
+    const note = squash(
+      mountMasthead({ ready: false, participantCount: 0 })
+        .find('[data-testid="leaderboard-title-note"]')
+        .text(),
+    )
+
+    expect(note).not.toContain('0 active')
+    expect(note).not.toContain('active')
+    expect(note).toBe('2026-09-12')
+  })
+
+  // anonymous 档的人数是分档字符串（如 `100+`），照原样印出来。
+  it('prints a banded participant count verbatim', () => {
+    const note = squash(
+      mountMasthead({ participantCount: '100+' })
+        .find('[data-testid="leaderboard-title-note"]')
+        .text(),
+    )
+
+    expect(note).toBe('100+ active · 2026-09-12')
+  })
+
+  // 快照还没生成时日期退回当天，而不是留空或印一个假日期。
+  it('falls back to today when there is no snapshot yet', () => {
+    const note = squash(
+      mountMasthead({ snapshotUpdatedAt: null, ready: false })
+        .find('[data-testid="leaderboard-title-note"]')
+        .text(),
+    )
+
+    expect(note).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  // 实名档是常态，不挂任何档位 chip；匿名档挂一个小 chip，排在快照 chip 之后。
   it('marks only the anonymous mode with a chip', () => {
     expect(mountMasthead().find('[data-testid="leaderboard-masthead-mode"]').exists()).toBe(false)
     expect(
       mountMasthead({ mode: null }).find('[data-testid="leaderboard-masthead-mode"]').exists(),
     ).toBe(false)
-    expect(
-      mountMasthead({ mode: 'anonymous' }).find('[data-testid="leaderboard-masthead-mode"]').text(),
-    ).toBe('Anonymous')
+
+    const anonymous = mountMasthead({ mode: 'anonymous' })
+    expect(anonymous.find('[data-testid="leaderboard-masthead-mode"]').text()).toBe('Anonymous')
+
+    const html = anonymous.html()
+    expect(html.indexOf('leaderboard-masthead-snapshot')).toBeLessThan(
+      html.indexOf('leaderboard-masthead-mode'),
+    )
   })
 
   it('marks the active window and metric with aria-pressed', () => {
@@ -124,9 +226,9 @@ describe('LbMasthead', () => {
       'false',
     )
     expect(
-      wrapper.find('[data-testid="leaderboard-metric-successful-requests"]').attributes(
-        'aria-pressed',
-      ),
+      wrapper
+        .find('[data-testid="leaderboard-metric-successful-requests"]')
+        .attributes('aria-pressed'),
     ).toBe('true')
     expect(
       wrapper.find('[data-testid="leaderboard-metric-total-tokens"]').attributes('aria-pressed'),
@@ -159,14 +261,13 @@ describe('LbMasthead', () => {
     expect(wrapper.emitted('select-metric')?.[0]).toEqual(['total_tokens'])
   })
 
-  // 快照 chip 只剩呼吸点 + 时分 + `(+Nm)`；`(+Nm)` 按重建周期现算，MUST NOT 写死示例值。
+  // 快照 chip：呼吸点 + `snapshot HH:MM` + `(+Nm)`；`(+Nm)` 按重建周期现算，MUST NOT 写死示例值。
   it('computes the minutes left until the next rebuild', () => {
     const snapshot = mountMasthead().find('[data-testid="leaderboard-masthead-snapshot"]')
 
     expect(snapshot.find('.rp-pulse').exists()).toBe(true)
-    expect(snapshot.text()).toContain('12:30')
+    expect(squash(snapshot.text())).toContain('snapshot 12:30')
     expect(snapshot.text()).toContain('(rebuilds in 3m)')
-    expect(snapshot.text()).not.toContain('snapshot')
   })
 
   it('drops the rebuild suffix when the snapshot is missing, stale or overdue', () => {
@@ -192,58 +293,12 @@ describe('LbMasthead', () => {
     ).not.toContain('rebuilds in')
   })
 
-  // 主题复用站点既有的那一套（html.dark + localStorage['theme']），切换后回到其它页面不会有两套主题。
-  it('drives the site theme from the theme segment and reports it back', async () => {
-    const wrapper = mountMasthead()
+  // 页面上不再出现任何 unicode 符号图标。
+  it('uses no unicode glyphs', () => {
+    const text = mountMasthead().text()
 
-    expect(wrapper.find('[data-testid="leaderboard-theme-light"]').attributes('aria-pressed')).toBe(
-      'true',
-    )
-
-    await wrapper.find('[data-testid="leaderboard-theme-dark"]').trigger('click')
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
-    expect(localStorage.getItem('theme')).toBe('dark')
-    expect(wrapper.emitted('theme-change')?.[0]).toEqual([true])
-    expect(wrapper.find('[data-testid="leaderboard-theme-dark"]').attributes('aria-pressed')).toBe(
-      'true',
-    )
-
-    await wrapper.find('[data-testid="leaderboard-theme-light"]').trigger('click')
-    expect(document.documentElement.classList.contains('dark')).toBe(false)
-    expect(wrapper.emitted('theme-change')?.[1]).toEqual([false])
-  })
-
-  it('does not re-emit when the already active theme is clicked again', async () => {
-    const wrapper = mountMasthead()
-
-    await wrapper.find('[data-testid="leaderboard-theme-light"]').trigger('click')
-
-    expect(wrapper.emitted('theme-change')).toBeUndefined()
-  })
-
-  it('navigates back to the dashboard', async () => {
-    const wrapper = mountMasthead()
-
-    await wrapper.find('[data-testid="leaderboard-back-to-dashboard"]').trigger('click')
-
-    expect(push).toHaveBeenCalledWith('/dashboard')
-  })
-
-  // 页面上不再出现任何 unicode 符号图标：主题与返回都用内联线条图标。
-  it('uses inline line icons rather than unicode glyphs', () => {
-    const wrapper = mountMasthead()
-
-    expect(wrapper.find('[data-testid="leaderboard-theme-light"] svg').attributes('data-icon')).toBe(
-      'sun',
-    )
-    expect(wrapper.find('[data-testid="leaderboard-theme-dark"] svg').attributes('data-icon')).toBe(
-      'moon',
-    )
-    expect(
-      wrapper.find('[data-testid="leaderboard-back-to-dashboard"] svg').attributes('data-icon'),
-    ).toBe('arrow-left')
-    expect(wrapper.text()).not.toContain('☾')
-    expect(wrapper.text()).not.toContain('☼')
-    expect(wrapper.text()).not.toContain('←')
+    expect(text).not.toContain('☾')
+    expect(text).not.toContain('☼')
+    expect(text).not.toContain('←')
   })
 })
