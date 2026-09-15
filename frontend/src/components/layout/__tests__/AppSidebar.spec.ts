@@ -130,19 +130,16 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }))
 
-vi.mock('@/utils/featureFlags', () => ({
-  FeatureFlags: {
-    channelMonitor: { key: 'channel_monitor_enabled', mode: 'opt-out', label: 'Channel Monitor' },
-    availableChannels: { key: 'available_channels_enabled', mode: 'opt-in', label: 'Available Channels' },
-    modelPlaza: { key: 'model_plaza_enabled', mode: 'opt-in', label: 'Model Plaza' },
-    pluginManagement: { key: 'plugin_management_enabled', mode: 'opt-in', label: 'Plugin Management' },
-    payment: { key: 'payment_enabled', mode: 'opt-out', label: 'Payment' },
-    riskControl: { key: 'risk_control_enabled', mode: 'opt-in', label: 'Risk Control' },
-    affiliate: { key: 'affiliate_enabled', mode: 'opt-in', label: 'Affiliate' },
-  },
-  makeSidebarFlag: () => () => false,
-  isLeaderboardVisible: () => leaderboardVisible(),
-}))
+// 只替换与本组测试相关的两个入口，其余保留真实实现：AppSidebar 经 siteBillingMode 间接
+// 依赖 resolveFeatureFlag 与 FeatureFlags.subscription，全量 mock 会把它们抹掉。
+vi.mock('@/utils/featureFlags', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/featureFlags')>()
+  return {
+    ...actual,
+    makeSidebarFlag: () => () => false,
+    isLeaderboardVisible: () => leaderboardVisible(),
+  }
+})
 
 async function mountSidebar() {
   const { default: AppSidebar } = await import('../AppSidebar.vue')
