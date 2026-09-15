@@ -2524,6 +2524,7 @@ type oauthPendingFlowTestHandlerOptions struct {
 	totpCache          service.TotpCache
 	totpEncryptor      service.SecretEncryptor
 	userRepoOptions    oauthPendingFlowUserRepoOptions
+	dingTalk           *config.DingTalkConnectConfig
 }
 
 func newOAuthPendingFlowTestHandlerWithDependencies(
@@ -2590,6 +2591,9 @@ CREATE TABLE IF NOT EXISTS user_affiliates (
 			UserBalance:     0,
 			UserConcurrency: 1,
 		},
+	}
+	if options.dingTalk != nil {
+		cfg.DingTalk = *options.dingTalk
 	}
 	settingValues := map[string]string{
 		service.SettingKeyRegistrationEnabled:              "true",
@@ -3100,9 +3104,13 @@ var _ service.RegistrationEmailDomainRepository = (*oauthPendingFlowUserRepo)(ni
 
 type oauthPendingFlowUserRepoOptions struct {
 	rejectDeleteWhileAuthIdentityExists bool
+	createCalls                         *int
 }
 
 func (r *oauthPendingFlowUserRepo) Create(ctx context.Context, user *service.User) error {
+	if r.options.createCalls != nil {
+		*r.options.createCalls++
+	}
 	entity, err := r.client.User.Create().
 		SetEmail(user.Email).
 		SetUsername(user.Username).

@@ -1706,6 +1706,38 @@ func respondPendingOAuthBindingApplyError(c *gin.Context, err error) {
 	response.ErrorFrom(c, infraerrors.InternalServer("PENDING_AUTH_BIND_APPLY_FAILED", "failed to bind pending oauth identity").WithCause(err))
 }
 
+// pendingOAuthSessionHasVerifiedCorpMembership 判断待注册会话是否来自已确认为本企业成员的钉钉登录。
+// 回调只有在用本企业 appToken 把 unionId 解析成企业内 userid 之后才写入 corp_user_id
+// （跨组织用户会被钉钉拒绝）；该 claim 由服务端回调写入，客户端无法自行提供。
+func pendingOAuthSessionHasVerifiedCorpMembership(session *dbent.PendingAuthSession) bool {
+	if session == nil || !strings.EqualFold(strings.TrimSpace(session.ProviderType), "dingtalk") {
+		return false
+	}
+	return pendingSessionStringValue(session.UpstreamIdentityClaims, "corp_user_id") != ""
+}
+
+// registerPendingOAuthEmailAccount 为待注册会话创建本地账号。skipEmailCode 只对已确认的
+// 钉钉企业成员为 true：邮箱按用户填写直接放行，不要求本地验证码；少了这道门槛，建号前先
+// 确认该钉钉身份不属于任何账号（含已禁用的），不靠事后回滚兜底。其余注册一律校验验证码。
+func (h *AuthHandler) registerPendingOAuthEmailAccount(
+	ctx context.Context,
+	client *dbent.Client,
+	req createPendingOAuthAccountRequest,
+	email string,
+	session *dbent.PendingAuthSession,
+	skipEmailCode bool,
+) (*service.TokenPair, *service.User, error) {
+	invitationCode := strings.TrimSpace(req.InvitationCode)
+	signupSource := strings.TrimSpace(session.ProviderType)
+	if skipEmailCode {
+		if err := ensurePendingOAuthRegistrationIdentityAvailable(ctx, client, session); err != nil {
+			return nil, nil, err
+		}
+		return h.authService.RegisterVerifiedOAuthEmailAccount(ctx, email, req.Password, invitationCode, signupSource)
+	}
+	return h.authService.RegisterOAuthEmailAccount(ctx, email, req.Password, strings.TrimSpace(req.VerifyCode), invitationCode, signupSource)
+}
+
 func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string) {
 	var req createPendingOAuthAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1766,18 +1798,18 @@ func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string)
 		return
 	}
 
-	tokenPair, user, err := h.authService.RegisterOAuthEmailAccount(
-		c.Request.Context(),
-		email,
-		req.Password,
-		strings.TrimSpace(req.VerifyCode),
-		strings.TrimSpace(req.InvitationCode),
-		strings.TrimSpace(session.ProviderType),
-	)
+	corpMemberSignup := pendingOAuthSessionHasVerifiedCorpMembership(session)
+	tokenPair, user, err := h.registerPendingOAuthEmailAccount(c.Request.Context(), client, req, email, session, corpMemberSignup)
 	if err != nil {
 		if errors.Is(err, service.ErrEmailExists) {
 			existingUser, lookupErr := findUserByNormalizedEmail(c.Request.Context(), client, email)
 			if lookupErr != nil {
+				if errors.Is(lookupErr, service.ErrUserNotFound) {
+					// 注册侧按别名去重（+别名、Gmail 点号变体）判定已存在，而这里按精确邮箱查不到：
+					// 如实返回邮箱已存在，不要透传 404 USER_NOT_FOUND。
+					response.ErrorFrom(c, service.ErrEmailExists)
+					return
+				}
 				response.ErrorFrom(c, lookupErr)
 				return
 			}
@@ -1885,6 +1917,15 @@ func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string)
 		return
 	}
 
+	if corpMemberSignup {
+		slog.Info("oauth pending create-account: dingtalk corp member registered without email verification",
+			"user_id", user.ID,
+			"email", email,
+			"union_id", strings.TrimSpace(session.ProviderSubject),
+			"corp_user_id", pendingSessionStringValue(session.UpstreamIdentityClaims, "corp_user_id"),
+			"email_verified", false,
+		)
+	}
 	h.authService.ApplyOAuthSignupPromoCode(c.Request.Context(), user.ID, pendingOAuthPromoCode(session))
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 	// createPendingOAuthAccount = 注册新账户，需要把钉钉昵称同步到 users.username 作为初始值
