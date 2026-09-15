@@ -153,3 +153,31 @@ describe('ProfileEditForm named participation', () => {
     expect(appStore.showError).toHaveBeenCalledWith('username already exists')
   })
 })
+
+// 上游回归（fix(profile): show normalized API error messages）：三种错误形态都要走
+// extractApiErrorMessage 归一化，失败时不动已保存的用户，提交按钮恢复可用。
+describe('ProfileEditForm API failure', () => {
+  beforeEach(() => {
+    updateProfile.mockReset()
+    appStore.showError.mockReset()
+    appStore.showSuccess.mockReset()
+    authStore.user = { username: 'alice' }
+  })
+
+  it.each([
+    [{ status: 400, code: 'VALIDATION_ERROR', message: 'username is too long' }, 'username is too long'],
+    [{ response: { data: { detail: 'backend failure' } } }, 'backend failure'],
+    [{}, 'profile.updateFailed']
+  ])('shows API failure %j without changing the saved profile', async (error, expectedMessage) => {
+    updateProfile.mockRejectedValue(error)
+    const wrapper = mountForm()
+
+    await wrapper.get('#username').setValue('new-name')
+    await submit(wrapper)
+
+    expect(updateProfile).toHaveBeenCalledWith({ username: 'new-name' })
+    expect(appStore.showError).toHaveBeenLastCalledWith(expectedMessage)
+    expect((authStore.user as { username: string }).username).toBe('alice')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+  })
+})
