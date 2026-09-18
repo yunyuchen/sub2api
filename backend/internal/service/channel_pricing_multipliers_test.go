@@ -22,6 +22,12 @@ func TestConfiguredServiceTierMultiplier(t *testing.T) {
 		{name: "ultrafast default", serviceTier: "ultrafast", pricing: &ModelPricing{}, want: 2},
 		{name: "ultrafast ignores fast multiplier", serviceTier: "ultrafast", pricing: &ModelPricing{FastMultiplier: pricingMultiplier(2.5)}, want: 2},
 		{name: "legacy flex default", serviceTier: "flex", pricing: &ModelPricing{}, want: 0.5},
+		// 上游忽略 service_tier 的价卡（DeepSeek）：未显式配倍率时一律 1×，显式倍率仍优先。
+		{name: "ignore tier priority", serviceTier: "priority", pricing: &ModelPricing{IgnoreServiceTier: true}, want: 1},
+		{name: "ignore tier ultrafast", serviceTier: "ultrafast", pricing: &ModelPricing{IgnoreServiceTier: true}, want: 1},
+		{name: "ignore tier flex", serviceTier: "flex", pricing: &ModelPricing{IgnoreServiceTier: true}, want: 1},
+		{name: "ignore tier explicit fast multiplier wins", serviceTier: "priority", pricing: &ModelPricing{IgnoreServiceTier: true, FastMultiplier: pricingMultiplier(2.5)}, want: 2.5},
+		{name: "ignore tier explicit flex multiplier wins", serviceTier: "flex", pricing: &ModelPricing{IgnoreServiceTier: true, FlexMultiplier: pricingMultiplier(0.4)}, want: 0.4},
 	}
 
 	for _, tt := range tests {

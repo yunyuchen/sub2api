@@ -106,6 +106,7 @@ type ModelPricing struct {
 	CacheReadPricePerTokenPriority     float64  // priority service tier 下缓存读取每token价格 (USD)
 	FastMultiplier                     *float64 // 渠道显式 Fast/priority 倍率；nil 时沿用模型目录行为
 	FlexMultiplier                     *float64 // 渠道显式 Flex 倍率；nil 时沿用默认行为
+	IgnoreServiceTier                  bool     // 上游忽略 service_tier（如 DeepSeek）：无显式 Fast/Flex 倍率时不套通用 2×/0.5×
 	MaxReasoningEffortMultiplier       *float64 // max 推理等级的额度/计费倍率；nil 时沿用模型默认行为
 	CacheCreation5mPrice               float64  // 5分钟缓存创建每token价格 (USD)
 	CacheCreation1hPrice               float64  // 1小时缓存创建每token价格 (USD)
@@ -131,6 +132,11 @@ func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bo
 		return false
 	}
 	if pricing.FastMultiplier != nil {
+		return false
+	}
+	// 上游忽略 service_tier 的价卡（DeepSeek 等）不存在 priority 档价：目录若带了
+	// *_priority 字段也不能走显式档位价，一律交给 configuredServiceTierMultiplier。
+	if pricing.IgnoreServiceTier {
 		return false
 	}
 	return pricing.InputPricePerTokenPriority > 0 || pricing.OutputPricePerTokenPriority > 0 ||
@@ -159,6 +165,13 @@ func configuredServiceTierMultiplier(serviceTier string, pricing *ModelPricing) 
 			if pricing.FlexMultiplier != nil {
 				return *pricing.FlexMultiplier
 			}
+		}
+		// 上游不识别 service_tier 的价卡（DeepSeek 等）：客户端带 priority /
+		// ultrafast / flex 只是被上游静默忽略，不能套 OpenAI 口径的通用 2× / 0.5×。
+		// 运营者显式配置的倍率仍在上面优先生效，但只覆盖 priority/fast（FastMultiplier）
+		// 与 flex（FlexMultiplier）；ultrafast 没有显式倍率位，对这类价卡按 1× 计。
+		if pricing.IgnoreServiceTier {
+			return 1.0
 		}
 	}
 	return serviceTierCostMultiplier(serviceTier)
@@ -267,11 +280,14 @@ var ErrModelPricingUnavailable = errors.New("pricing not found")
 // ---- DeepSeek 官方低谷价（$/token）----
 // 2026-09-10 官方公告：DeepSeek-V4.1-Flash（新名 deepseek-flash）大幅降价，
 // Flash 低谷价降为 $0.15/$0.60/$0.003 per MTok（输入缓存未命中/输出/缓存命中）；
-// deepseek-v4-pro 名义价格暂不变，但自北京时间 2026-09-14 12:00（04:00 UTC）起
-// 其请求被上游路由到 V4.1-Flash 并按 Flash 价计费（见 deepseekProBilledAsFlash）。
-// Source: https://api-docs.deepseek.com/news/news260910
+// 旧名 deepseek-v4-flash / deepseek-v4-flash-vision-exp 由 V4.1-Flash 服务并按 Flash 价计费。
+// deepseek-v4-pro 价格不变：09-10 公告曾称 09-14 04:00 UTC 起 pro 请求改路由到
+// V4.1-Flash 并按 Flash 价计费，但官方定价页脚注(2)随后撤回——「应用户要求，
+// 2026-09-14 之后继续提供 DeepSeek V4 Pro 服务，计费方式不变」；线上 usage_logs
+// 的 upstream_response_model 也一直回 deepseek-v4-pro。因此 pro 档始终按 Pro 价。
+// Source: https://api-docs.deepseek.com/quick_start/pricing （脚注 (1)(2)(3)）
 //
-//	https://api-docs.deepseek.com/quick_start/pricing
+//	https://api-docs.deepseek.com/news/news260910
 //
 // 高峰价 = 2× 低谷价；高峰时段 01:00–04:00 与 06:00–10:00 UTC（仅工作日），
 // 北京时间周六/周日全天低谷。时段判定见 deepseekPeakMultiplierAt。
@@ -309,21 +325,6 @@ func deepseekPeakMultiplierAt(now time.Time) float64 {
 		return 2.0
 	}
 	return 1.0
-}
-
-// deepseekProRoutesToFlashAt：官方公告自北京时间 2026-09-14 12:00（04:00 UTC）起，
-// 所有 deepseek-v4-pro 请求被上游路由到 V4.1-Flash 并按 Flash 价计费（直至未来
-// V4.1 Pro 上线）。Source: https://api-docs.deepseek.com/news/news260910
-var deepseekProRoutesToFlashAt = time.Date(2026, 9, 14, 4, 0, 0, 0, time.UTC)
-
-// deepseekProBilledAsFlash 报告指定计费时点 deepseek-v4-pro 是否已按 Flash 价
-// 计费：计费时点到达或晚于切换时点返回 true；零值时点回退当前时刻（与峰谷
-// 倍率的取时点方式一致，见 calculateTokenCost）。
-func deepseekProBilledAsFlash(pricingAt time.Time) bool {
-	if pricingAt.IsZero() {
-		pricingAt = timezone.Now()
-	}
-	return !pricingAt.Before(deepseekProRoutesToFlashAt)
 }
 
 // isDeepSeekProModel 判断模型名是否归入 deepseek-v4-pro 档（含版本化名称，
@@ -1228,14 +1229,6 @@ func (s *BillingService) HasIdentifiedTokenPricing(model string) bool {
 
 // GetModelPricing 获取模型价格配置
 func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
-	// 无显式计费时点，DeepSeek pro→Flash 切换按当前时刻判定。
-	return s.getModelPricingAt(model, timezone.Now())
-}
-
-// getModelPricingAt 是 GetModelPricing 的带计费时点内部变体：pricingAt 显式
-// 驱动 DeepSeek pro→Flash 切换判定（切换点前 Pro 价、之后 Flash 价），使
-// 展示/估算路径可与历史补账同刻复算，测试也能用固定时点钉住断言。
-func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*ModelPricing, error) {
 	// 标准化模型名称（转小写）
 	model = strings.ToLower(model)
 
@@ -1277,7 +1270,7 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 				ImageInputPricePerToken:       litellmPricing.InputCostPerImageToken,
 				ImageCacheReadPricePerToken:   litellmPricing.CacheReadInputImageTokenCost,
 				ImageOutputPricePerToken:      litellmPricing.OutputCostPerImageToken,
-			}, true, pricingAt), nil
+			}, true), nil
 		}
 	}
 
@@ -1289,7 +1282,7 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 		if _, seen := s.fallbackWarnSeen.LoadOrStore(model, struct{}{}); !seen {
 			log.Printf("[Billing] Using fallback pricing for model: %s", model)
 		}
-		return s.applyModelSpecificPricingPolicyEx(model, fallback, true, pricingAt), nil
+		return s.applyModelSpecificPricingPolicyEx(model, fallback, true), nil
 	}
 
 	return nil, fmt.Errorf("%w for model: %s", ErrModelPricingUnavailable, model)
@@ -1468,8 +1461,8 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 		return nil, fmt.Errorf("no pricing available for model: %s: %w", input.Model, ErrModelPricingUnavailable)
 	}
 
-	// 计费时点：优先请求级 PricingAt（历史补账与 DeepSeek pro→Flash 切换判定
-	// 同源），零值回退当前时刻。
+	// 计费时点：优先请求级 PricingAt（与 DeepSeek 峰谷判定、历史补账同源），
+	// 零值回退当前时刻。
 	pricingAt := input.PricingAt
 	if pricingAt.IsZero() {
 		pricingAt = timezone.Now()
@@ -1477,7 +1470,7 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 
 	// 默认价卡（Source=LiteLLM）应用 DeepSeek 官方价强制覆盖（幂等，GetModelPricing
 	// 内部已强制过）；分组/渠道自定义定价保留运营者配置，不强制覆盖官方价。
-	pricing = s.applyModelSpecificPricingPolicyEx(input.Model, pricing, resolved.Source == PricingSourceLiteLLM, pricingAt)
+	pricing = s.applyModelSpecificPricingPolicyEx(input.Model, pricing, resolved.Source == PricingSourceLiteLLM)
 
 	// DeepSeek 模型默认价卡按官方峰谷口径调整：高峰时段（01:00–04:00 与
 	// 06:00–10:00 UTC，仅工作日；北京时间周末全天低谷）按 2× 低谷价计费。
@@ -1742,50 +1735,63 @@ func (s *BillingService) calculateCostInternalWithPolicy(
 }
 
 // applyModelSpecificPricingPolicy 对目录数据做模型特定修正：DeepSeek 官方价
-// 强制覆盖；GPT-5.6 缺 cache_write 价时按官方规则补 1.25 倍输入价；Fast/priority
-// 档按业务倍率改写（本地/远程目录的 priority 价可能沿用官方旧口径）。长上下文
-// 阶梯不在此处补齐：一律由目录数据（above_XXXk 折算或显式 long_context_* 字段）
-// 驱动。强制 DeepSeek 官方价且无显式计费时点（pro→Flash 切换按当前时刻判定），
-// 供无既有时点的策略修正场景与测试使用；计费/展示主路径分别经
-// calculateTokenCost 与 getModelPricingAt 显式传时点，分组/渠道自定义定价
-// 用 applyModelSpecificPricingPolicyEx 关闭强制，保留运营者配置。
+// 强制覆盖并关闭通用 service_tier 倍率；GPT-5.6 缺 cache_write 价时按官方规则补
+// 1.25 倍输入价；Fast/priority 档按业务倍率改写（本地/远程目录的 priority 价可能
+// 沿用官方旧口径）。长上下文阶梯不在此处补齐：一律由目录数据（above_XXXk 折算或
+// 显式 long_context_* 字段）驱动。本入口强制 DeepSeek 官方价，供策略修正场景与
+// 测试使用；分组/渠道自定义定价用 applyModelSpecificPricingPolicyEx 关闭强制，
+// 保留运营者配置。
 func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *ModelPricing) *ModelPricing {
-	return s.applyModelSpecificPricingPolicyEx(model, pricing, true, time.Time{})
+	return s.applyModelSpecificPricingPolicyEx(model, pricing, true)
 }
 
 // applyModelSpecificPricingPolicyEx 与 applyModelSpecificPricingPolicy 相同，
-// 但由调用方控制是否强制 DeepSeek 官方价（forceDeepSeekRates），并显式传入
-// 计费时点 pricingAt（零值表示按当前时刻判定）。
+// 但由调用方控制是否强制 DeepSeek 官方价（forceDeepSeekRates）。
 // calculateTokenCost 对分组/渠道自定义定价（Source 非 LiteLLM）传 false：
 // 强制覆盖会把运营者配置的售价盖回官方价，违反自定义定价语义。
-func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing *ModelPricing, forceDeepSeekRates bool, pricingAt time.Time) *ModelPricing {
+// forceDeepSeekRates=false 只关闭官方价强制覆盖；DeepSeek 价卡无论真假都会被
+// 克隆并置 IgnoreServiceTier=true（上游忽略 service_tier，见函数体注释），
+// 因此本函数对 DeepSeek 永不返回入参指针。
+func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing *ModelPricing, forceDeepSeekRates bool) *ModelPricing {
 	if pricing == nil {
 		return nil
 	}
-	// DeepSeek 模型：无论 JSON/远端价格表给什么价，一律强制官方低谷价
-	// （Flash 三档为 2026-09-10 官方降价后口径）。这是覆盖远端旧价的关键——远端
-	// 仓库不可改，生产会先拉到旧价，必须在此兜底修正；克隆后再覆盖，避免污染
-	// 共享 fallbackPrices 指针。
-	// 档位判定：含 "deepseek-v4-pro" 的版本化名称（如 deepseek-v4-pro-0813）归 pro 档，
-	// 其余 deepseek-*（含已停服的 chat/reasoner 与未知型号）统一归 flash 档。
-	// 2026-09-14 04:00 UTC 起上游把 pro 请求路由到 V4.1-Flash，pro 档改按
-	// Flash 三档价计费；历史时点（早于切换时刻）仍按 Pro 价。
-	// 高峰时段倍率不在本函数处理，由 calculateTokenCost 按 deepseekPeakMultiplierAt
-	// 对默认价卡另行叠加（分组/渠道自定义定价不叠加）。
-	if forceDeepSeekRates && isDeepSeekModel(model) {
+	if isDeepSeekModel(model) {
+		// 克隆后再改，避免污染共享 fallbackPrices 指针。
 		cloned := *pricing
-		if isDeepSeekProModel(model) && !deepseekProBilledAsFlash(pricingAt) {
-			cloned.InputPricePerToken = deepseekProOffPeakInputPrice
-			cloned.OutputPricePerToken = deepseekProOffPeakOutputPrice
-			cloned.CacheReadPricePerToken = deepseekProOffPeakCacheRead
-		} else {
-			// deepseek-flash（= V4.1-Flash）、deepseek-v4-flash /
-			// deepseek-v4-flash-vision-exp 与其余 deepseek-* 共用 flash 价；
-			// 切换时点之后的 pro 请求同样按 flash 价计费。
-			cloned.InputPricePerToken = deepseekFlashOffPeakInputPrice
-			cloned.OutputPricePerToken = deepseekFlashOffPeakOutputPrice
-			cloned.CacheReadPricePerToken = deepseekFlashOffPeakCacheRead
+		if forceDeepSeekRates {
+			// 无论 JSON/远端价格表给什么价，一律强制官方低谷价（Flash 三档为
+			// 2026-09-10 官方降价后口径）。这是覆盖远端旧价的关键——远端仓库不可改，
+			// 生产会先拉到旧价（且远端存的是高峰价），必须在此兜底修正。
+			// 档位判定：含 "deepseek-v4-pro" 的版本化名称（如 deepseek-v4-pro-0813）
+			// 归 pro 档，始终按 Pro 价（官方已撤回 pro→Flash 路由，见常量注释）；
+			// 其余 deepseek-*（deepseek-flash、旧名 v4-flash / vision-exp、已停服的
+			// chat/reasoner 与未知型号）统一归 flash 档。
+			// 高峰时段倍率不在本函数处理，由 calculateTokenCost 按
+			// deepseekPeakMultiplierAt 对默认价卡另行叠加（分组/渠道自定义定价不叠加）。
+			if isDeepSeekProModel(model) {
+				cloned.InputPricePerToken = deepseekProOffPeakInputPrice
+				cloned.OutputPricePerToken = deepseekProOffPeakOutputPrice
+				cloned.CacheReadPricePerToken = deepseekProOffPeakCacheRead
+			} else {
+				cloned.InputPricePerToken = deepseekFlashOffPeakInputPrice
+				cloned.OutputPricePerToken = deepseekFlashOffPeakOutputPrice
+				cloned.CacheReadPricePerToken = deepseekFlashOffPeakCacheRead
+			}
+			// 官方没有 priority 档价：目录若混入 *_priority 字段（远端仓库不可控），
+			// 一并清零，避免 priority/fast 请求绕过官方价走目录的档位价。
+			cloned.InputPricePerTokenPriority = 0
+			cloned.OutputPricePerTokenPriority = 0
+			cloned.CacheCreationPricePerTokenPriority = 0
+			cloned.CacheReadPricePerTokenPriority = 0
 		}
+		// DeepSeek 上游不识别 service_tier（Responses API 文档：Not supported，
+		// 静默忽略；Anthropic 端点：Ignored；价表只有峰谷两档）。客户端（如 Codex）
+		// 带 priority / ultrafast / flex 时上游照常按峰谷价扣费，网关不能再套
+		// OpenAI 口径的通用 2× / 0.5×，也不走目录/渠道的显式 priority 档价。
+		// 运营者显式配置的 FastMultiplier（priority/fast）与 FlexMultiplier（flex）
+		// 仍优先生效；ultrafast 无显式倍率位，按 1× 计。
+		cloned.IgnoreServiceTier = true
 		return &cloned
 	}
 	normalized := normalizeKnownOpenAICodexModel(model)
