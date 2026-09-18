@@ -12,7 +12,9 @@ import (
 // - Layered scoring: Business Health (70%) + Infrastructure Health (30%)
 // - Avoids double-counting (e.g., DB failure affects both infra and business metrics)
 // - Conservative + stable: penalize clear degradations; avoid overreacting to missing/idle data.
-func computeDashboardHealthScore(now time.Time, overview *OpsDashboardOverview) int {
+//
+// ttftEnabled 为 false（指标阈值里首字预警被关闭）时，业务健康不再计入 TTFT。
+func computeDashboardHealthScore(now time.Time, overview *OpsDashboardOverview, ttftEnabled bool) int {
 	if overview == nil {
 		return 0
 	}
@@ -23,7 +25,7 @@ func computeDashboardHealthScore(now time.Time, overview *OpsDashboardOverview) 
 		return 100
 	}
 
-	businessHealth := computeBusinessHealth(overview)
+	businessHealth := computeBusinessHealth(overview, ttftEnabled)
 	infraHealth := computeInfraHealth(now, overview)
 
 	// Weighted combination: 70% business + 30% infrastructure
@@ -31,9 +33,14 @@ func computeDashboardHealthScore(now time.Time, overview *OpsDashboardOverview) 
 	return int(math.Round(clampFloat64(score, 0, 100)))
 }
 
+// opsTTFTAlertEnabled 与前端 isTtftAlertEnabled 同口径：ttft_p99_ms_max 为空或 ≤ 0 视为关闭首字预警。
+func opsTTFTAlertEnabled(cfg *OpsMetricThresholds) bool {
+	return cfg != nil && cfg.TTFTp99MsMax != nil && *cfg.TTFTp99MsMax > 0
+}
+
 // computeBusinessHealth calculates business health score (0-100)
-// Components: Error Rate (50%) + TTFT (50%)
-func computeBusinessHealth(overview *OpsDashboardOverview) float64 {
+// Components: Error Rate (50%) + TTFT (50%)；首字预警关闭时 Error Rate 占 100%。
+func computeBusinessHealth(overview *OpsDashboardOverview, ttftEnabled bool) float64 {
 	// Error rate score: 1% → 100, 10% → 0 (linear)
 	// Combines request errors and upstream errors
 	errorScore := 100.0
@@ -46,6 +53,11 @@ func computeBusinessHealth(overview *OpsDashboardOverview) float64 {
 		} else {
 			errorScore = 0
 		}
+	}
+
+	// 首字预警关闭：TTFT 不参与评分，否则它的 50% 权重会把总分上限压在 65。
+	if !ttftEnabled {
+		return errorScore
 	}
 
 	// TTFT score: 1s → 100, 3s → 0 (linear)

@@ -12,7 +12,7 @@ import (
 func TestComputeDashboardHealthScore_IdleReturns100(t *testing.T) {
 	t.Parallel()
 
-	score := computeDashboardHealthScore(time.Now().UTC(), &OpsDashboardOverview{})
+	score := computeDashboardHealthScore(time.Now().UTC(), &OpsDashboardOverview{}, true)
 	require.Equal(t, 100, score)
 }
 
@@ -50,7 +50,7 @@ func TestComputeDashboardHealthScore_DegradesOnBadSignals(t *testing.T) {
 		},
 	}
 
-	score := computeDashboardHealthScore(time.Now().UTC(), ov)
+	score := computeDashboardHealthScore(time.Now().UTC(), ov, true)
 	require.Less(t, score, 80)
 	require.GreaterOrEqual(t, score, 0)
 }
@@ -229,7 +229,7 @@ func TestComputeDashboardHealthScore_Comprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			score := computeDashboardHealthScore(time.Now().UTC(), tt.overview)
+			score := computeDashboardHealthScore(time.Now().UTC(), tt.overview, true)
 			require.GreaterOrEqual(t, score, tt.wantMin, "score should be >= %d", tt.wantMin)
 			require.LessOrEqual(t, score, tt.wantMax, "score should be <= %d", tt.wantMax)
 			require.GreaterOrEqual(t, score, 0, "score must be >= 0")
@@ -328,7 +328,7 @@ func TestComputeBusinessHealth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			score := computeBusinessHealth(tt.overview)
+			score := computeBusinessHealth(tt.overview, true)
 			require.GreaterOrEqual(t, score, tt.wantMin, "score should be >= %.1f", tt.wantMin)
 			require.LessOrEqual(t, score, tt.wantMax, "score should be <= %.1f", tt.wantMax)
 			require.GreaterOrEqual(t, score, 0.0, "score must be >= 0")
@@ -440,3 +440,42 @@ func TestComputeInfraHealth(t *testing.T) {
 func timePtr(v time.Time) *time.Time { return &v }
 
 func stringPtr(v string) *string { return &v }
+
+func TestOpsTTFTAlertEnabled(t *testing.T) {
+	t.Parallel()
+
+	zero, positive, negative := 0.0, 500.0, -1.0
+	require.False(t, opsTTFTAlertEnabled(nil))
+	require.False(t, opsTTFTAlertEnabled(&OpsMetricThresholds{}))
+	require.False(t, opsTTFTAlertEnabled(&OpsMetricThresholds{TTFTp99MsMax: &zero}))
+	require.False(t, opsTTFTAlertEnabled(&OpsMetricThresholds{TTFTp99MsMax: &negative}))
+	require.True(t, opsTTFTAlertEnabled(&OpsMetricThresholds{TTFTp99MsMax: &positive}))
+	require.True(t, opsTTFTAlertEnabled(defaultOpsMetricThresholds()))
+}
+
+// 首字预警关闭后，TTFT 再慢也不能拖低健康分；错误率仍然照常扣分。
+func TestComputeHealthScore_TTFTDisabledIgnoresTTFT(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	slowTTFT := &OpsDashboardOverview{
+		RequestCountTotal: 1000,
+		RequestCountSLA:   1000,
+		TTFT:              OpsPercentiles{P99: intPtr(16_500)},
+	}
+	require.InDelta(t, 50, computeBusinessHealth(slowTTFT, true), 0.001)
+	require.InDelta(t, 100, computeBusinessHealth(slowTTFT, false), 0.001)
+	require.Equal(t, 65, computeDashboardHealthScore(now, slowTTFT, true))
+	require.Equal(t, 100, computeDashboardHealthScore(now, slowTTFT, false))
+
+	// 5.5% 错误率 → errorScore 50；关闭首字后它占业务健康的 100%。
+	withErrors := &OpsDashboardOverview{
+		RequestCountTotal: 1000,
+		RequestCountSLA:   1000,
+		ErrorRate:         0.055,
+		TTFT:              OpsPercentiles{P99: intPtr(16_500)},
+	}
+	require.InDelta(t, 25, computeBusinessHealth(withErrors, true), 0.001)
+	require.InDelta(t, 50, computeBusinessHealth(withErrors, false), 0.001)
+	require.Equal(t, 65, computeDashboardHealthScore(now, withErrors, false))
+}

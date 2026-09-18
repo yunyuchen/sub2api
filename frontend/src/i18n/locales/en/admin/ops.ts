@@ -705,7 +705,7 @@ export default {
         slaMinPercent: 'SLA Minimum Percentage',
         slaMinPercentHint: 'SLA below this value will be displayed in red (default: 99.5%)',
         ttftP99MaxMs: 'TTFT P99 Maximum (ms)',
-        ttftP99MaxMsHint: 'TTFT P99 above this value will be displayed in red (default: 500ms); 0 turns the TTFT warning off (no red TTFT card, no diagnosis entry)',
+        ttftP99MaxMsHint: 'TTFT P99 above this value will be displayed in red (default: 500ms); 0 turns the TTFT warning off (no red TTFT card, no diagnosis entry, and TTFT no longer counts toward the health score)',
         requestErrorRateMaxPercent: 'Request Error Rate Maximum (%)',
         requestErrorRateMaxPercentHint: 'Request error rate above this value will be displayed in red (default: 5%)',
         upstreamErrorRateMaxPercent: 'Upstream Error Rate Maximum (%)',
