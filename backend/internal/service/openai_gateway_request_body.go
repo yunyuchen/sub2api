@@ -131,6 +131,10 @@ func deleteOpenAIResponsesNoneReasoningEffortFromObject(account *Account, body m
 // 强制 store=false 并清除 previous_response_id（DeepSeek / Kimi 官方
 // Responses 均不支持服务端状态存储，携带这些字段会被拒绝）。
 // 非原生 Responses 协议账号原样返回。
+//
+// DeepSeek 平台账号另外补齐工具调用轮的 reasoning_text：同一分组里可以同时挂 DeepSeek
+// 官方与火山方舟等兼容上游，一段对话跨账号续聊时，历史里另一家产出的条目缺 reasoning_text，
+// DeepSeek 官方会以不可换号的 400 拒绝整段对话（详见 apicompat.EnsureResponsesToolTurnReasoning）。
 func normalizeDeepSeekResponsesRequestBody(account *Account, body []byte) []byte {
 	if account == nil || !account.UsesNativeCNResponses() {
 		return body
@@ -151,11 +155,17 @@ func normalizeDeepSeekResponsesRequestBody(account *Account, body []byte) []byte
 	if !exists {
 		return normalized
 	}
-	liftedInput, changed := apicompat.LiftResponsesToolOutputMedia(input)
+	rewrittenInput, changed := apicompat.LiftResponsesToolOutputMedia(input)
+	if account.Platform == PlatformDeepseek {
+		if ensured, ensuredChanged := apicompat.EnsureResponsesToolTurnReasoning(rewrittenInput); ensuredChanged {
+			rewrittenInput = ensured
+			changed = true
+		}
+	}
 	if !changed {
 		return normalized
 	}
-	requestBody["input"] = liftedInput
+	requestBody["input"] = rewrittenInput
 	rebuilt, err := marshalOpenAIUpstreamJSON(requestBody)
 	if err != nil {
 		return normalized

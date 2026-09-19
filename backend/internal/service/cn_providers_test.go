@@ -837,12 +837,15 @@ func TestNormalizeDeepSeekResponsesRequestBody(t *testing.T) {
 	mediaBody := []byte(`{"model":"deepseek-v4.1-flash","store":true,"input":[{"type":"function_call","call_id":"call_image","name":"view_image","arguments":"{}"},{"type":"function_call_output","call_id":"call_image","output":[{"type":"input_image","image_url":"data:image/png;base64,AQID"}]}]}`)
 	mediaNormalized := normalizeDeepSeekResponsesRequestBody(deepseekResponses, mediaBody)
 	require.False(t, gjson.GetBytes(mediaNormalized, "store").Bool())
-	require.Equal(t, gjson.String, gjson.GetBytes(mediaNormalized, "input.1.output").Type)
-	require.NotContains(t, gjson.GetBytes(mediaNormalized, "input.1.output").String(), "data:image/png")
-	require.Equal(t, "message", gjson.GetBytes(mediaNormalized, "input.2.type").String())
-	require.Equal(t, "user", gjson.GetBytes(mediaNormalized, "input.2.role").String())
-	require.Equal(t, "input_image", gjson.GetBytes(mediaNormalized, "input.2.content.1.type").String())
-	require.Equal(t, "data:image/png;base64,AQID", gjson.GetBytes(mediaNormalized, "input.2.content.1.image_url").String())
+	// 这段历史的工具调用轮没有 reasoning 条目，DeepSeek 平台会在轮首补一条，其余条目顺延一位。
+	require.Equal(t, "reasoning", gjson.GetBytes(mediaNormalized, "input.0.type").String())
+	require.Equal(t, "function_call", gjson.GetBytes(mediaNormalized, "input.1.type").String())
+	require.Equal(t, gjson.String, gjson.GetBytes(mediaNormalized, "input.2.output").Type)
+	require.NotContains(t, gjson.GetBytes(mediaNormalized, "input.2.output").String(), "data:image/png")
+	require.Equal(t, "message", gjson.GetBytes(mediaNormalized, "input.3.type").String())
+	require.Equal(t, "user", gjson.GetBytes(mediaNormalized, "input.3.role").String())
+	require.Equal(t, "input_image", gjson.GetBytes(mediaNormalized, "input.3.content.1.type").String())
+	require.Equal(t, "data:image/png;base64,AQID", gjson.GetBytes(mediaNormalized, "input.3.content.1.image_url").String())
 
 	// 非 responses 协议（deepseek CC 账号）原样返回
 	deepseekCC := &Account{Platform: PlatformDeepseek, Type: AccountTypeAPIKey}
@@ -867,6 +870,54 @@ func TestNormalizeDeepSeekResponsesRequestBody(t *testing.T) {
 	// openai 账号原样返回
 	openai := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 	require.Equal(t, string(body), string(normalizeDeepSeekResponsesRequestBody(openai, body)))
+}
+
+// 同一分组里 DeepSeek 官方与火山方舟同池时，一段 Codex 对话可能跨账号续聊。火山产出的工具调用轮
+// 要么没有 reasoning 条目、要么只有 summary_text，DeepSeek 官方会以不可换号的 400 拒绝
+// （The `reasoning_text` in the thinking mode must be passed back to the API.）。
+func TestNormalizeDeepSeekResponsesRequestBody_EnsuresToolTurnReasoningText(t *testing.T) {
+	t.Parallel()
+
+	deepseekAdaptive := &Account{
+		Platform: PlatformDeepseek, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_protocol": APIProtocolAdaptive},
+	}
+	arkHistory := []byte(`{"model":"deepseek-flash","store":false,"input":[` +
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":"weather?"}]},` +
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Let me check."}]},` +
+		`{"type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{}"},` +
+		`{"type":"function_call_output","call_id":"call_1","output":"ok"},` +
+		`{"type":"reasoning","id":"rs_021","summary":[{"type":"summary_text","text":"Check Rome too."}]},` +
+		`{"type":"function_call","call_id":"call_2","name":"get_weather","arguments":"{}"},` +
+		`{"type":"function_call_output","call_id":"call_2","output":"ok"}]}`)
+
+	normalized := normalizeDeepSeekResponsesRequestBody(deepseekAdaptive, arkHistory)
+	types := make([]string, 0, 8)
+	for _, item := range gjson.GetBytes(normalized, "input").Array() {
+		types = append(types, item.Get("type").String())
+	}
+	require.Equal(t, []string{"message", "reasoning", "message", "function_call", "function_call_output", "reasoning", "function_call", "function_call_output"}, types)
+	require.Equal(t, "reasoning_text", gjson.GetBytes(normalized, "input.1.content.0.type").String())
+	require.Equal(t, " ", gjson.GetBytes(normalized, "input.1.content.0.text").String())
+	require.Equal(t, "rs_021", gjson.GetBytes(normalized, "input.5.id").String())
+	require.Equal(t, "Check Rome too.", gjson.GetBytes(normalized, "input.5.content.0.text").String())
+	require.Equal(t, "summary_text", gjson.GetBytes(normalized, "input.5.summary.0.type").String())
+
+	// DeepSeek 官方自己的历史已经带 reasoning_text：请求体必须逐字节不变（不重新序列化），
+	// 保证现有单账号流量与上游前缀缓存不受影响。
+	nativeHistory := []byte(`{"model":"deepseek-flash","store":false,"input":[` +
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":"weather?"}]},` +
+		`{"type":"reasoning","id":"cdf43f","summary":[],"content":[{"type":"reasoning_text","text":"thinking"}],"encrypted_content":"opaque"},` +
+		`{"type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{}"},` +
+		`{"type":"function_call_output","call_id":"call_1","output":"ok"}]}`)
+	require.Equal(t, string(nativeHistory), string(normalizeDeepSeekResponsesRequestBody(deepseekAdaptive, nativeHistory)))
+
+	// 其它原生 Responses 的 CN 平台未经实测，不套用这条 DeepSeek 专属规则。
+	kimiResponses := &Account{
+		Platform: PlatformKimi, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_protocol": APIProtocolResponses},
+	}
+	require.Equal(t, string(arkHistory), string(normalizeDeepSeekResponsesRequestBody(kimiResponses, arkHistory)))
 }
 
 // TestGetAnthropicAPIKeyAuthScheme_CNProvider CN 账号可经 extra 覆写鉴权方案，
