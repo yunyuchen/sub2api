@@ -90,6 +90,7 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 
 const username = ref(props.initialUsername)
+let savedUsername = props.initialUsername
 const leaderboardNamedParticipation = ref(props.initialLeaderboardNamedParticipation)
 // 后端对 username 的昵称展示校验（长度 / 字符集 / 邮箱形态 / 保留词）与个人资料的通用
 // username 校验是两套规则；拒绝时后端给的 message 是英文，双语文案由 reason
@@ -98,7 +99,8 @@ const namedParticipationError = ref('')
 const loading = ref(false)
 
 watch(() => props.initialUsername, (val) => {
-  username.value = val
+  if (username.value === savedUsername) username.value = val
+  savedUsername = val
 })
 
 watch(() => props.initialLeaderboardNamedParticipation, (val) => {
@@ -120,6 +122,7 @@ const handleUpdateProfile = async () => {
   }
 
   loading.value = true
+  const submittedUsername = username.value
   namedParticipationError.value = ''
   // 开关没动过就不提交这个字段（后端是指针语义，缺省即不动）。否则「昵称展示已开启的
   // 用户只改 username」也会被后端拿新 username 重跑一次展示校验，改成一个合法但不够
@@ -130,11 +133,13 @@ const handleUpdateProfile = async () => {
   const requestedEnable = namedParticipationChanged && leaderboardNamedParticipation.value
   try {
     const updatedUser = await userAPI.updateProfile({
-      username: username.value,
+      username: submittedUsername,
       ...(namedParticipationChanged
         ? { leaderboard_named_participation: leaderboardNamedParticipation.value }
         : {})
     })
+    if (username.value === submittedUsername) username.value = updatedUser.username
+    savedUsername = updatedUser.username
     authStore.user = updatedUser
     // 响应里字段缺席（旧后端）按后端默认的「开启」读，别把缺席塌成关闭。
     leaderboardNamedParticipation.value = updatedUser.leaderboard_named_participation !== false
