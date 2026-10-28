@@ -377,7 +377,7 @@ func TestCalculateCostUnified_DeepseekFlashAndLegacyFlashShareNewRates(t *testin
 	offPeakTotal := 1000*1.5e-7 + 500*6e-7 + 1000*3e-9
 
 	// deepseek-flash 与 deepseek-v4-flash 都取 Flash 新价。
-	// 时点取切换日 2026-09-14（周一）12:00 UTC 低谷，峰谷倍率不影响断言。
+	// 时点取 2026-09-14（周一）12:00 UTC 低谷，峰谷倍率不影响断言。
 	for _, model := range []string{"deepseek-flash", "deepseek-v4-flash"} {
 		cost, err := bs.CalculateCostUnified(CostInput{
 			Ctx: context.Background(), Model: model, Tokens: tokens,
