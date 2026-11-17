@@ -25,6 +25,7 @@ func TestConfiguredServiceTierMultiplier(t *testing.T) {
 		// 上游忽略 service_tier 的价卡（DeepSeek）：未显式配倍率时一律 1×，显式倍率仍优先。
 		{name: "ignore tier priority", serviceTier: "priority", pricing: &ModelPricing{IgnoreServiceTier: true}, want: 1},
 		{name: "ignore tier ultrafast", serviceTier: "ultrafast", pricing: &ModelPricing{IgnoreServiceTier: true}, want: 1},
+		{name: "忽略档位的价卡即使带有 Ultra Fast 倍率也按原价计费", serviceTier: "ultrafast", pricing: &ModelPricing{IgnoreServiceTier: true, UltrafastMultiplier: 6}, want: 1},
 		{name: "ignore tier flex", serviceTier: "flex", pricing: &ModelPricing{IgnoreServiceTier: true}, want: 1},
 		{name: "ignore tier explicit fast multiplier wins", serviceTier: "priority", pricing: &ModelPricing{IgnoreServiceTier: true, FastMultiplier: pricingMultiplier(2.5)}, want: 2.5},
 		{name: "ignore tier explicit flex multiplier wins", serviceTier: "flex", pricing: &ModelPricing{IgnoreServiceTier: true, FlexMultiplier: pricingMultiplier(0.4)}, want: 0.4},
