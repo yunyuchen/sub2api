@@ -474,8 +474,7 @@ func TestCalculateCostUnified_DeepseekGroupPricingHonorsExplicitTierMultiplier(t
 	base := 1000*1e-6 + 500*2e-6
 	at := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
 
-	// 运营者显式配置的 Fast 倍率对 priority/fast 仍生效；未配置的 flex 不再套通用
-	// 0.5×；ultrafast 没有显式倍率位，对 DeepSeek 按 1× 计（而非通用 2×）。
+	// 显式配置的 Fast 倍率对 priority/fast 生效，未配置倍率的档位按 1 倍计费。
 	for _, tc := range []struct {
 		tier string
 		want float64
@@ -486,6 +485,39 @@ func TestCalculateCostUnified_DeepseekGroupPricingHonorsExplicitTierMultiplier(t
 		})
 		require.NoError(t, err)
 		require.InDelta(t, tc.want, cost.TotalCost, 1e-10, "service_tier=%q", tc.tier)
+	}
+}
+
+func TestCalculateCostUnified_DeepseekGroupUltrafastOverride(t *testing.T) {
+	for _, model := range []string{"deepseek-flash", "deepseek-v4-pro"} {
+		for _, tc := range []struct {
+			name       string
+			multiplier *float64
+			want       float64
+		}{
+			{name: "沿用默认倍率", want: 0.002},
+			{name: "采用显式倍率", multiplier: pricingMultiplier(2.5), want: 0.005},
+		} {
+			t.Run(model+"/"+tc.name, func(t *testing.T) {
+				bs := newTestBillingService()
+				group := &Group{
+					ID: 1, Name: "ds-group", Platform: PlatformDeepseek, Status: StatusActive,
+					ModelPricing: []ChannelModelPricing{{
+						Models: []string{model}, BillingMode: BillingModeToken,
+						InputPrice: pricingMultiplier(1e-6), OutputPrice: pricingMultiplier(2e-6),
+						UltrafastMultiplier: tc.multiplier,
+					}},
+				}
+				cost, err := bs.CalculateCostUnified(CostInput{
+					Ctx: context.Background(), Model: model, Group: group,
+					Tokens: UsageTokens{InputTokens: 1000, OutputTokens: 500}, RateMultiplier: 1,
+					Resolver: NewModelPricingResolver(nil, bs), ServiceTier: OpenAIFastTierUltrafast,
+					PricingAt: time.Date(2026, 8, 24, 2, 0, 0, 0, time.UTC),
+				})
+				require.NoError(t, err)
+				require.InDelta(t, tc.want, cost.TotalCost, 1e-12)
+			})
+		}
 	}
 }
 

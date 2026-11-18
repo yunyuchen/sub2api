@@ -224,7 +224,7 @@ func (s *BillingService) contextPricingBreakpoints(resolver *ModelPricingResolve
 		return plan
 	}
 	// 此处 pricing 仅取 LongContextInputThreshold 等与计费时点无关的字段。
-	pricing = s.applyModelSpecificPricingPolicyEx(model, pricing, true)
+	pricing = s.applyModelSpecificPricingPolicyEx(model, pricing, true, time.Time{})
 	if pricing.LongContextInputThreshold <= 0 {
 		return plan
 	}
